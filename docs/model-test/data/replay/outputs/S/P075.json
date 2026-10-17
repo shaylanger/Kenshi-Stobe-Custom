@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op10 (a97e05a80e87aab69): Coordinator #12 orders (peer message, carries Shay's authority): Shay ordered every SETUP-FAIL/GATED row unblocked and the one-call row scripts are ready (testing\\live-stobe-queue\\imm26-assert\\rowtools\\unblock*; notes in C:\\KenshiTestRuns\\inbox\\operators\\u-rowsA/B/C.txt). Do this now: (1) finish the current 13-ax run, do NOT start any new hardening rows; (2) COMMIT and push your uncommitted rowtools edits (hxdefs.sh etc.), checking git config user.email is shaylanger2@gmail.com first; (3) write C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.handoff.md (rows done with RESULT lines, rows still open, game/save/lock state on 4080-i4, tools changed); (4) set status via agent-status.ps1 imm26-4080-i4op10 STOPPED-CONTEXT (or DONE) with latest and next filled; (5) stop. Coordinator #12 spawns a fresh 4080-i4 operator (op11) for the unblock rows right after, so leave the 4080-i4 game, lock and inflight marker as they are for it.",
+   "why": "Coordinator #12 (peer, Shay's authority) cannot reach op10 from its session and asked the tail, which owns op10 (a97e05a80e87aab69), to deliver the wrap-up order; no permission or config change is involved."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Re-arm tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02 as a PowerShell run_in_background task (the armed waker bz0lf5892 already covers op10; re-arm only if it has exited) and wait for op10 to reach STOPPED-CONTEXT/DONE, then run tail-relay.ps1 -Agent imm26-4080-i4op10 -Kind DONE|FAILED with its handoff file as -Report and tell coordinator #12",
+   "why": "The tail only relays results; the op10 result is not in yet, and the tail spawns, edits and decides nothing."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "After checking tail-ack.ps1 usage (not shown in this file, exact arguments unknown), run tail-ack.ps1 for the imm26-5090-i5-op9c relay (inbox file 20261015-233521-tail-imm26-5090-i5-op9c.msg, shown as delivered; #12 states it is acked on its side), so the op9c release is closed",
+   "why": "#12 asked the tail to tail-ack the relays it holds once delivered; op9c's relay was delivered and acked by #12."
+  }
+ ],
+ "checks": [
+  "sed -n 1,12p C:/KenshiModding/tools/automation/tail-ack.ps1 | cut -c1-250",
+  "head -3 C:/KenshiTestRuns/agents/imm26-4080-i4op10.status | sed -n '1p;3p' | cut -c1-300",
+  "ls C:/KenshiTestRuns/tail C:/KenshiTestRuns/inbox/coordinator | tail -8"
+ ]
+}

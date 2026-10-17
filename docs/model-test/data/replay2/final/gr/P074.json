@@ -1,0 +1,20 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add '#12 NC15 built+pushed (commits af010bd, e8afd0f; DLL SHA256 9EABD486...5748, NC15 dir pending-fixes\\npc-immersion-26\\NC15). NOT installed. 14-c live run queued on 5090-i5 after op9g and WP-5.'; mark imm26-u3-nc15 DONE in the imm26 program ledger (program-ledger.ps1)",
+   "why": "The coordinator must record every agent report in HANDOFF and the ledger, and NC15 is built but not yet proven live."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:generate] NC15 install + live 14-c on 5090-i5', name imm26-5090-i5-nc15op. Brief: start ONLY after the 5090-i5 status shows op9g and WP-5 DONE (no game process to kill). Stop the game, copy C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC15\\Stobe.dll to the lane (verify SHA256 9EABD486FBF8F996D2153DDA5FD8FE057DBC55AF93D1DCAA433A046841CE5748), relaunch with lane-setup.sh 5090 5 kah-imm26-i5 --clear-faction none, run row 14-c with the live recipe from agents\\imm26-5090-i5-op9c.handoff.md, then check ACTIVITY_CAMP_TOWNS_DIAG for nc15=sid_key, reasons=ok_sid_keyed:N and accepted>0. If the offer stage fails because no hostile member Cind can see sits inside camp borders (ActivityRuntimeBindings.cpp:629-631), report that exact blocker and do not edit code. Write one RESULT 14-c PASS|FAIL line with evidence and update your status file each 10 min. Do not touch the live tree /var/www/html/StobeServer or Shay's DB.",
+   "why": "NC15 is the fix for 14-c's handle_serial_zero root cause; only the live run on the 5090-i5 lane can prove it, and the lane must be free of op9g before the DLL is swapped."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-FileHash -Algorithm SHA256 C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC15\\Stobe.dll",
+  "git -C C:/KenshiTestRuns/imm26-nc15 log --oneline -3 origin/main"
+ ]
+}

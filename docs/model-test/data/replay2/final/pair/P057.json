@@ -1,0 +1,20 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Shay: your message 'size 3 and do it if it isnt too large' does not say which item '3' is. Which one? Nothing new starts; the 5090 stays stopped per your order (no new 5090 testing sessions). Reply with the item and I will size it (one work package, token estimate per docs/WP_SIZING.md section 2) and do it only if it is under the size limit. Sent via SendMessage to your relay session.",
+   "why": "The inbound has no referent in the handoff text, so guessing the work would invent a task; Shay's rule is to ask once in the final text and keep working, and messages for Shay go via his relay session."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for Shay's reply naming the item; keep event-wait.sh running in the background; all running imm26 lanes and agents continue unchanged",
+   "why": "Nothing can be sized or started until the item is known, and the waker must stay armed while work is in flight."
+  }
+ ],
+ "checks": [
+  "grep -n -i \"size 3\\|size-3\\|item 3\\|#3\" /c/KenshiModding/testing/HANDOFF.md /c/KenshiModding/testing/SHAY_DECISIONS.md /c/KenshiModding/docs/WP_SIZING.md | head -20",
+  "ls -la /c/KenshiTestRuns/inbox/coordinator | tail -5",
+  "ls /c/KenshiTestRuns/programs/"
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; .\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3-hard2b -Report C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md -Summary \"imm26-5090-i3-hard2b STOPPED-CONTEXT 2026-10-15 20:49 (~150k): 10-a FAIL marked; next 19-ax 02-cx 05-cx 01-bx 01-cx 11-b; successor needed, new coordinator decides the name\" 2>&1 | Select-Object -Last 1",
+   "why": "Relay the stopped agent's result to the new coordinator so the stop hook can release this tail (tail relays results, it does not respawn)."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=kenshimodding-76: TAIL-RELAY from tail 6d1f3011: imm26-5090-i3-hard2b STOPPED-CONTEXT (report C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md; ack with tail-ack.ps1 -Agent imm26-5090-i3-hard2b). Result, not an order: 10-a FAIL marked, context ~150k; remaining rows 19-ax 02-cx 05-cx 01-bx 01-cx 11-b. Successor needed; this tail spawns nothing.",
+   "why": "Tells the new coordinator the result is in its inbox and what it must act on (successor respawn), matching the relay pattern used for imm26-pi21."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiTestRuns/agents; for i in $(seq 1 900); do for a in imm26-5090-i4-hard2b2 imm26-4080-op2jb imm26-4080-i4op7c imm26-fix19; do if head -1 $a.status 2>/dev/null | grep -qE '\\| (DONE|FAILED|STOPPED-CONTEXT) \\|'; then echo \"FINISHED $a: $(head -1 $a.status)\"; exit 0; fi; done; sleep 2; done; echo TIMEOUT   (run_in_background)",
+   "why": "The previous wait exited on i3-hard2b and would exit on it again at once, so re-arm ONE background wait over the four agents still RUNNING."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-5090-i4-hard2b2, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-fix19 (all RUNNING)",
+   "why": "Each still-running agent must be relayed to the new coordinator on finish; nothing else to do until then."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no new spawn, no message to any lane operator, no edit to imm26-5090-i3-hard2b handoff",
+   "why": "A tail session spawns and decides nothing new; successor respawn belongs to the new coordinator."
+  }
+ ],
+ "checks": [
+  "head -3 C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.status",
+  "dir C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md",
+  "dir C:\\KenshiTestRuns\\inbox\\coordinator"
+ ]
+}

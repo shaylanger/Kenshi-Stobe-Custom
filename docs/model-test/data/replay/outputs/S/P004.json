@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/savever.py a5f5a157aa21dff07 A3 ''",
+   "why": "Save the A3 verifier's PASS verdict and notes into the suite round folder, same as was done for A2 (the tool's exact argument form is copied from the A2 call)."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mcp__ccd_session_mgmt__get_usage {\"session_id\":\"self\"}, then write the 5h/weekly percentages to /mnt/c/KenshiTestRuns/invest/suite/A3/quota-after.txt; then in WSL: python3 /mnt/c/KenshiTestRuns/invest/suite/tools/collect.py A3 SUITE-A3 ; bash /mnt/c/KenshiTestRuns/invest/suite/tools/state-check.sh /mnt/c/KenshiTestRuns/invest/suite/A3/state-after.txt ; sed -i 's/^Done rounds:.*/Done rounds: B1 (ticket SUITE-B1b), B2, B3, A1 (PASS), A2 (PASS), A3 (PASS)/' /mnt/c/KenshiTestRuns/invest/suite/PROGRESS.md",
+   "why": "Record quota, collect per-agent cost/time metrics, confirm the state check is OK and update progress for the last investigation round, mirroring the A2 close-out."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Then move to the suite's final plan steps (step 8/9 of the plan: aggregate rounds.tsv across rounds and give Shay one summary). The A3 root cause (Stobe.dll lacks LocalTravel.cpp, so travel_destinations is empty) is report-only; no fix, build or install is started without Shay's order, since the Phase 1 patch was not requested here.",
+   "why": "The investigation suite is read-only and the fix was not ordered; no agent is left running and the 5090 has no in-flight work, so the next step is the summary, not new work."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiTestRuns/invest/suite/tools/state-check.sh /mnt/c/KenshiTestRuns/invest/suite/A3/state-after.txt",
+  "head -3 /mnt/c/KenshiTestRuns/invest/suite/A3/report.md"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] 5090 i4 lane operator imm26-5090-i4op32 | You are imm26-5090-i4op32, fresh successor of imm26-5090-i4op3 (STOPPED-CONTEXT) as the operator of lane 5090 i4 (imm26 NPC immersion program, both rigs allowed, isolated lane only, never Shay's live install/server/DB). Start by reading C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md in full (lane runs NC5 DLL 25252267, save kah-imm26-i4-trip2, helpers via '. /c/KenshiTestRuns/imm26-5090-i4op3/h4.sh', reinstall script C:\\KenshiTestRuns\\imm26-5090-i4op3\\reinstall-nc5.ps1), then testing/NPC_IMMERSION_26_HANDOFF.md top section, the OPERATOR_COMMON.md / COMMON.md briefs it points to, and testing/KNOWN_BLOCKERS.md. Keep C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.status current with agent-status.ps1 and write agents\\imm26-5090-i4op32.handoff.md at every milestone (~40k tokens). Keep the inflight marker. First verify the lane game is still up and the NC5 SHA is installed; relaunch from the save if not. Then work the TODO rows in the handoff (10-d, 13-c, 12-c, 12-d, 14-b, 15-a, 16-c, 19-a, 20-a, 24-a, 24-b, plus 19-c/23-*/22-a/b/14-c as the coordinator assigns), debug budget one attempt per row, handbacks <= 8 lines, mark rows in TESTS and push. Known open items from the handoff: 13-b FAIL (AbandonTracker GapSeconds vs scan interval, needs a fixer), Hunt needs a naturally spawned wild herd, lane-isolation window overlap i4 vs i3 (lane-window.ps1 i4 place REFUSED).",
+   "why": "Waker reports LANE NO-OPERATOR 5090-i4 and the only i4 operator imm26-5090-i4op3 is STOPPED-CONTEXT with a full handoff and no successor, so a fresh op named i4op32 (the successor name its own handoff gives) must take the lane now."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Update C:\\KenshiTestRuns\\lane-owners.json so lane 5090-i4 maps to imm26-5090-i4op32 (override file named in HANDOFF; its current content and exact key format are unknown, read it first and edit only the i4 entry); then add the successor to the imm26 ledger wp with program-ledger.ps1 and update HANDOFF 'Right now' with the new i4 operator.",
+   "why": "lane-idle.ps1 checks operators via that override map, so without the update the NO-OPERATOR alert keeps re-firing, and the ledger/HANDOFF must record the new owner."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP (run_in_background)",
+   "why": "The waker just exited after delivering this event and must be restarted so other events still wake the coordinator."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i4 \"spawned imm26-5090-i4op32 from imm26-5090-i4op3.handoff.md\"",
+   "why": "Closes the open LANE NO-OPERATOR alert once the successor is launched (alert id is unknown, so by subject; it re-opens after 30 min if still true)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ls C:\\KenshiTestRuns\\agents | grep imm26-5090-i4op3",
+  "Get-Content C:\\KenshiTestRuns\\lane-owners.json"
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No new agent, no new operator message for 26-e SETUP-FAIL (lane 5090-i3, op20).",
+   "why": "Same offer prefix and cause as 26-d/26-dx (Hunt/ClearGroup accept needs NC17, d0221bf, not installed yet); the note to 5090-i3 (mark 26-dx/26-e/26-f/24-c SETUP-FAIL with the known cause, release claims, move to hardening/re-run rows) and the 5090-i5 note (run 26-d/26-dx/26-e after 26-c once NC17 is installed and 26-a passes) were already written, so the operator behaved as ordered."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "In testing/NPC_IMMERSION_26_TESTS.md set row 26-e to SETUP-FAIL (blocked on NC17 install + Hunt offer fixture; re-run on 5090-i5 after 26-c), alongside the pending 24-c and 26-f TESTS-table fix.",
+   "why": "The TESTS table still shows these rows as UNRUN although SETUP-FAIL tickets exist (open TODO in HANDOFF)."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "The waker just exited after delivering this event and agents (sfE2, sfA..sfD, hxA/hxB, operators) are in flight, so a waker must be running again."
+  }
+ ],
+ "checks": [
+  "ls C:\\KenshiTestRuns\\claims\\ (confirm 26-e claim is released so 5090-i5 can take it)",
+  "ls C:\\KenshiTestRuns\\inbox\\operators\\5090-i5-ready-nc17.txt C:\\KenshiTestRuns\\inbox\\operators\\5090-i3-after-26d.txt (confirm the notes covering 26-e exist)"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix15bx05cx2 (live successor working on the 05-cx candidates): 'PILOT-ESCALATE 05-cx SETUP-FAIL from lane 5090-i4 (hk2): E scene is not empty at E1, the prompt lists Malzin (female) under Nearby People Awareness. Fix the 05-cx setup recipe so the E1 scene is empty at start (exclude Malzin from the nearby-people list). Change no assertion. Add a selftest, save the candidate, update your status and handoff.'",
+   "why": "05-cx is a SETUP-FAIL needing a recipe fix, and fix15bx05cx2 is already working on the 05-cx candidates; the ledger owner imm26-inv15bx is only the fallback if setupfail.ps1 shows otherwise."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The background event waker completed on this event and must keep running while work is in flight."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "Read the full EVENT INBOX message 20261016-140625-pilot-escalate-05-cx.msg to confirm the E1 scene reason; do not message hk2, which belongs to tail #17."
+ ]
+}

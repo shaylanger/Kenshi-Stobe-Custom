@@ -1,0 +1,32 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker just exited after delivering this digest and must be restarted so the in-flight lanes stay watched."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "STATUS imm26-inv26nat DONE: no action; its report was already routed to imm26-5090-i5-op9p and the 26-d/26-dx/26-e tickets are already set recipe/ready.",
+   "why": "The DONE event only confirms work the coordinator already handled, and it needs no respawn."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to tail session 245d8ad7 (owner of the 4080-i4 operator, imm26-4080-i4op14 per HANDOFF): 'Coordinator #17 -> tail 245d8ad7: LANE IDLE 4080-i4 6.5 min (alert names operator imm26-4080-i4op12, which looks like a stale predecessor name; HANDOFF lists op14 as the live operator). Is op14 working on 4080-i4 (20-d rerun, 08-d via sfS v2, NC24 install, 23-b/22-b)? If it is stuck or gone, fix the root or respawn it with lane-brief.ps1 4080-i4 -Name <next> -Predecessor imm26-4080-i4op14, and reply with what you did.'",
+   "why": "The tail owns this agent, so the coordinator must not respawn it, but the lane has been idle past the 2 minute rule and the owner has to be asked."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the tail's reply in inbox\\coordinator or for the next waker event; if 4080-i4 is still idle after about 5 more minutes with no reply and no live operator, escalate by running alert-ack.ps1 only after the lane is working again.",
+   "why": "Acking before the lane is working would hide a still-true condition, and the 4080 rig must not sit idle while rows exist."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "ls C:\\KenshiTestRuns\\alerts\\open",
+  "cat C:\\KenshiTestRuns\\agents\\imm26-4080-i4op14.status",
+  "ls C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12.status"
+ ]
+}

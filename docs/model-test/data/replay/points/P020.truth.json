@@ -1,0 +1,42 @@
+{
+ "id": "P020",
+ "session": "5720e5b8",
+ "ts": "2026-10-15T23:04:19.463Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiTestRuns/agents/briefs; sed -n 169p /c/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md | cut -c1-1500\ncat > imm26-compose-fix-batch2e.md <<'EOF'\n[case:generate] imm26-compose-fix-batch2e: fix row 13-d (RETURN_ITEM baseline) in the composed server. Successor of imm26-compose-fix-batch2d (DONE, commit a299993).\nRead C:\\KenshiTestRuns\\agents\\briefs\\COMMON.md first (rules), then C:\\KenshiTestRuns\\agents\\out\\imm26-compose-fix-batch2d\\latest.md (what is deployed). Row 13-d in testing/NPC_IMMERSION_26_TESTS.md (grep IMM-13-d): loan deal (Cind lends Metal Junk, GIVE_ITEM VERIFIED), player returned the item (evidence C:\\KenshiTestRuns\\imm26-4080\\13-d-d-offer, 13-d-d-return, 13-d-d-return2) but the RETURN_ITEM is never completed / the `SE` property_returned positive event never fires. Baseline suspect: negotiation_engine.php ~line 1005 (RETURN_ITEM handling). Use /root/imm26/codemap (b...[truncated 890 chars]",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiTestRuns/agents/briefs; cat >> imm26-compose-fix-batch2e.md <<'EOF'\nKNOWN ROOT CAUSE (from the row): lib/negotiation_engine.php ~1005-1015 verifies RETURN_ITEM by (NPC inventory now - baseline.npc_inventory) >= qty or a stobe GIVE_ITEM action record; baseline.npc_inventory was taken at accept (Metal Junk 1) BEFORE the NPC lent it, so after the return the delta is 0. Fix: rebase baseline.npc_inventory after the NPC's GIVE_ITEM term executes (or count the lent qty) for RETURN_ITEM.\nEOF",
+   "why": "Root cause is already in the row; I'll add it to the brief and spawn."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\spawn-wp-session.ps1 imm26-compose-fix-batch2e generate C:\\KenshiTestRuns\\agents\\briefs\\imm26-compose-fix-batch2e.md -Program imm26 -Wp compose-ci",
+   "why": "Root cause is already in the row; I'll add it to the brief and spawn."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiTestRuns/inbox; ls | head; for a in imm26-5090-ctxop3 imm26-4080-i4op4; do mkdir -p $a; cat > $a/$(date +%Y%m%d-%H%M%S)-coord.msg <<'EOF'\ncoordinator: batch2d is DONE and deployed to all 5 lane sites (compose patch a299993; php opcache picks up in ~1 min). Changed: 20-a deferred confirm, 15-a awareness filter, far-NPC (>80u) travel, 14-a, 19-a, 24-a (must name a Known place), 24-b, 06-c, 08-a, 12-*, 16-c. Rerun the affected rows on YOUR lane at your next row boundary (no restart needed): 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a(needs non-empty Known places) 24-b; travel rows >80u 23-a/c/d 19-c; 23-b at <80u on NC-DLL lane. 13-d fix (RETURN_ITEM) follows from imm26-compose-fix-batch2e. Full list: C:\\KenshiTestRuns\\agents\\out\\imm26-compose-fix-batch2d\\latest.md\nEOF\ndone\ncd /c/KenshiModding; sed -i '0,/^\\*\\*18:xx #6.*$/s//&\\n**#6 later:** batch2d DONE (a299993, deployed 5 la...[truncated 504 chars]",
+   "why": "Root cause is already in the row; I'll add it to the brief and spawn."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiTestRuns/agents/out/imm26-compose-fix-batch2d; ls; tail -40 latest.md 2>/dev/null | cut -c1-400; ls ../../briefs | tail -15",
+  "cd /c/KenshiTestRuns/agents/briefs; cat imm26-compose-fix-batch2d.md | cut -c1-1500 | head -30; grep -n \"13-d\" /c/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md | head -5 | cut -c1-400"
+ ],
+ "narration": [
+  "Root cause is already in the row; I'll add it to the brief and spawn.",
+  "Batch2d is done, and the batch2 server fixes (a299993) are deployed to all 5 lane sites. The full test run shows only the 5 known failures.\n\n- **Rerun list:** I sent the rows to rerun to `imm26-5090-ctxop3` and `imm26-4080-i4op4` as inbox messages. They are 06-c, 08-a, 12-*, 14-a, 15-a, 16-c, 19-a, 20-a, 24-a, 24-b, and the travel rows run beyond 80 units. 23-b still needs a rerun under 80 units on a lane with the NC DLL.\n- **New agent:** I spawned `imm26-compose-fix-batch2e` (hidden session) fo...[truncated 534 chars]"
+ ],
+ "event_text_chars": 989
+}

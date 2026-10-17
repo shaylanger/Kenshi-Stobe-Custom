@@ -1,0 +1,21 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP",
+   "why": "The waker just exited after delivering this event, and lanes and agents are still in flight, so it must be restarted at once."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the TAIL-RELAY for imm26-5090-i4op3 from tail session 5720e5b8 (message plus C:\\KenshiTestRuns\\inbox\\coordinator), then run tail-ack.ps1 -Agent imm26-5090-i4op3 and spawn the fresh successor from its handoff.",
+   "why": "The ledger route shows imm26-5090-i4op3 is owned by the live tail (owner=tail:5720e5b8-42a8-4aaf-9e29-db0072586324, acked=no), and the rules say never respawn an agent a live tail owns, because the tail relays the result and the successor brief (imm26-5090-i4op3 handoff file) comes with it."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief | Select-String -Pattern 'i4op3|TAIL|OWNED-BY-LIVE-TAIL|NO SUCCESSOR|ORPHANED'",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.status",
+  "Test-Path C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator | Sort-Object LastWriteTime | Select-Object -Last 5"
+ ]
+}

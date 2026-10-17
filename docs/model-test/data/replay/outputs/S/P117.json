@@ -1,0 +1,20 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background, restarted right after reading the waker output so something is always listening while imm26-fix15bx05cx2 and the 4080-i4 op16 batch are in flight)",
+   "why": "The waker exited after delivering an event; the rule is to restart it every time it wakes me, and agents are in flight so the Stop hook requires a waker."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-fix15bx05cx2 completion notification and the next waker event; act on any LANE IDLE / AGENT STALL / relay line the waker printed.",
+   "why": "The only in-flight items are the fresh fixer, 4080-i4 op16 and tail-owned agents; nothing else is actionable until a result arrives. The stop-hook respawn demand for imm26-fix15bx05cx is already satisfied by the running successor imm26-fix15bx05cx2 (status RUNNING 14:04), so no second spawn."
+  }
+ ],
+ "checks": [
+  "tail -c 2500 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/3a21a7b9-2954-4145-be31-079880e2e887/tasks/bjikfnh8e.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ls C:\\KenshiTestRuns\\respawn C:\\KenshiTestRuns\\alerts\\open"
+ ]
+}

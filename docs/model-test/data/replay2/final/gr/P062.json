@@ -1,0 +1,14 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:investigate] imm26-setupfail-13g (kenshi-debugger): SETUP-FAIL 13-g on lane 4080-i4: cannot read the GIVE_CATS price of deal-99fa2f6efec25f5083602a42 (price.txt is empty). Find the root cause (why the deal's price.txt is written empty: setup script, deal creation, or DB row), propose the smallest fix, and build the missing piece so 13-g can run. Do not touch the 5090 lanes, the live server tree, ss-merge or Shay's saves. Write status with agent-status.ps1 and report via save-report.ps1.",
+   "why": "A setup failure needs a root-cause fix in the same hour, and the coordinator builds fixes rather than reporting them blocked; the investigate case goes to kenshi-debugger."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

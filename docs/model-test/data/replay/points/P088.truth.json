@@ -1,0 +1,28 @@
+{
+ "id": "P088",
+ "session": "48b778a7",
+ "ts": "2026-10-16T16:59:51.259Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: 5 can you clearify more? 6: i don tunderstand you need to be mroe clear with the actual question and"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:investigate] SETUP-FAIL 23-a and 11-b\nprompt: You are imm26-sfK, a fresh offline investigator (no live rig use; lanes belong to operators). Read C:\\KenshiModding\\testing\\AGENT_PROMPTS.md standard block for status updates (tools/automation/agent-status.ps1 imm26-sfK RUNNING|DONE ...). Claim tickets with tools/automation/setupfail.ps1 assign <row> imm26-sfK.\nTASKS: (1) SETUP-FAIL 23-a (lane 5090-i3, ticket C:\\KenshiTestRuns\\setupfail\\23-a.json): 'resolved_speaker is not Shay in s3', evidence C:\\KenshiTestRuns\\imm26-5090-i3\\rows\\23-a\\s3\\reply.txt (read that file and the row definition IMM-23-a in testing/NPC_IMMERSION_26_TESTS.md only). Determine whether it is a test/recipe defect, a model-reply variance, or a server/native bug; give the smallest fix (script change as a new file in testing/live-stobe-queue/imm26-assert/rowtools/, or a staged patch in pending-fixes/ for server code, compose copy only, no live deploy). (2) SETUP-FAIL 11-b (lane 4080-i4, ticket 11-b.json, inbox note C:\\KenshiTestRuns\\inbox\\operators): topic not claimable at in-combat ticks (c1b gamets 280056 < not_before_gamets 280098), needs recipe with U11B_PRE_ADV; check whether op12b / an existing rowtools script already covers it before building; produce the recipe and an operator note C:\\KenshiTestRuns\\inbox\\operators\\sfK.txt with exact commands. Do not weaken assertions. Commit+push your files (repo-local identity shaylanger). Final report via tools/automation/save-report.ps1 to agents/out/imm26-sfK.",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "A new SETUP-FAIL, 23-a on the 5090-i3 lane (the speaker wasn't resolved to Shay), arrived with no owner. I started imm26-sfK to investigate it. sfK also takes 11-b on the 4080-i4 lane, where the topic wasn't claimable yet at the in-combat ticks. It works offline, and the waker is running again."
+ ],
+ "event_text_chars": 830
+}

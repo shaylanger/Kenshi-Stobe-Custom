@@ -1,0 +1,31 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent call: description \"[case:generate] 4080-i4 lane operator op12b2\"; name imm26-4080-i4op12b2; prompt: \"You are imm26-4080-i4op12b2, the 4080-i4 lane operator, a FRESH successor of imm26-4080-i4op12b (STOPPED-CONTEXT). Read your brief C:\\\\KenshiTestRuns\\\\agents\\\\out\\\\imm26-4080-i4op12b2.brief.md first (rules, helper scripts, exact agent-status commands), then C:\\\\KenshiTestRuns\\\\agents\\\\imm26-4080-i4op12b.handoff.md and its status file. Continue from where op12b stopped (11-b, then NC20 install + 13-c 13-c-neg 23-a 19-d 08-d, then 03-b and 10-b after the 4080 deploys). Read the operator notes in C:\\\\KenshiTestRuns\\\\inbox\\\\operators\\\\ (4080-i4-ready-nc18.txt, sfH-nc20.txt, inboxoperators4080-deploys-before-rows.txt). Shay orders: 2 lanes per rig; a stuck row is SETUP-FAIL after ONE attempt, then the next runnable row. Keep your own status current with tools\\\\automation\\\\agent-status.ps1 imm26-4080-i4op12b2 RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:\\\\KenshiTestRuns\\\\agents\\\\imm26-4080-i4op12b2.handoff.md. Never SendMessage the old agent.\"",
+   "why": "The 4080-i4 operator stopped at its context limit with no successor, and the event text says to respawn fresh unless a successor already runs; the lane must not sit idle."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-4080-i4op12b 2>&1 | head -2",
+   "why": "Closes the stopped predecessor's tail relay once the successor is running, the same pattern used for op20."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The waker that delivered this batch has exited, and work is still in flight on both rigs, so a waker must keep running."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "no message to imm26-4080-i4op12b (stopped agent; never SendMessage an old session's agent)",
+   "why": "The predecessor is STOPPED-CONTEXT and cannot receive messages; the successor reads its handoff file instead."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief | grep -i \"4080-i4\\|NO SUCCESSOR\\|ORPHANED\\|WAKER\"",
+  "ls -la /c/KenshiTestRuns/agents/imm26-4080-i4op12b2.status /c/KenshiTestRuns/agents/imm26-4080-i4op12bb.status 2>&1 (confirm no successor already runs)",
+  "tail -20 /c/KenshiTestRuns/agents/imm26-4080-i4op12b.handoff.md (read the next: line and the last checkpoint before the brief)",
+  "tail -5 /c/KenshiTestRuns/agents/imm26-4080-i4op12b.status"
+ ]
+}

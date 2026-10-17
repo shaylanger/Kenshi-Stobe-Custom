@@ -1,0 +1,20 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 (no -ToSession, so it follows coordinator.current; exact arg names for message text unknown, use the script's usage) with message: 'imm26-4080-i4op52 INTERIM result (agent still has its own background work, may notify again). Lane 4080 i4 now runs NC6 3ADDE488 (SHA verified), game up, marker 4080-imm26-i4 kept. PASS 08-b (batch4; claim 6255, social_followup ask_count 1, Cind line, control Cind-in-combat not run). PASS 09-c (caveat: no no-preference control; reply refuses with We already shook on Stumble Inn). PASS 06-c. FAIL 08-a (travel-consent reply suppresses the followup row; matches the suspected 08-d design conflict). FAIL 10-a (Selika accepted apology in speech, 0 apology_relief rows). SETUP-FAIL 10-b (blocked, detail truncated in my copy). Full report: the agent hand-back message and C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status. Lane is still owned by this tail; do not respawn the operator until its status is DONE/STOPPED-CONTEXT. Failed rows need --allow-retry with a reason (PI-06).'",
+   "why": "Tail rule: every agent result owned by this tail is forwarded to the new coordinator via tail-relay.ps1; the tail spawns, edits and decides nothing itself."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the next task-notification of agent ae85217f23349ae6e (imm26-4080-i4op52) or its status file reaching DONE/STOPPED-CONTEXT, and for the coordinator's tail-ack.ps1 of the relay; keep the tail waker running.",
+   "why": "The notification says the agent stopped with background work still running and may resume, so the result is interim: no ack of the final, no successor spawn and no lane release yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status",
+  "Get-Content C:\\KenshiTestRuns\\lane-owners.json"
+ ]
+}

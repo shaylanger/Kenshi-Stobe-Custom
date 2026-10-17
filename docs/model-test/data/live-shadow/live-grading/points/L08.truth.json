@@ -1,0 +1,16 @@
+{
+ "id": "L08",
+ "batch_id": 8,
+ "class": "shay message",
+ "window": [
+  "2026-10-16T21:59:01.028Z",
+  "2026-10-16T22:00:38.247Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": true,
+ "real_action_count": 1,
+ "action_types": []
+}

@@ -1,0 +1,42 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, 'Right now' block: add '#13 27-a: imm26-inv-27a DONE (agents/out/imm26-inv-27a/latest.md). Verdict: TEST DEFECT, not product. c_27a in rowtools/reloadcheck_a.py judges both chase legs by final distance <= 35 u (copied from legacy row 23-e); the native Bodyguard stands off 49-67 u over four samples. The 67.3 -> 80.7 pair is the PRE-load leg (sampled ~2 s after teleport), not after the load. Engine saved the contract (hours_left 24.0 -> 23.1, package still Bodyguard): no STOBE or server change. Row 27-a stays FAIL until a rescore passes; op11 misread the post leg as a pass. Fixer imm26-fix27a spawned.'",
+   "why": "HANDOFF must record every agent report, and the correction of op11's pass reading has to land before anyone reruns 27-a."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Imm26 program ledger (program name from the session-start.ps1 -Brief output; file under C:/KenshiTestRuns/programs/): set work package 27-a to FAIL (checker defect), owner imm26-fix27a, state RUNNING, checkpoint = the inv-27a diagnosis path above.",
+   "why": "The ledger is the resumable state, so a new coordinator must see the package and its owner before the fixer reports."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "From C:/KenshiModding: git add testing/HANDOFF.md; git commit -m 'HANDOFF #13: 27-a = checker defect (test, not product), fixer imm26-fix27a' with the Co-Authored-By trailer the earlier HANDOFF commits use; then git push origin HEAD. Do not commit the ledger (it lives outside the repo) or any runtime files.",
+   "why": "Each state change is committed and pushed right after it is made, per the repo rules."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: '[case:patch] imm26-fix27a 27-a checker v2 (offline)'. Brief: Offline fix only. No game launch, no lane, no DLL or server change, no edit to hxdefs.sh or hunt26a-scene.sh. Read C:/KenshiTestRuns/agents/out/imm26-inv-27a/latest.md first. Do NOT edit testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py in place (queued or running lists may import it); create reloadcheck_a_v2.py beside it and change only c_27a: (a) each bodyguard leg is judged by a stand-off band: distance falls from the teleport gap into the band and stays there over a settled window; (b) the pre-leg distance is sampled only after the settle window; (c) post-load keeps order present, hours_left falls, package still Bodyguard, the Shay-away precondition, and distance stays in the band. Keep every other check unchanged and do not loosen the rule so a non-follower passes. Justify the band from the row text in testing/NPC_IMMERSION_26_TESTS.md; if it cannot be justified, stop and report it as a Shay decision instead of choosing a number. Rescore the saved evidence in C:/KenshiTestRuns/imm26-4080-i4/rows/27-a (run 2) and 27-a.prev (run 1); the new checker must pass the contract on both and fail a synthetic non-follower. Add a selftest in rowtools, commit with the item number, then push. Report: file paths, selftest counts, the exact one-call row command for the 4080-i4 operator, and the band value chosen (for Shay to confirm). Checkpoint with save-report.ps1 and agent-status.ps1 imm26-fix27a; grep and line ranges only; budget <= 100k tokens.",
+   "why": "A checker defect with saved evidence needs one bounded patch agent, and the assertion must be justified from the row text rather than from the observed number alone."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background)",
+   "why": "The waker exits each time it wakes the coordinator, and work is still in flight (03-b2 and 14-c investigators, the new fixer, tail-owned operators)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-fix27a's offline rescore report and for imm26-inv-03b2 and imm26-inv-14c; then the 27-a live rerun joins the 4080-i4 operator series after tail-owned op12 finishes. Do not message op12 or i4op10 (tail-owned) and do not touch 4080-i4 or 5090-i5 meanwhile.",
+   "why": "The rerun needs the fixed checker and a free lane, and the tail session owns both operators."
+  }
+ ],
+ "checks": [
+  "Get-Content C:/KenshiTestRuns/agents/out/imm26-inv-27a/latest.md -TotalCount 60",
+  "grep -n c_27a -A14 C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py",
+  "grep -l reloadcheck_a C:/KenshiTestRuns/queue/running/* C:/KenshiTestRuns/queue/4080/* C:/KenshiTestRuns/queue/5090/* C:/KenshiTestRuns/queue/any/* C:/KenshiTestRuns/inbox/operators/* C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/*.sh",
+  "Confirm C:/KenshiTestRuns/agents/imm26-inv-27a.status reads DONE and C:/KenshiTestRuns/inflight/imm26-inv-27a is gone",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not repeat the spawn, inbox note, agent-abandon, commit 6376cff or push from the background task; the coordinator already ran them and they show in the output (SPAWNED imm26-4080-i4op5 launcher_pid=75660).",
+   "why": "The task-notification reports work that already completed, so repeating any of it would duplicate the successor spawn and the NC install hand-off."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP  (run as a BACKGROUND Bash task)",
+   "why": "The background command ended with exit 0 right after EVENT STATUS wpT2 DONE, so the event waker has returned and nothing is watching for agent events while agents are in flight."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Update testing/HANDOFF.md 'Right now' and the imm26 program ledger (C:/KenshiTestRuns/programs/) with: wpT2 DONE (tail handoff WP-T2 ledger side); imm26-4080-i4op5 is the live 4080 lane i4 operator (spawned 17:20); imm26-4080-i4op4 abandoned as superseded; agent-rollcall heartbeat fix 6376cff pushed but live only after the agent-host restarts.",
+   "why": "The program ledger and HANDOFF must be updated after every agent report, and this batch changed the agent set and the open 4080 i4 work."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "No restart of the agent-host now; the rollcall heartbeat fix goes live at its next restart.",
+   "why": "Restarting the host now could disturb running agents, including the new 4080 i4 operator that has just started."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1 (confirm imm26-4080-i4op5 is alive and imm26-install-nc-rest2b is still running)",
+  "cat C:/KenshiTestRuns/agents/imm26-4080-i4op5.status",
+  "cat C:/KenshiTestRuns/agents/imm26-install-nc-rest2b.status"
+ ]
+}

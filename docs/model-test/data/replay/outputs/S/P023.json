@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP  (run_in_background: true, Bash tool, after reading the exited waker's output so its event line is not lost)",
+   "why": "The background waker bjjwra6y5 exited with code 0 (it woke on an event), and work is still in flight (5 lane operators, wpT1, compose-fix-batch2e, install-nc-rest2b, investigations), so a waker must be running again or the Stop hook blocks."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "Read the event line(s) the exited waker printed (tail of bjjwra6y5.output); if it holds an open alert (LANE IDLE, AGENT STALL/ORPHANED/DEAD) run powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id> \"<action taken>\" only after acting on it; the output is not visible in this file, so the specific id is unknown",
+   "why": "The waker's wake reason is not in the replay, so I handle whatever it printed instead of assuming it is only the wpT2 DONE status already seen."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': record wpT2 DONE (commit 7744453, tail-ledger-selftest 33/33, program-ledger selftest 46/46, agent-host-ensure selftest 12/12); wpT1 still running; docs package (CLAUDE.md, AGENT_PROMPTS, HANDOFF) starts after wpT1",
+   "why": "Right-now state must be updated the moment an agent finishes."
+  }
+ ],
+ "checks": [
+  "tail -c 1500 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/5720e5b8-42a8-4aaf-9e29-db0072586324/tasks/bjjwra6y5.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "cat C:/KenshiTestRuns/agents/wpT1.status | cut -c1-400"
+ ]
+}

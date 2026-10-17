@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next event line from the restarted waker (task bwp1pu36n); no message or command",
+   "why": "The batch only reports that the event-wait restart wrapper exited 0 after launching waker task bwp1pu36n, so nothing new needs action until the waker wakes with an event."
+  }
+ ],
+ "checks": [
+  "tail -c 800 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2b1a8eca-c7aa-44ff-bda2-326523d5864e/tasks/bwp1pu36n.output"
+ ]
+}

@@ -1,0 +1,37 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add '#10 SHAY ANSWER 2026-10-16: rumor-share hook = option A (run it on director-mode BORED_EVENT turns too; his recommendation yes). Row 03-b unblocked; spawned imm26-rumorhook-dir (server-only, offline). Row 03-b stays UNRUN until the deploy reaches the lanes. Open items unchanged: WP-N1 resume probe, WP-N2 displayed-proposal carry-over, durable item id.'",
+   "why": "HANDOFF is the canonical state the next coordinator reads, so this answer and the open 03-b dependency must be recorded there and not asked again."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: mark the rumor-hook question (rumor-share hook in director-mode turns, needed for row 03-b) as ANSWERED 2026-10-16: option A, run the hook on director-mode turns too; in-game effect: witness gossip reaches bystanders after director scenes as well as after autochat chats; code consequence: server-only, no native or DLL change.",
+   "why": "The repo rule requires every Shay decision to be recorded in SHAY_DECISIONS.md before a handoff, and neither earlier decision did this."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\memory\\rumor-hook-director-turns.md (first check that no rumor memory exists; new feedback memory: Shay 2026-10-16 chose option A, the rumor-share hook also runs on director-mode BORED_EVENT turns, his recommendation yes. Why: row 03-b cannot pass on busy scenes otherwise. How to apply: do not re-ask; build on director turns with the same rules as autochat) plus one index line in MEMORY.md: '- [Rumor hook in director turns](rumor-hook-director-turns.md) \u2014 Shay 2026-10-16: option A, rumor-share hook also runs on director-mode BORED_EVENT turns'",
+   "why": "The decision must survive into later sessions so nobody re-asks or re-decides the hook placement, and the index keeps MEMORY.md current."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "First ListAgents: if an imm26-rumorhook-dir or imm26-rumordir agent already exists, do not spawn. Otherwise Agent, subagent_type kenshi-generator, description '[case:generate] imm26-rumorhook-dir rumor hook in director turns', brief: 'You are imm26-rumorhook-dir (offline only: code, php -l, stobe-tests, deploy, commit; no game runs, no lane messages; do not turn the STOBE server on or off). Shay answered the rumor-hook question on 2026-10-16: option A. The server rumor-share hook (stobeKnowledgeShareFromSpeech: a witness gossip is passed to the listener as hearsay) must also run on director-mode BORED_EVENT turns (mode=director), with the same eligibility, no-duplicate rules and autochat behaviour as now. Server-only: no native or DLL change; keep the 45 s lifelike cooldown. Read testing/NPC_IMMERSION_26_HANDOFF.md, the row 03-b text in testing/NPC_IMMERSION_26_TESTS.md and C:/KenshiTestRuns/agents/out/imm26-inv-03b/latest.md sections 0-2 (root cause). If the server cannot tell director from autochat on the request, stop and report that instead of guessing. Set your status RUNNING with tools/automation/agent-status.ps1 first and checkpoint at each milestone. Read big files through the code map: bash tools/automation/codemap.sh --check, then grep -n in /root/imm26/codemap/ and sed -n only the ranges you need; never read a file over 60 KB whole. Run git status and git log in /var/www/html/StobeServer first (Shay also commits there). Patch BOTH /var/www/html/StobeServer and /root/stobe-work/ss-merge with one anchor-assert script in pending-fixes/imm26-rumorhook-dir/ that takes the tree root as argument and asserts each anchor count (never git checkout a file in ss-merge, never chown). Back up, php -l, offline stobe-tests must pass, deploy both trees, one commit in shaylanger/StobeServer (item 03-b, Shay decision 2026-10-16) with the shaylanger identity, then git push origin HEAD:stobe. Do not run game rows, do not touch Shay live install, saves or DB, do not message any lane operator, do not duplicate the work of fix10a, rowtools4, pi25 or pi28. End the status file DONE or FAILED. Final report: changed functions, commit id, php -l and stobe-tests result lines, deploy state of both trees, and whether the lanes need the deploy before row 03-b runs.'",
+   "why": "Shay chose the server-side option A, so one offline generator agent on the right model builds, tests and deploys it without a rig; the coordinator does not write server code itself."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-rumorhook-dir final report (commit id and deploy state) while the waker keeps running; then assign row 03-b to a lane operator with a deploy note in inbox/operators/",
+   "why": "Row 03-b cannot run until the hook is deployed to the lanes, and the lanes stay untouched while the agent works."
+  }
+ ],
+ "checks": [
+  "ListAgents: confirm no imm26-rumorhook-dir or imm26-rumordir agent already exists (PI-26 duplicate rule)",
+  "grep -n -i rumor C:/KenshiModding/testing/SHAY_DECISIONS.md (find the open entry to close)",
+  "sed -n 1,60p C:/KenshiTestRuns/agents/out/imm26-inv-03b/latest.md (confirm the director-mode root cause before the brief goes out)",
+  "wsl.exe -d DwemerAI4Skyrim3 -- git -C /var/www/html/StobeServer status --short",
+  "wsl.exe -d DwemerAI4Skyrim3 -- git -C /var/www/html/StobeServer log --oneline -5"
+ ]
+}

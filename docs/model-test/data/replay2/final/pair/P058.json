@@ -1,0 +1,26 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-setupfail19a, description '[case:investigate] imm26-setupfail19a: unblock SETUP-FAIL 19-a on lane 4080-i4'; brief: 'SETUP-FAIL 19-a on lane 4080-i4: no trip was proposed after two asks (s1, s1b). Read-only first: run powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/setupfail.ps1 list, then read the 19-a rows in testing/NPC_IMMERSION_26_TESTS.md and testing/NPC_IMMERSION_26_HANDOFF.md. Find why no trip proposal happened and write the smallest trip plan for 19-a that lane 4080-i4 can run, as testing/SETUPFAIL_19a_PLAN.md (do not name it REPORT, SUMMARY, FINDINGS or ANALYSIS). Do not edit code, do not run setupfail.ps1 assign, do not message the lane operator or any test arm, do not touch Shay install, the server tree or the DB. Keep C:\\KenshiTestRuns\\agents\\imm26-setupfail19a.status current with tools/automation/agent-status.ps1. Report only the plan path.'",
+   "why": "A bug-style unblock on the 4080 lane is an investigation first, and nobody owns 19-a yet; 4080 lanes stay allowed while 5090 rows are on hold."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add 'SETUP-FAIL 19-a (lane 4080-i4): spawned imm26-setupfail19a, waiting for plan path' and update it when the agent reports",
+   "why": "Right now must be updated the moment an agent starts, so a successor sees 19-a as owned."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-setupfail19a to report its plan path, read that plan, then run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/setupfail.ps1 assign 19-a imm26-setupfail19a <plan_path>",
+   "why": "The coordinator checks the plan before assign, because assign closes the 19-a setup-fail message and needs the plan path from the investigation."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/setupfail.ps1 list",
+  "grep -n \"19-a\" testing/NPC_IMMERSION_26_TESTS.md testing/NPC_IMMERSION_26_HANDOFF.md",
+  "ls C:/KenshiTestRuns/agents | grep -i \"4080-i4\\|setupfail\"",
+  "ls C:/KenshiTestRuns/inbox/coordinator | grep 19-a"
+ ]
+}

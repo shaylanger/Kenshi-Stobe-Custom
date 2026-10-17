@@ -1,0 +1,27 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none; bq15px3j6 is the completed tail-relay.ps1 call for imm26-4080-i3op23 (DONE report, already relayed to the new coordinator inbox)",
+   "why": "The i3op23 result was already relayed and summarised to the new coordinator, so this notification only confirms delivery."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding && powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/tail-wait.ps1 -Session 60ad9d7d-290e-4ca0-9909-9c33f627d722 (run_in_background)",
+   "why": "bq15px3j6 chained the tail-wait and has now exited (completed), so no waiter is running for hk2, op9p, fix20a19e and fix26f11b; re-arm one so the tail stays reachable and the Stop hook stops blocking."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the tail-wait exit line naming imm26-5090-i4-hk2, imm26-5090-i5-op9p, imm26-fix20a19e or imm26-fix26f11b; then save its report and tail-relay.ps1 it to the new coordinator",
+   "why": "These four tail-owned agents are still running; as a tail session I spawn and decide nothing new."
+  }
+ ],
+ "checks": [
+  "ls -la /c/KenshiTestRuns/tail/ | grep 60ad9d7d",
+  "cat /c/KenshiTestRuns/agents/imm26-5090-i4-hk2.status",
+  "cat /c/KenshiTestRuns/agents/imm26-5090-i5-op9p.status",
+  "cat /c/KenshiTestRuns/agents/imm26-fix20a19e.status",
+  "cat /c/KenshiTestRuns/agents/imm26-fix26f11b.status"
+ ]
+}

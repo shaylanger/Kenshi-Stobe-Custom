@@ -1,0 +1,52 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sfU2, description '[case:generate] imm26-sfU2 successor: finish asserter and row fixes 15-bx 16-bx (successor of imm26-sfU STOPPED-CONTEXT)'. Brief: 'You are the successor of imm26-sfU (STOPPED-CONTEXT). Do not resume the old agent. Read C:/KenshiTestRuns/agents/imm26-sfU.handoff.md and C:/KenshiTestRuns/agents/imm26-sfU.status first and work in the same directory. Part (1) is done and pushed (commit 1fc7e9d2, testing/live-stobe-queue/imm26-assert/v2/); do not change the committed originals. Finish: (a) fix the two selftest bugs in the uncommitted 15-bx v2 scripts (unblockdefs_c_v2.sh, unblockcheck_c_v2.py, unblock_c_v2_selftest.sh in testing/live-stobe-queue/imm26-assert/rowtools/) until the selftest passes fully, then commit with identity shaylanger and push; (b) write the 16-bx recipe; (c) write the operator note in C:/KenshiTestRuns/inbox/operators/ and the final report through save-report.ps1 to agents/out/imm26-sfU. Run no lane rows and no server deploys. Keep C:/KenshiTestRuns/agents/imm26-sfU2.status current with agent-status.ps1: RUNNING at start, DONE or STOPPED-CONTEXT at the end. Checkpoint at each milestone; at the context meter warn level hand off as STOPPED-CONTEXT.'",
+   "why": "sfU is STOPPED-CONTEXT with no successor, the relay said this coordinator starts imm26-sfU2, and the standing rule forbids leaving it orphaned; record its id with agent-ids.ps1 right after the spawn."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To the current 4080-i4 operator (last named imm26-4080-i4op13; confirm the current one from the newest imm26-4080-i4op* status file first): 'sfS DONE (a85c7b7a). Read C:/KenshiTestRuns/inbox/operators/sfS.txt. When your current row finishes (never mid-row), run 08-d: bash C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/unblockrun_sfs.sh 08-d 4080-i4 --allow-retry 08-d v2 after sfS attn fix. Send one RESULT 08-d line with evidence. If 08-d still does not retire with attn in place, say so in that RESULT line and do not patch the server yourself.'",
+   "why": "08-d v2 tests the attn fix on the 4080-i4 lane; the operator owns the lane and runs rows at its row boundary, and sfT's retire-block fix is needed only if attn alone does not retire the follow-up."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To the current 4080-i3 operator (last named imm26-4080-i3op21; confirm the current one from its status file first): 'sfS DONE (a85c7b7a). Read C:/KenshiTestRuns/inbox/operators/sfS.txt. At your next row boundary (never mid-row), run --dry first, then queue 05-cx v2 on 4080-i3: bash C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/hxrun_cx2.sh 05-cx 4080-i3 --out <the 4080 output path from sfS.txt; do not use the 5090 path C:/KenshiTestRuns/imm26-5090-hx> --allow-retry 05-cx v2 after sfS. Send one RESULT 05-cx line. Do not use any 5090 lane for this row.'",
+   "why": "Shay's hold on new 5090 sessions stands, but a 4080 lane may take the row, so 05-cx moves to 4080-i3 at a row boundary; the 4080 --out path is not given in this replay, so the operator must take it from sfS.txt rather than from the coordinator."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add 'imm26-sfS DONE a85c7b7a (pushed, shaylanger): 05-cx v2 = rowtools/hxrun_cx2.sh (SELFTEST HXCX2 23/23); 08-d v2 = rowtools/unblockrun_sfs.sh (SELFTEST SFS 18/18); offline only, no row run. NEXT: 08-d on 4080-i4 by message at a row boundary; 05-cx on a 4080 lane at a row boundary (5090 hold stands). sfU STOPPED-CONTEXT: successor imm26-sfU2 spawned. sfT still running: its retire-above-gates fix is needed only if 08-d still does not retire with attn.' Then record sfS DONE in the imm26 program ledger under C:/KenshiTestRuns/programs/ (the exact file name is not given in this replay; list that folder to find it).",
+   "why": "HANDOFF Right now and the program ledger are updated after every agent report, and sfS outputs feed the next rows."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/live-stobe-queue/imm26-assert/rowtools/README_HX.md: add one line that every hx row spawn uses its own setname and pin (Malzin pinned at the far spot, NPCs held); confirm the file exists first and do not create it if it is missing, and report that instead.",
+   "why": "sfS named this as the next speed-up and could not edit the README under its new-files-only rule, so the coordinator records it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-sfT to report DONE. Run the sfT retire-above-gates server fix (through lane-deploy-4080.sh with the exact args from C:/KenshiTestRuns/inbox/operators/bundle.txt, between rows only) only if 08-d reports that it still does not retire with attn in place, and only if bundle.txt does not already list it.",
+   "why": "The sfS caveat makes the sfT fix conditional on 08-d failing with attn alone, so the fix is not a prerequisite for running 08-d and should not delay it."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no tail-ack and no respawn for imm26-sfS",
+   "why": "sfS is DONE and is a non-ledger agent (tail-ack fails for it), and it needs no successor."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "git -C C:/KenshiModding show --stat a85c7b7a",
+  "git -C C:/KenshiModding status --short testing/live-stobe-queue/imm26-assert/rowtools",
+  "cat C:/KenshiTestRuns/inbox/operators/sfS.txt",
+  "tail -20 C:/KenshiTestRuns/inbox/operators/bundle.txt",
+  "sed -n 1,6p C:/KenshiTestRuns/agents/imm26-sfT.status",
+  "ls C:/KenshiTestRuns/agents/imm26-sfU.handoff.md C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/README_HX.md",
+  "newest imm26-4080-i4op* and imm26-4080-i3op* status files under C:/KenshiTestRuns/agents (current operator, and whether it is between rows)",
+  "bash C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/unblockrun_sfs.sh 08-d 4080-i4 --dry",
+  "bash C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/hxrun_cx2.sh 05-cx 4080-i3 --dry"
+ ]
+}

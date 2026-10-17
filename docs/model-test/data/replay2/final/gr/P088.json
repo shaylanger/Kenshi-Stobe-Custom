@@ -1,0 +1,19 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:investigate] imm26-sfK 23-a SETUP-FAIL diagnosis' (subagent kenshi-debugger), name imm26-sfK. Brief: row 23-a on lane 5090-i3 is SETUP-FAIL after one attempt: resolved_speaker is not Shay in s3 (evidence C:/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt). Find the root cause (speaker resolution in the s3 reply, the row script, or the lane setup), propose the smallest unblock with exact file and line, and say whether a fresh attempt is needed. Do not edit lane trees or the live server. Keep C:\\KenshiTestRuns\\agents\\imm26-sfK.status current with tools/automation/agent-status.ps1.",
+   "why": "A SETUP-FAIL row needs an agent on it (Shay's order), and an odd resolved speaker is an investigate case first under the routing rules."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash tool with run_in_background=true; no trailing & and no disown)",
+   "why": "The waker just woke on this event and exited, so nothing watches the lanes until it is re-armed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "grep -n -i speaker /c/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt | head -20"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Short answer: no, the test setup does not check your Claude quota, and I have found no place where the test records log Claude usage. The rows record game-state receipts only, so your quota does not change row results. The last usage read showed the weekly all-models limit at 100 percent (resets 2026-10-14 23:00 UTC, about 34 minutes) and extra usage on with 70.41 USD spent, so every new Claude agent spawn now costs extra. No rig work is running: automated 5090 testing is paused, and no rig work or agents restart until you give a new direct instruction. stobe-server stays off. One question, asked once: while you are on usage credits, should I hold all new Claude agent spawns until the reset, or allow only the cheapest tier?",
+   "why": "Shay asked whether the setup accounts for quota and records the right info; the input and HANDOFF show no quota gate or usage recorder, and his spend choice is his to make."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for Shay's one answer on holding new Claude agent spawns until the 2026-10-14 23:00 UTC reset; spawn nothing and restart no rig work meanwhile.",
+   "why": "Holding spawns is his spend decision, and HANDOFF already says no rig work or agents restart without a new direct instruction."
+  }
+ ],
+ "checks": [
+  "Grep -rIl -i \"get_usage|extraUsage|percentUsed\" C:/KenshiModding/tools/automation C:/KenshiModding/testing/HANDOFF.md",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

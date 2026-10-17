@@ -1,0 +1,29 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "sed -n 1,40p /c/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md (read-only check of the op22 DONE report before anything else)",
+   "why": "The op22 DONE relay is a result to read, not an order, so its report must be checked before the lane is respawned."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:generate] 4080-i3 operator imm26-4080-i3op23\"; brief: run powershell -NoProfile -File tools/automation/lane-brief.ps1 4080-i3 -Name imm26-4080-i3op23 -Predecessor imm26-4080-i3op22, then read C:\\KenshiTestRuns\\agents\\imm26-4080-i3op23.brief.md and the predecessor handoff from the op22 report; work only rows that have a runnable row script; record the agent id with agent-ids.ps1 add imm26-4080-i3op23 <id>",
+   "why": "The 4080-i3 lane has no RUNNING operator after op22 finished, and an idle rig with open work is not allowed; if the op22 report shows no runnable row, park with a handoff instead of spawning."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id of the LANE NO-OPERATOR 4080-i3 alert from the open-alert list> \"respawned imm26-4080-i3op23\"",
+   "why": "The alert closes only after the successor operator is running, so the ack comes after the spawn."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "mv /c/KenshiTestRuns/inbox/coordinator/20261016-133455-tail-imm26-4080-i3op22.msg /c/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "Handled relays move to inbox/coordinator/delivered/ once the result has been read and acted on."
+  }
+ ],
+ "checks": [
+  "sed -n 1,40p /c/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

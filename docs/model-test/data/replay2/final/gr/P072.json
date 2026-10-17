@@ -1,0 +1,21 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background; re-arm, never a bare &)",
+   "why": "The batch is only the 600 s EVENT BACKSTOP after the hold-i5 command, so the previous waker has ended while two agents (imm26-26a-recipe and imm26-4080-i4op10) are still running, and in-flight work must keep a waker armed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-26a-recipe report with the one-call goat recipe, and for imm26-4080-i4op10 status updates. Spawn imm26-5090-i5-op9g only after the recipe arrives, using the op9g brief in HANDOFF #12.",
+   "why": "The batch carries no new result; 26-a is blocked on the goat fixture recipe, and starting op9g before the recipe would repeat the same owned_target/flee failure."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -4 /c/KenshiTestRuns/agents/imm26-26a-recipe.status | cut -c1-250; date",
+  "head -4 /c/KenshiTestRuns/agents/imm26-4080-i4op10.status | cut -c1-250",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -f 'event-wait.sh$'"
+ ]
+}

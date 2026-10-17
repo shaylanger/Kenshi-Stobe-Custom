@@ -1,0 +1,28 @@
+{
+ "id": "P097",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:08:44.542Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 2>&1 | Select-Object -First 12 | ForEach-Object { $_.ToString().Substring(0,[Math]::Min(220,$_.ToString().Length)) }",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "ssh 4080 \"powershell -NoProfile -Command \\\"Get-ChildItem 'C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch' | Select-Object -First 3 Name,LastWriteTime; Remove-Item -Recurse -Force 'C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch'; Test-Path 'C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch'\\\"\" 2>&1 | tail -6",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "I deleted the stale 4080 log snapshot, `C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch` (0.7 MB). It was a pre-launch copy of the harness logs, last written 10/14, and ssh confirmed the folder is gone.\n\nIt was the only leftover older than 24 h. The other 86 entries the sweep lists are all under 24 h old. They are mostly the 259 MB `imm26-nc*` lane copies on the 5090, and the lanes may still use them, so I left them. They will block the Stop hook once they pass 24 h unless they're deleted o...[truncated 43 chars]"
+ ],
+ "event_text_chars": 493
+}

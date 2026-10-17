@@ -1,0 +1,43 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Stop the running waker (background task b77uckqhi, via TaskStop) so no waker runs during the swap; then in WSL: cd /mnt/c/KenshiModding/tools/automation && cp event-wait.sh /root/event-wait.sh.pre-wk1.bak && cp event-wait.sh.candidate event-wait.sh && bash -n event-wait.sh, but only if the checks below show event-wait.sh has no uncommitted edits that the candidate would lose and the candidate selftests still pass",
+   "why": "wk1's handoff says the candidate may be swapped only while no waker runs, since replacing a running script kills the waker; inbox events are file-based, so a short gap loses nothing."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "Work is in flight (hk2 02-cx, i5 relaunch, tail-owned agents), so a waker must be running again right after the swap."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "tail-ack.ps1 on the wk1 relay file in inbox\\coordinator (relay id and exact tail-ack.ps1 arguments are not in this file; take them from the inbox listing), then move the relay to inbox/coordinator/delivered/",
+   "why": "The new coordinator acks tail relays so tail 16 can close on wk1."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': record wk1 DONE (digest waker swapped in at <time>, backup path, EW_DIGEST=1 default, EW_DIGEST=0 rolls back), and a reminder to run waker-stats.sh after an hour and to check the first live LANE IDLE and health wakes; also update the program ledger entry for wk1",
+   "why": "State must be recorded after every agent report so a handoff or restart loses nothing."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git add tools/automation/event-wait.sh testing/HANDOFF.md && git commit -m 'imm26 wk1: swap in digest waker (event-wait.sh.candidate): actionable-only wakes, EW_DIGEST=1' (with the Co-Authored-By line), then git push; use the shaylanger identity",
+   "why": "One change per commit and push right after, once the swap has been verified working."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for hk2's 02-cx result, the i5 relaunch, and the first live wakes from the new waker; if the new waker misbehaves (it stays silent while an alert is open), restore the backup and set EW_DIGEST=0",
+   "why": "The digest path is not yet exercised live for lane-idle.ps1 and health wakes, so the first hour needs watching."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding status --short tools/automation/event-wait.sh tools/automation/event-wait.sh.candidate",
+  "git -C C:/KenshiModding diff --stat tools/automation/event-wait.sh",
+  "git -C C:/KenshiModding log --oneline -3 -- tools/automation/event-wait.sh.candidate",
+  "diff <(git -C C:/KenshiModding show HEAD:tools/automation/event-wait.sh) C:/KenshiModding/tools/automation/event-wait.sh | head -40",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -n /mnt/c/KenshiModding/tools/automation/event-wait.sh.candidate",
+  "ls C:/KenshiTestRuns/inbox/coordinator C:/KenshiTestRuns/alerts/open"
+ ]
+}

@@ -1,0 +1,32 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 imm26-4080-op2jc STOPPED-CONTEXT \"<task text copied unchanged from C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.status>\" \"tail TaskStop at coordinator #11 request (task a9528fa658b941ea0): silent since 21:48, no row evidence since 22:04; latest = last row state copied from the status file, the stop adds no new marks\" \"<outputs text copied unchanged from the status file>\" \"successor imm26-4080-op2jd via lane-brief.ps1 4080-i3 -Predecessor imm26-4080-op2jc; the new coordinator spawns it, the tail does not\"",
+   "why": "The peer asked for STOPPED-CONTEXT with the last row state so the successor can be spawned, and this write keeps the inflight marker and writes the respawn todo."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 <args per its param block, checked first> to coordinator.current with message: 'STOPPED-CONTEXT imm26-4080-op2jc: the tail TaskStopped it at coordinator #11 request; its status file holds the last row state. Successor imm26-4080-op2jd is yours to spawn via lane-brief.ps1 4080-i3 -Predecessor imm26-4080-op2jc. Its brief landed in a misnamed file in the repo root: find it with git status and move it to agents\\ before the successor reads it. Check the 4080-i3 game and lock state before the successor runs rows. No other tail agent is running.'",
+   "why": "The new coordinator owns the successor, so the stop result, the misnamed brief location and the lane state must reach it as a relay, since the tail spawns nothing."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to coordinator #11 (kenshimodding-41, pipe uds:\\\\.\\pipe\\LOCAL\\cc-msg-8fe47832583a3e943c9c0c1d8a8e8386): Tail 4cdf261b: imm26-4080-op2jc TaskStopped (task a9528fa658b941ea0), status marked STOPPED-CONTEXT with its last row state kept. The relay is in coordinator.current. Successor imm26-4080-op2jd is yours to spawn via lane-brief.ps1 4080-i3 -Predecessor imm26-4080-op2jc. No other tail agent is running.",
+   "why": "The peer asked to be told when the stop and status mark are done so it can spawn imm26-4080-op2jd."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 4cdf261b-1f2e-44be-902c-5390ee91e111 (re-arm)",
+   "why": "The tail may end only after this STOPPED-CONTEXT relay is delivered or acked (or 5 min old), so it waits on the re-armed tail wait until the new coordinator acks with tail-ack.ps1."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.status -Tail 5",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (confirm no other tail-owned agent is RUNNING)",
+  "git -C C:/KenshiModding status --short (locate the misnamed op2jc brief in the repo root; its file name is not in this batch)",
+  "Select-String -Path C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Pattern 'param' -Context 0,12 (confirm the relay parameter form before running it)",
+  "ssh 4080 with C:\\KAH\\ctl.ps1 read-only status verb for lane 4080-i3 (game and lock state; read-only only)"
+ ]
+}

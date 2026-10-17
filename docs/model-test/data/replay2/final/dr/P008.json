@@ -1,0 +1,19 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiTestRuns/../KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5  (run in background, same command as the previous waker: bash /mnt/c/KenshiModding/tools/automation/event-wait.sh)",
+   "why": "The previous waker just fired; six agents are still RUNNING so a waker must stay up (Stop hook), and each wake reports the next STOPPED-CONTEXT."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for claude-md-reviewer, imm26-4080-op2, imm26-nativecomp, imm26-wpA3, imm26-wpB3 and program-ledger to report STOPPED-CONTEXT (up to about 10 min from the stop messages); then stop stragglers, run handoff-ready.ps1 and open the next coordinator session.",
+   "why": "imm26-5090-op2 reaching STOPPED-CONTEXT is the expected result of the coordinator's own stop message; the coordinator is at its context limit and must start nothing new, and the HANDOFF already tells the next coordinator to respawn it fresh (imm26-5090-op3) from agents\\imm26-5090-op2.handoff.md, so the draft spawn is removed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "Read C:\\KenshiTestRuns\\agents\\imm26-5090-op2.handoff.md (confirm it exists for the successor)"
+ ]
+}

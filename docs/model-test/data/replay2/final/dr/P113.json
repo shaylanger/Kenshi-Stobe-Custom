@@ -1,0 +1,29 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background, after the checks below)",
+   "why": "The waker task br6081oo8 just exited, and work is in flight on other lanes, so exactly one waker must be running again."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:generate] 4080-i3 operator imm26-4080-i3op23\"; brief: run powershell -NoProfile -File tools/automation/lane-brief.ps1 4080-i3 -Name imm26-4080-i3op23 -Predecessor imm26-4080-i3op22, then read C:\\KenshiTestRuns\\agents\\imm26-4080-i3op23.brief.md and the predecessor handoff named in C:\\KenshiTestRuns\\agents\\out\\imm26-4080-i3op22\\latest.md; work only rows that have a runnable row script; do not run 15-bx, 05-cx or 16-bx until imm26-inv15bx recipe fixes arrive; record the agent id with agent-ids.ps1 add imm26-4080-i3op23 <id>",
+   "why": "The 4080-i3 lane has no RUNNING operator and an idle rig with open work is not allowed; if the op22 report shows no runnable row, park with a handoff instead of spawning."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id of the LANE NO-OPERATOR 4080-i3 alert from alerts\\open, or subject 4080-i3> \"respawned imm26-4080-i3op23\"",
+   "why": "The alert closes only after the successor operator is running, so the ack comes after the spawn; the alert id is not in the input."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "mv /c/KenshiTestRuns/inbox/coordinator/20261016-133455-tail-imm26-4080-i3op22.msg /c/KenshiTestRuns/inbox/coordinator/delivered/ (plus tail-ack.ps1 for this relay, exact args unknown from the input)",
+   "why": "The relay is a result, now read and acted on; handled relays move to inbox/coordinator/delivered/ and the tail is told via tail-ack."
+  }
+ ],
+ "checks": [
+  "sed -n 1,40p /c/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

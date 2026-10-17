@@ -1,0 +1,21 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding; pgrep -f event-wait.sh >/dev/null || MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP  (start as a background Bash job only when no event-wait is running; the last one ended at 18:14 and was not restarted)",
+   "why": "The waker guard blocks ending the tail turn without a running waker, and the restart rule says to restart it each time it wakes."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-5090-ctxop322 (RUNNING, last status 18:18): wait for DONE/FAILED/STOPPED-CONTEXT, relay the report with tail-relay.ps1 when it ends, and send no new orders; if its status is still silent at 18:28 send it a SendMessage check-in, and at 18:38 TaskStop it and tell the new coordinator. imm26-5090-i3op3 (STOPPED-CONTEXT, not acknowledged): wait for the new coordinator's tail-ack.ps1 ack; do not re-relay, re-send or respawn it.",
+   "why": "Both agents are still owned by this tail session and the stop-hook rule says to keep waiting, spawn nothing new and decide nothing new; the 10-minute silence limit has not yet been reached."
+  }
+ ],
+ "checks": [
+  "head -4 /c/KenshiTestRuns/agents/imm26-5090-ctxop322.status | cut -c1-320",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 status",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1 records imm26",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh"
+ ]
+}

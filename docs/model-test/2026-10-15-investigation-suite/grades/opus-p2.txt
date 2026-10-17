@@ -1,0 +1,23 @@
+GRADES P2
+R01 | root=4 evid=4 fix=3 comp=4 hon=5 | total=20 | false=0 | Never traces the $text=$why overwrite; the job-line fix is wording only
+R02 | root=5 evid=4 fix=5 comp=5 hon=5 | total=24 | false=1 | Most thorough; "trust 0" is from an earlier request, and it says so
+R03 | root=5 evid=2 fix=3 comp=4 hon=3 | total=17 | false=2 | Causes right; wrong Emperor row count; wrongly says raw reply not logged
+R04 | root=5 evid=2 fix=5 comp=5 hon=4 | total=21 | false=2 | Strong fix; affinity 0 is wrong for that turn (-5); line misattributed
+R05 | root=5 evid=4 fix=4 comp=5 hon=5 | total=23 | false=0 | Correct and clear; the fix code relies on helpers it does not define
+R06 | root=5 evid=4 fix=5 comp=5 hon=4 | total=23 | false=1 | Found race Unknown at create; wrongly says the player typed
+R07 | root=3 evid=3 fix=2 comp=3 hon=4 | total=15 | false=0 | Thin; misses the reply overwrite and the schema.sql source
+R08 | root=5 evid=4 fix=4 comp=4 hon=5 | total=22 | false=1 | Solid; miscounts the STT turns; wrote scratch files to /tmp (disclosed)
+R09 | root=2 evid=3 fix=2 comp=3 hon=3 | total=13 | false=1 | Issue 2 wrong: blames the LLM, misses the server gate replacing her line
+R10 | root=5 evid=4 fix=4 comp=5 hon=4 | total=22 | false=1 | Correct; wrongly says the STT transcript text is not logged
+R11 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | Every claim checked true; complete fix with controls
+R12 | root=4 evid=3 fix=3 comp=4 hon=2 | total=16 | false=2 | Says "Tango" came from the model and the player typed
+R13 | root=5 evid=2 fix=5 comp=4 hon=4 | total=20 | false=1 | Deep evidence, but wrong about race/faction at profile creation
+R14 | root=5 evid=3 fix=4 comp=5 hon=4 | total=21 | false=1 | Good; wrongly says the model's original reply text was not logged
+RANKING: R11 > R02 > R06 > R05 > R08 > R10 > R04 > R14 > R13 > R01 > R03 > R12 > R07 > R09
+KEY FALSE CLAIMS:
+R09: the LLM invented the job line (the server gate replaced her MoveToTarget reply with the canned text; stobeserver.log:2157758, travel_companionship.php:561)
+R12: "Tango" came from the model and the player's line was typed (Shay's own STT transcript "What's up, Tango?" came first; every player line has an STT_RESULT)
+R03: the Emperor Tengu set has 11 rows and the raw LLM output is not in the logs (it has 6 rows; the reply is in chat_llm_full_capture.log:151 and output_from_llm.log ~327307)
+R04: "Current player affinity: 0/100" on the rejected turn (the prompt for req_6ad031e617a02 says -5, context_sent_to_llm.log:1921229)
+R13: the profile was created at 01:49 with the correct race and faction (core_npc_master_history 115968, snapshot_reason=create, has race Unknown and an empty faction)
+R06: the player text "arrived as typed" (all player lines came through parakeet STT: stobe.log STT_RESULT lines, and the sha1 matches at stobeserver.log:2157671)

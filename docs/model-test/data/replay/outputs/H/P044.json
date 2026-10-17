@@ -1,0 +1,24 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-wpC-b5 and imm26-5090-i5-op6 to finish; keep the event-wait watcher running and restart it on each wake",
+   "why": "The tail session owns two RUNNING agents that are not finished or acknowledged, the Stop hook forbids ending the turn, and the tail spawns and decides nothing new."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \\\"C:\\KenshiTestRuns\\agents\\$n.status\\\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1); Get-Content $i.FullName -TotalCount 3 | Select -Skip 2 }\"",
+   "why": "Read-only status check to see whether either agent has written a new step or finished since the last check (wpC-b5 last wrote 19:39, op6 19:45 Win clock)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Stall rule: if an agent is silent 10 min, message it again; at 20 min silent, TaskStop it and tell the new coordinator in the relay",
+   "why": "Per the tail contract, a stalled agent is escalated on those timers, and wpC-b5 has been silent since 19:39 with a status message already sent."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \\\"C:\\KenshiTestRuns\\agents\\$n.status\\\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1) }\"",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator -Filter *tail* | Sort LastWriteTime -Desc | Select -First 2 Name"
+ ]
+}

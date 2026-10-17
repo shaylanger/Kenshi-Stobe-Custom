@@ -1,0 +1,24 @@
+{
+ "id": "P027",
+ "session": "2b1a8eca",
+ "ts": "2026-10-15T23:59:03.633Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "ls -t /c/KenshiTestRuns/inbox/coordinator | head -5; tail -c 1200 /c/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md",
+  "head -c 2500 /c/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md; ls /c/KenshiTestRuns/agents/out/imm26-5090-i4op3 2>/dev/null"
+ ],
+ "narration": [],
+ "event_text_chars": 698
+}

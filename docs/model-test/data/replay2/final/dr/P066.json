@@ -1,0 +1,21 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a36b1ed7ac43a8d66 (imm26-5090-i4-hard2b3): Coordinator #11: the Stop hook reports the 5090 idle (Kenshi closed, game lock free, no idle reason). You own the one allowed 5090 lane, 5090-i4. As soon as imm26-5090-i4-hard2b2.handoff.md exists or its status is DONE/STOPPED-CONTEXT/FAILED, restart the lane backend, acquire the 5090-i4 lane lock, launch windowed on DISPLAY2 and run the next open row (16-bx, then 15-bx, 13-ax, 02-ax) with the one-call row scripts. Do not touch 5090-i3 or 5090-i5 (held by Shay). Keep the STOBE server off unless a row needs it. Update your status file at every row boundary and at least every 10 minutes during waits.",
+   "why": "The one allowed 5090 lane must start its next row instead of recording an idle reason, and the operator was only just spawned so a nudge is enough."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Only if the status check shows imm26-5090-i4-hard2b3 is STOPPED, FAILED or has no fresh status: run lane-brief.ps1 5090-i4 -Out C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b4.brief.md -Name imm26-5090-i4-hard2b4 -Predecessor imm26-5090-i4-hard2b3, then Agent [case:generate] imm26-5090-i4-hard2b4 lane operator with the text: Read C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b4.brief.md (PREDECESSOR HANDOVER first), then the predecessor handoff, then start row 16-bx on 5090-i4 only.",
+   "why": "If the operator is dead, a fresh successor from its handoff is the only way to keep the one allowed 5090 lane running without recording an idle reason."
+  }
+ ],
+ "checks": [
+  "head -3 C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b3.status",
+  "head -3 C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.status",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 -NoMemory",
+  "& C:/KenshiModding/tools/automation/kenshi-ctl.ps1 idle"
+ ]
+}

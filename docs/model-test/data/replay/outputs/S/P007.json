@@ -1,0 +1,34 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5  (run_in_background)",
+   "why": "The waker just exited and claude-md-trim and other agents are still in flight, so a waker must be running again before anything else; the Stop hook blocks otherwise."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding && git checkout -- CLAUDE.md && git diff --stat CLAUDE.md | tail -1",
+   "why": "The previous CLAUDE.md edit split docs/WP_SIZING.md on three backticks and took index [1], which is the section 7 brief template, not the section 8 text; the grep showed 0 'Big files are read' and the sed output showed '[case:generate] <wpName>' inside the Large programs section. CLAUDE.md was clean at session start, so reverting to HEAD discards only that bad edit."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\CLAUDE.md: python (WSL or Git Bash) that reads docs/WP_SIZING.md, picks the fenced block that contains the text 'Big files are read through code maps' (assert exactly one match), and replaces only the '- **Size work packages before spawning:**' line with that block, keeping LF line endings. Then run: grep -c 'Big files are read' CLAUDE.md; grep -c '\\[case:generate\\] <wpName>' CLAUDE.md (expect 1 and 0); git diff --stat CLAUDE.md",
+   "why": "Shay said 'Yes, you can edit CLAUDE.md', so apply the intended section 8 text with an anchored assertion and verify it, instead of indexing the blocks by position."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git add CLAUDE.md && git commit -m 'CLAUDE.md: Large programs section gets code-map, checkpoint and successor rules (WP_SIZING section 8, Shay ok)' with the Co-Authored-By trailer, then git push",
+   "why": "The repo is the source of truth and the rule is commit and push after each change; the CLAUDE.md diff must contain only the three intended bullets."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "The claude-md-trim agent's report, the independent reviewer's verdict on the full trim, and the next event-wait.sh digest. The trim (with the backup at docs/claude-md-archive/CLAUDE.md.pre-trim-<date> and the rule checklist) is a separate step Shay has also approved, so do not mix it into this commit.",
+   "why": "The trim comes after the section 8 edit is committed and has its own backup and review steps."
+  }
+ ],
+ "checks": [
+  "tail -5 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/277ebe12-067a-4b4a-b63d-8c4b6c5f3aa2/tasks/bzbwr5kui.output | cut -c1-500",
+  "cd /c/KenshiModding; git status --short CLAUDE.md; git diff CLAUDE.md | head -30 | cut -c1-160"
+ ]
+}

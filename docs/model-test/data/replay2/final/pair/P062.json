@@ -1,0 +1,24 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+   "why": "Read the full 13-g entry (lane, plan path, deal id) before assigning anyone, since the event shows only the lane and an unknown label."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:investigate] imm26-setupfail-13g'; agent name imm26-setupfail-13g; brief: 'Root-cause the 13-g SETUP-FAIL on lane 4080-i4: cannot read the GIVE_CATS price of deal-99fa2f6efec25f5083602a42 (price.txt is empty). Read the setupfail list entry first. Trace how price.txt is written for GIVE_CATS deals in the NPC immersion 26 code (compose tree /root/imm26/compose and pending-fixes), find why it is empty, and build the smallest fix (setup code or tooling) with a selftest. Do not edit the live server tree or ss-merge, do not restart lane 4080-i4, and do not message operator imm26-4080-i4op8 (its run is in progress). Never ask questions and never report blocked. Write the report to C:/KenshiTestRuns/agents/out/imm26-setupfail-13g/latest.md and keep C:/KenshiTestRuns/agents/imm26-setupfail-13g.status current with agent-status.ps1 (RUNNING, then DONE or FAILED).'",
+   "why": "An empty price file is a root-cause bug; the investigate case finds it and the coordinator has the fix built rather than reporting the row blocked."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 13-g imm26-setupfail-13g",
+   "why": "Give 13-g an owner in the ledger once the investigator exists so the entry is not left unowned."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "tail -5 C:/KenshiTestRuns/agents/imm26-4080-i4op8.status"
+ ]
+}

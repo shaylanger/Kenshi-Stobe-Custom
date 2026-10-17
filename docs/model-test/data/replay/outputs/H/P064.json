@@ -1,0 +1,23 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no spawn for lane 5090-i4",
+   "why": "Shay ordered no new 5090 testing until he says otherwise and 5090 lanes are HELD, so the NO-OPERATOR event for 5090-i4 gets no respawn from the waker's handoff text"
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id of the open 5090-i4 NO-OPERATOR alert, read from session-start.ps1 OPEN ALERTS> \"5090 lane held by Shay's order (no new 5090 testing); 4080 + offline work continue\"",
+   "why": "the alert condition is the known hold, so it is closed with that reason (the batch does not give the alert id, so it is looked up first)"
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "the background waker that delivered this event has completed, and anything in flight (4080-i4 op9, 4080-i3 op2jc, rowfix-reload) needs a waker armed"
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

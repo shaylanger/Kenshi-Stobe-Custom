@@ -1,0 +1,43 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP",
+   "why": "The batch's background waker exited (exit 0) after the wpT2 DONE event, so nothing is listening and the waker guard would block; restart it now and again after every wake."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "tools/automation/program-ledger.ps1: record WP-T2 (tail handoff ledger side) DONE with evidence C:/KenshiTestRuns/agents/wpT2.status; read the script header first for the verb and args (not shown in this file)",
+   "why": "Every agent report must go into the program ledger, and the wpT2 DONE event is a finished work package."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': imm26-4080-i4op5 RUNNING (replacement operator for 4080 lane i4, spawned 17:20 after the 17:19 monitor kill of imm26-4080-i4op4); imm26-4080-i4op4 abandoned as superseded (agent-abandon.ps1); wpT2 DONE; commit 6376cff (agent-rollcall evidence heartbeat) pushed but not live until agent-host restarts; NC DLL install on 4080 i4 requested through inbox/imm26-install-nc-rest2b; i4op5 was spawned via the hidden spawn-wp-session.ps1, which CLAUDE.md keeps OFF unless Shay asks, so the next long agent uses the Agent tool",
+   "why": "Shay's rule is to update Right now on every agent start or finish, and this batch changed three agents and one fix at once; the hidden-spawn deviation must be on record."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git -C C:/KenshiModding status --short tools/automation/ ; only if wpT2's own ledger-side files show as uncommitted: git -C C:/KenshiModding add <those wpT2 files only>; git commit -m 'WP-T2: tail handoff ledger side' with a Co-Authored-By trailer naming the committing model; git -C C:/KenshiModding push origin main",
+   "why": "A finished package's deliverables are committed on their own, but the batch does not show that wpT2 left anything uncommitted, so this is conditional; event-wait.sh and the rowtools edits stay out, and commit 6376cff is already pushed so it is not repeated."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "next event: an imm26-4080-i4op5 status update (its brief requires one at least every 8 min) and the imm26-install-nc-rest2b reply in inbox/coordinator",
+   "why": "The replacement operator and the NC DLL install were both started in this batch, so nothing else is needed yet."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no respawn of imm26-4080-i4op4; do not restart agent-host to load the 6376cff rollcall fix",
+   "why": "i4op4 is already abandoned as superseded, and restarting the host would disturb running agents; the fix goes live at the next quiet restart and the 8-minute heartbeat in the i4op5 brief covers the gap."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "cat C:/KenshiTestRuns/agents/imm26-4080-i4op5.status | head -3",
+  "cat C:/KenshiTestRuns/agents/imm26-install-nc-rest2b.status | head -3",
+  "cat C:/KenshiTestRuns/agents/wpT2.status | head -5",
+  "git -C C:/KenshiModding status --short tools/automation/",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-rollcall.ps1 | cut -c1-150"
+ ]
+}

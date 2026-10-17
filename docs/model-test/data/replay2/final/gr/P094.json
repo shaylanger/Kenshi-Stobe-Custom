@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The event-wait job bajoz23m8 exited after reporting imm26-bundle DONE, so nothing is watching the lanes until a new waker starts; the rule is a waker whenever work is in flight (operators, op9n, sfN, sfO, fxA/fxB/fxC, ctxaudit)."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section 'Right now': add one line: imm26-bundle DONE, commit 9be74b55 pushed; lane-deploy.sh, lane-deploy-4080.sh and lane-deploy-selftest.sh built and tested on temp trees only; 122 compose files; operator command in C:\\KenshiTestRuns\\inbox\\operators\\bundle.txt; no lane has deployed yet (each lane runs it once at its next row boundary).",
+   "why": "The HANDOFF rule requires an update after every agent report, and the bundle report has not been recorded there yet."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none (the bundle DONE needs no tail-ack)",
+   "why": "imm26-bundle was spawned by this coordinator session, not by a tail, so no tail-ack or relay is needed; its routing note (coordinator15-10e-route.txt) was already written at 12:00, and the earlier tail-ack 'no program ledger' message is noise for this agent."
+  }
+ ],
+ "checks": [
+  "ls /c/KenshiTestRuns/inflight",
+  "ls /c/KenshiTestRuns/agents/out/imm26-bundle",
+  "git -C /c/KenshiModding log -1 --oneline"
+ ]
+}

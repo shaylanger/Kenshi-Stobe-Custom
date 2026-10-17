@@ -1,0 +1,14 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:debug] 15-bx SETUP-FAIL unblock plan\", subagent_type general-purpose, prompt: \"Write the unblock plan for SETUP-FAIL 15-bx (lane 5090-i3). The failure is: no reply of Cind within 150s in P1; read C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt and the 15-bx row files. Write the plan as a file, then assign it with powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 15-bx <agent> <plan_path>. Do not edit the lane operator's rows and do not touch other lanes.\"",
+   "why": "The SETUP-FAIL names 15-bx with no unblock plan, so a debug agent on the cheap tier should write one for the coordinator to assign, and the event does not name a plan or agent for it."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "cat C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt"
+ ]
+}

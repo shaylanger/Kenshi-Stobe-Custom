@@ -1,0 +1,40 @@
+{
+ "id": "P035",
+ "session": "5720e5b8",
+ "ts": "2026-10-16T00:23:58.439Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; timeout 580 bash -c 'until ! head -1 /c/KenshiTestRuns/agents/imm26-5090-ctxop322.status | grep -q \"RUNNING\"; do sleep 20; done'; echo \"exit $?\"; head -3 C:/KenshiTestRuns/agents/imm26-5090-ctxop322.status | cut -c1-320; powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/program-ledger.ps1 records imm26 2>&1 | python3 -c \"\nimport sys,json\nfor r in json.load(sys.stdin):\n    if r['owner_session'].startswith('tail') and not r['acked_by_new_coordinator']: print('UNACKED',r['agent'])\n\"; date +%H:%M:%S",
+   "why": ""
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "cd /c/KenshiModding; cat > C:/KenshiTestRuns/agents/out/ctxop322-relay-summary.txt <<'EOF'\nimm26-5090-ctxop322 STOPPED-CONTEXT (needs FRESH successor imm26-5090-ctxop3222, lane 5090 i5 only). i5 runs NC5 25252267 (both copies verified), relaunched with -Gfx low, EnableBoredEvents=true. Helpers C:\\KenshiTestRuns\\imm26-5090-ctxop322\\h2.sh (cx_chase), mark.py, dps5.php.\nPASS marked+pushed (last 88d2ba3): 06-c 12-b 14-a 19-a 19-c. FAIL: 08-a 13-b 16-c 23-a 24-a 24-b. SETUP-FAIL: 12-d 15-a 20-a.\nTOOL FIXES pushed: rowcheck.py first_reply regex (nested-bracket NPC names; 12-b etc. were falsely failing), haff.php shadowed global $db (every H-AFF was a silent no-op \"Wrong database\") -> fixed.\nFINDIN...[truncated 1679 chars]",
+   "why": "`imm26-5090-ctxop322` has stopped at its context limit. I'll relay it now."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "to=kenshimodding-44: TAIL-RELAY imm26-5090-ctxop322 FAILED (STOPPED-CONTEXT; needs a FRESH successor imm26-5090-ctxop3222, lane 5090 i5 only) 2026-10-15 ~18:32. LAST agent I own; also still unacknowledged: imm26-5090-i3op3 (relayed 18:04+addendum) - please tail-ack.ps1 both so this tail can end.\nreport: C:\\KenshiTestRuns\\agents\\imm26-5090-ctxop322.handoff.md ; same text in C:\\KenshiTestRuns\\inbox\\coordinator\\*tail-imm26-5090-ctxop322.msg\n- i5: NC5 25252267 verified, -Gfx low relaunch, EnableBoredEvents=true; helpers C:\\KenshiTestRuns\\imm26-5090-ctxop322\\h2.sh (cx_chase), mark.py, dps5.php.\n- PASS marked+pushed (88d2ba3): 06-c 12-b 14-a 19-a 19-c. FAIL: 08-a 13-b 16-c 23-a 24-a 24-b. SETUP-FAIL: 12-d 15-a 20-a.\n- TOOL FIXES pushed: rowcheck.py first_reply regex (nested-bracket NPC names, 12-b was falsely failing); haff.php shadowed global $db (every H-AFF was a silent no-op) fixed.\n- Fixer findings: 13-b needs NC6 (3ADDE488..) installed on i5 (NC5 never fires N2_ABANDON at speed 0.5); 16-c personality guard rejects the whole refresh (\"core trait dropped\", updated=0); 24-a PROPOSE row still written; 24-b no region_plan row; 12-d needs an NPC with a spare weapon; 15-a harness transfer emits no trade event unless the item was held unequipped: give Cind a weapon first; 08-a scene inside the Hub makes Cind deflect: put the player outside the Hub; 20-a/23-a: Hub brawl keeps Shay in combat and sets Cind aff -14: haff set 60 platonic and use a calm scene (a trip FAILED after a 17.8 km teleport).\n- lane-isolation `windows` FAILs always (all 5090 windows stacked at -2560,0): operators set KAH_PF_ISOLATION=0; delete C:\\KenshiTestRuns\\preflight-isolation-5090.txt after gfx fixes.\n- TODO for successor: install NC6, rerun 13-b (speed 0.5: squad Cind+Malzin, Malzin onto Cind 8 s, `ko Cind 150`, Malzin 84 m away 40 s, grep N2_ABANDON, `wake Cind`); 12-a, 12-c, 22-a/b, 23-b/c/d, 25/26 (ProvenWild blocker), 15-a, 08-a outside the Hub, 20-a confirm leg.",
+   "why": "`imm26-5090-ctxop322` has stopped at its context limit. I'll relay it now."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; timeout 560 bash -c 'until [ -z \"$(powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/program-ledger.ps1 records imm26 2>/dev/null | python3 -c \"import sys,json;print(\\\" \\\".join(r[\\\"agent\\\"] for r in json.load(sys.stdin) if r[\\\"owner_session\\\"].startswith(\\\"tail\\\") and not r[\\\"acked_by_new_coordinator\\\"]))\")\" ]; do sleep 20; done'; echo exit $?; powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/program-ledger.ps1 records imm26 2>/dev/null | python3 -c \"import sys,json;print([ (r['agent'],r['acked_by_new_coordinator']) for r in json.load(sys.stdin) if r['owner_session'].startswith('tail')])\"",
+   "why": "`imm26-5090-ctxop322` has stopped at its context limit. I'll relay it now."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding; sed -n 1,12p C:/KenshiTestRuns/agents/imm26-5090-ctxop322.handoff.md | cut -c1-1000"
+ ],
+ "narration": [
+  "`imm26-5090-ctxop322` has stopped at its context limit. I'll relay it now."
+ ],
+ "event_text_chars": 1401
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background=true: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (no trailing & or disown)",
+   "why": "The waker bekp466sr completed on this batch, so nothing watches the lanes until it is restarted; do this first."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:investigate] imm26-sf23a. Brief: SETUP-FAIL 23-a on lane 5090-i3, reason 'resolved_speaker is not Shay in s3', evidence C:/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt. Find the root cause and write the unblock plan (exact row-script or recipe fix), following the lane plan in C:/KenshiTestRuns/inbox/operators/lane-plan-20261016.txt. Do not edit or run the lane's row tree. Save the report with save-report.ps1 under agents/out/imm26-sf23a and keep your status file current with agent-status.ps1.",
+   "why": "Every SETUP-FAIL row gets an agent, and an unknown-reason failure is a bug, so it starts with [case:investigate]."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 23-a imm26-sf23a",
+   "why": "Registers the new agent as owner of the 23-a unblock plan so the lane and the ledger point at it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Write C:/KenshiTestRuns/inbox/operators/5090-i3-setupfail-23-a.txt with: '23-a is SETUP-FAIL after one attempt (resolved_speaker is not Shay in s3). Per the lane plan, take the next runnable row now and claim it per the claims rule in lane-plan-20261016.txt. The unblock plan for 23-a comes from imm26-sf23a; do not re-run 23-a until it is delivered.'",
+   "why": "The lane must not sit idle waiting for the fix (Shay order: stuck row = SETUP-FAIL after one attempt, then the next runnable row), and the operator is not reachable by SendMessage (PI-36), so the note goes to its inbox."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "tail -n 40 /c/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt",
+  "tail -5 /c/KenshiTestRuns/inbox/operators/lane-plan-20261016.txt"
+ ]
+}

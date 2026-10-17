@@ -1,0 +1,24 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 \"LANE NO-OPERATOR 5090-i5\" \"5090-i5 idle recorded (kenshi-ctl idle, 60 min): remaining i5 rows 26-a 26-b 26-c 22-a need the native NC13 fix; imm26-nc13-investigate running; respawn an i5 operator when NC13 lands\"",
+   "why": "The NO-OPERATOR alert is a true condition but the idle reason was already recorded for a real blocker (no runnable i5 row until the native fix), so the alert is closed with that reason, not used to quiet the hook."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the completion notification of agent imm26-nc13-investigate (root cause of canISeeThisGuy drops at ActivityRuntimeBindings.cpp:496), then spawn one NC13 native fixer and, once NC13 is built and installed at a clean boundary, respawn one 5090-i5 operator from C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op9d.handoff.md",
+   "why": "No row on 5090-i5 can run until the native fix exists, and the lane must not be re-filled with filler work just to clear the alert."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no restart of the waker: the background command bt9krrl8h that recorded the idle reason also re-armed event-wait.sh",
+   "why": "The waker is already armed in the preceding conversation, so restarting it would duplicate it."
+  }
+ ],
+ "checks": [
+  "tail -n 3 /c/KenshiTestRuns/agents/imm26-nc13-investigate.status",
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i5-op9d.status"
+ ]
+}

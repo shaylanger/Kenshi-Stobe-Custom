@@ -1,0 +1,13 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "No action: remain TAIL (flag C:\\KenshiTestRuns\\tail\\6cd72ef5-6329-47f2-9c32-981e5e40dc16.flag) and keep the Monitor on event-stream.sh running; wait for imm26-wpC-b5 or imm26-5090-i5-op6 to reach DONE/FAILED/STOPPED-CONTEXT, then save its report to a file, send it with tail-relay.ps1 + SendMessage to the new coordinator inbox C:\\KenshiTestRuns\\inbox\\coordinator and wait for the tail-ack.ps1 ack. Escalate only on silence: imm26-wpC-b5 (last status 19:39) silent 10 min -> SendMessage it, 20 min -> TaskStop it and tell the new coordinator.",
+   "why": "Repeated waker-guard Stop block is expected for a tail session that still owns two running agents with fresh status (wpC-b5 19:39, i5-op6 19:45); the stop is correctly blocked, nothing new may be spawned or decided, and no leave -Force since the flag is right."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \\\"C:\\KenshiTestRuns\\agents\\$n.status\\\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1) }\""
+ ]
+}

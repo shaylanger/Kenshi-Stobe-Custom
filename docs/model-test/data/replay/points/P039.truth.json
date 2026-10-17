@@ -1,0 +1,42 @@
+{
+ "id": "P039",
+ "session": "2b1a8eca",
+ "ts": "2026-10-16T01:02:12.672Z",
+ "class": "other",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "sed -n 100,106p tail-close.ps1 | cut -c1-240; cp tail-close.ps1 /c/KenshiTestRuns/tail-close.ps1.bak-hidden && python3 - <<'EOF'\np='tail-close.ps1'\nraw=open(p,'rb').read(); bom=raw.startswith(b'\\xef\\xbb\\xbf'); s=raw.decode('utf-8-sig')\na='$wa = \"-NoProfile -ExecutionPolicy Bypass -File'\nassert a in s\ns=s.replace(a,'$wa = \"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File',1)\nb='$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = \"powershell.exe $wa\" } -ErrorAction Stop'\nassert b in s\nc='$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }   # SW_HIDE: the worker must never open a visible window (Shay 2026-10-15)\\n        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = \"powershell.exe $wa\"; ProcessStartupInformation = $si } -ErrorAction Stop...[truncated 141 chars]",
+   "why": "`tail-close.ps1` is the only place that starts a worker this way. I'll make the worker start hidden."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }\n$a = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = 'powershell.exe -NoProfile -WindowStyle Hidden -Command Start-Sleep 6'; ProcessStartupInformation = $si }\n$b = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = 'powershell.exe -NoProfile -Command Start-Sleep 6' }\nStart-Sleep 2\nforeach($x in @(@('hidden',$a.ProcessId),@('old-way',$b.ProcessId))){ $p=Get-Process -Id $x[1] -ErrorAction SilentlyContinue; \"{0}: pid={1} MainWindowHandle={2}\" -f $x[0],$x[1],$p.MainWindowHandle }\nStart-Sleep 5\ncd C:\\KenshiModding\\tools\\automation; powershell -NoProfile -ExecutionPolicy Bypass -File tail-close-selftest.ps1 2>&1 | Select-Object -Last 3",
+   "why": "Now I'll verify the hide flag actually hides the window, then run the selftest."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "cd /c/KenshiModding && git add tools/automation/tail-close.ps1 && git commit -q -m \"tail-close: start the worker hidden (WMI ShowWindow=0 + -WindowStyle Hidden); the selftest/workers opened visible PowerShell windows every few seconds\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\" -- tools/automation/tail-close.ps1 2>&1 | tail -1; git push -q origin HEAD 2>&1 | tail -1; git log --oneline -1\ncd tools/automation; for a in imm26-5090-i5-op4:DONE imm26-tailfix:DONE imm26-tripresume-b:FAILED imm26-4080-i4op52:DONE; do n=${a%%:*}; k=${a##*:}; f=$(ls -t /c/KenshiTestRuns/agents/out/$n/*.md 2>/dev/null | head -1); [ -z \"$f\" ] && f=/c/KenshiTestRuns/agents/$n.handoff.md; powershell -NoPr...[truncated 143 chars]",
+   "why": "Now I'll verify the hide flag actually hides the window, then run the selftest."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "to=kenshimodding-02: TAIL-RELAY from tail 2b1a8eca (full texts in C:\\KenshiTestRuns\\inbox\\coordinator\\*tail-*.msg, please tail-ack each). DONE: imm26-5090-i5-op4 (NC6 on i5; 10-a FAIL = repair capture compares player_quote strictly and the prompt's '(talking to: X)' suffix breaks it, social_repair_dialogue.php:222; 10-b SETUP-FAIL; 10-d GATED no native restitution signal; 14-c SETUP-FAIL no campZone candidate; hunt rows 22-a 25-a/b 26-a/b/c SETUP-FAIL: Herbivore goats and iron node still give observedSource.candidates=[] on NC6, no ACTIVITY_PROPOSAL_DIAG to see why -> needs a DLL with that trace at ActivityRuntimeBindings.cpp:208), imm26-tailfix (relay follows coordinator.current; tail-close.ps1 auto-close; selftests tail-close 73/73), imm26-4080-i4op52 (08-b PASS, 09-c PASS, 06-c PASS; 08-a FAIL travel-consent suppresses followup row; 10-a FAIL 0 apology_relief rows; 08-d SETUP-FAIL), imm26-tripresume-b FAILED/STOPPED-CONTEXT at part 1 (65-check test tests/imm26_trip_resume_regression.php written in /root/imm26/compose/tests, baseline 36 pass/29 fail; part 2 not started: rowdefs rd_19a/rd_19anc2/rd_19d, rowcheck c_19a, assert_claims row_19ax, fakelane/selftest 19-a scenario, TESTS rows; it needs a FRESH successor imm26-tripresume-b2 from agents\\imm26-tripresume-b.handoff.md; commit only own hunks, imm26-triprow has uncommitted edits in the same files). Cautions: a stray `php -S 127.0.0.1:37275` (pid 768669, cwd /root/imm26/compose) holds /tmp/stobe-tests.lock: kill it. \nSHAY'S REPORT (done by me at his order): the PowerShell window that flashed every ~30-60 s was tail-close.ps1 -Worker started via WMI without a hide flag (selftests run by agents opened it; fixed in e94379a: ShowWindow=0 + -WindowStyle Hidden, verified MainWindowHandle=0, tail-close-selftest 73/73). If Shay still sees flashes, remaining suspects are powershell.exe calls from the WSL waker (event-wait.sh lines 44/131, event-sweep.sh 39/56): a hidden resident sweep service is the fix; fold that into your streaming-monitor...[truncated 11 chars]",
+   "why": "Now I'll verify the hide flag actually hides the window, then run the selftest."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "ListAgents {}"
+ ],
+ "narration": [
+  "`tail-close.ps1` is the only place that starts a worker this way. I'll make the worker start hidden.",
+  "Now I'll verify the hide flag actually hides the window, then run the selftest.",
+  "I found the cause of the flashing windows and fixed it.\n\n**Cause:** `tail-close.ps1` starts a small background worker, and it started it through a WMI call with no \"hide window\" flag. That made the worker open a visible PowerShell window. The tail-close selftests, which agents run repeatedly while building the tail-close tool, start many of these. I watched for new visible windows for 150 seconds and caught exactly two, at 19:01:30 and 19:01:40. That matches your \"just happened twice\". The worke...[truncated 1057 chars]"
+ ],
+ "event_text_chars": 929
+}

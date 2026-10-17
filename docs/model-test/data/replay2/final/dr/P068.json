@@ -1,0 +1,30 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "This event-wait waker ended on the batch, and the Stop guard needs a waker while agents and lanes are in flight."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op9: Status check: your status file has not changed since 22:54 and the 4080-i4 lane has been idle 16.9 min. Reply in one line with your current step (10-a PASS and 10-b SETUP-FAIL are marked, 03-b is next) and any blocker, and update your status file now.",
+   "why": "The LANE IDLE 4080-i4 alert says to ask the operator what it is doing before any respawn."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op9c: Status check: you started at 23:05 with 'started, taking over lane' and have not reported since. Reply in one line with what you are doing now (26-a first, per your brief) and update your status file.",
+   "why": "The LANE IDLE 5090-i5 alert names the stopped predecessor op9, but the live operator on that lane is op9c, silent for about 6 minutes; the i5 lane was already allowed in the handoff, so this is continuation, not a new 5090 session."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait up to 10 min for both replies and status-file changes, then re-check the lane alerts. If imm26-4080-i4op9 stays silent or stuck, respawn a fresh operator (name not in this file, use <new>): powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-brief.ps1 4080-i4 -Out C:/KenshiTestRuns/agents/<new>.brief.md -Name <new> -Predecessor imm26-4080-i4op9. Run alert-ack.ps1 on each LANE IDLE alert only after its operator has answered or been respawned.",
+   "why": "Ack only closes and the exact alert ids are not in this file, so acking before the operators answer would hide a still-true idle; a live but slow operator is left alone."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op9.status",
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i5-op9c.status"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Coordinator: lane 5090-i5 has been idle 6.3 min and your status has said 'started, NC15 install + 14-c' since 01:37. Update your status file with agent-status.ps1 now, then reply in one line: the step you are on, the NC15 SHA256 check result, the 14-c result so far, and any blocker. If you are in a long wait, name it and its end time.",
+   "why": "The LANE IDLE alert needs the operator to say what it is doing before any fix or respawn."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op9h's reply or a fresh status line. Ack the LANE IDLE alert with alert-ack.ps1 once it shows the lane working. If it stays silent and its status stays stale past 10 min, respawn a fresh operator named imm26-5090-i5-op9h2 from its checkpoint.",
+   "why": "The operator was spawned at 01:37 and is probably still in the NC15 install or a long game wait, so a fresh respawn is held back until it has had a chance to answer."
+  }
+ ],
+ "checks": [
+  "sed -n 1,6p C:/KenshiTestRuns/agents/imm26-5090-i5-op9h.status | cut -c1-500",
+  "tail -c 1500 C:/KenshiTestRuns/imm26-5090-i5/towns200.txt"
+ ]
+}

@@ -1,0 +1,53 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (only if the pgrep check shows no event-wait.sh alive; never a bare &)",
+   "why": "The waker delivered this batch and exited, so the in-flight lanes have no waker until it is re-armed, and only one waker may be alive."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 20261016-133455-tail-imm26-4080-i3op22.msg (check its usage line first)",
+   "why": "The TAIL-RELAY DONE from imm26-4080-i3op22 is a result for this coordinator, not an order; acking lets tail 245d8ad7 end once its relay is delivered."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mv C:/KenshiTestRuns/inbox/coordinator/20261016-133455-tail-imm26-4080-i3op22.msg C:/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "A handled relay moves to delivered/ (not done/) so it is not re-read on the next wake."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-brief.ps1 4080-i3 -Name imm26-4080-i3op23 -Predecessor imm26-4080-i3op22",
+   "why": "Successors are briefed with lane-brief.ps1 from the DONE predecessor's handoff, so the new operator starts from op22's open rows."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[case:generate] imm26-4080-i3op23 | You are lane operator imm26-4080-i3op23 for the 4080-i3 lane (successor of imm26-4080-i3op22, DONE). Read your brief C:/KenshiTestRuns/agents/imm26-4080-i3op23.brief.md first, then the predecessor handoff C:/KenshiTestRuns/agents/imm26-4080-i3op22.handoff.md and the predecessor report C:/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md. Work: only the rows still open in the predecessor's next: line (03-b via sfZ unblockrun_sfz.sh, 01-cx rerun, 01-bx/10-b re-judge with the v2 checkers sfY). Touch only the 4080 rig and its isolated lane; never the 5090 lanes, Shay's live install, server tree or DB. Write one RESULT <row> PASS|FAIL line per row. Checkpoint with agent-status.ps1 at every milestone; at the warn meter finish the edit, checkpoint and hand off as STOPPED-CONTEXT.",
+   "why": "A fresh successor, named by the wpA -> wpA2 convention, keeps the 4080-i3 lane moving with the work op22 left open."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-4080-i3op23 <agentId returned by the Agent call>",
+   "why": "Records the successor id so SendMessage and tail routing can reach it."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 \"LANE NO-OPERATOR 4080-i3\" \"respawned imm26-4080-i3op23 from imm26-4080-i3op22 handoff\"",
+   "why": "The spawn answers the NO-OPERATOR alert, and acking with the action taken closes it so it does not re-open or block the Stop hook."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': op22 DONE with report path C:/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md; successor imm26-4080-i3op23 owns lane 4080-i3; relay 20261016-133455 acked and delivered; tail 245d8ad7 no longer owns op22.",
+   "why": "The coordinator updates HANDOFF after every agent report, so a stop loses nothing; op22 is not in a program ledger, so only HANDOFF changes."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -fc event-wait.sh",
+  "sed -n 1,60p C:/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md",
+  "tail -5 C:/KenshiTestRuns/agents/imm26-4080-i3op22.status",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "ls C:/KenshiTestRuns/alerts/open C:/KenshiTestRuns/inflight C:/KenshiTestRuns/inbox/coordinator"
+ ]
+}

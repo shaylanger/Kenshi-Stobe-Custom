@@ -1,0 +1,31 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-fix-pq DONE (commit e7e70c4; pending-fixes/imm26-fix-pq/apply.py + tests/imm26_pq_quote_regression.php, 12 checks OK, nothing deployed); pending step = apply to /root/imm26/compose after imm26-tripresume-a DONE, then deploy and rerun 10-a. Also update the program ledger entry for imm26-fix-pq to DONE.",
+   "why": "Every agent report updates the resumable checkpoint and ledger at once so the pending 10-a step is not lost."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-tripresume-a to report DONE (status file C:/KenshiTestRuns/agents/imm26-tripresume-a.status; the waker delivers the event)",
+   "why": "imm26-tripresume-a is still running in /root/imm26/compose, so the 10-a quote fix is not applied to that tree until it finishes."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "after tripresume-a DONE: WSL python3 /mnt/c/KenshiModding/pending-fixes/imm26-fix-pq/apply.py /root/imm26/compose ; php -l lib/social_repair_dialogue.php ; stobe-tests pattern repair|pq_quote|social_dialogue ; mkcompose_patch.sh APPLY-IDENTICAL, commit compose.patch, run imm26-install\\b4\\mk.sh BEFORE deploy.sh to the lanes (no DLL change)",
+   "why": "Puts the quote-matching fix into the compose tree with anchors asserted, tested, and committed before any lane deploy, as the tripresume WP-C flow requires."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "after deploy: rerun row 10-a on the lane(s) that list it in the handoff (5090 i5 operator and 4080 i4 operator; confirm via lane-owners.json) with --allow-retry \"imm26-fix-pq e7e70c4 quote suffix fix deployed\"",
+   "why": "The fix is proven only by a real 10-a rerun, and the PI-06 row guard needs --allow-retry for a previously FAILED row."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding show --stat e7e70c4 | head -20",
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-tripresume-a.status",
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-fix-pq.status",
+  "cat C:/KenshiTestRuns/lane-owners.json | head -c 800"
+ ]
+}

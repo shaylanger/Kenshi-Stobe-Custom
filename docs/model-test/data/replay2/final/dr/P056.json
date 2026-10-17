@@ -1,0 +1,29 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Recorded: option A (yes), the rumor hook also runs in director-mode turns. Building it offline now as imm26-rumorhook-dir (server-only patch plus offline tests). Row 03-b then runs on a 4080 lane only, since no new 5090 sessions still stands. Native side is untouched.",
+   "why": "Shay answered A to the open rumor-hook question, so confirm the decision and the 4080-only constraint."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add line '#10 SHAY DECISION (A, yes): rumor hook (stobeKnowledgeShareFromSpeech) also runs in director-mode BORED_EVENT turns, row 03-b; offline patch agent imm26-rumorhook-dir; then compose+deploy, 03-b on 4080 only.' Also append the same one-line note to memory file C:/Users/Shay/.claude/projects/C--KenshiModding/memory/everything-resumes-after-save-load.md is NOT the place; create memory/rumor-hook-director-turns.md with the decision and add it to MEMORY.md. Remove 'rumor hook in director turns' from the ask-Shay list.",
+   "why": "The decision must be recorded where the next coordinator reads it and the open question dropped from the ask list."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:generate] imm26-rumorhook-dir rumor hook on director turns'. Prompt: You are imm26-rumorhook-dir. Shay decided (option A, yes): the server rumor-share hook (stobeKnowledgeShareFromSpeech) must also run on director-mode BORED_EVENT turns (mode=director), not only on mode=autochat. Read C:/KenshiTestRuns/agents/out/imm26-inv-03b/latest.md (sections 0 and 1) and row 03-b in testing/NPC_IMMERSION_26_TESTS.md. Work offline only, imm26 style like wpW/wpR2: write an anchor-script patch in pending-fixes/imm26-rumorhook-dir against the composed server copy /root/imm26/compose (never the live tree /var/www/html/StobeServer, never Shay's DB), find the director-turn path with the codemap (grep -n funcname in /root/imm26/codemap, then sed -n a,bp; never read a file over 60 KB whole), backup, stage, php -l, add an offline test, run the offline stobe-tests (known pre-existing failure: negotiation_engine_regression 'cap tiers @topup/@exact'). Scope: code and offline tests ONLY; no game launch, no 5090, no 4080 rows, no deploy (a separate compose+deploy agent and a 4080 operator do those after your report). Keep agent-status.ps1 imm26-rumorhook-dir current, checkpoint at each milestone. Report: patch path, test result lines, risk to autochat path, next speed-up.",
+   "why": "A server-only patch is a code-phase work package; rules say never code plus tests plus live validation in one agent and imm26 patches go via pending-fixes and compose, not the live tree."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-rumorhook-dir completion notification/status DONE; then spawn compose+deploy (as for wpR1/R2/R3) and assign row 03-b to a 4080 lane operator (imm26-4080-i4op8 or imm26-4080-op2jc); the STOBE server on/off is handled inside that batch, not now.",
+   "why": "Nothing can be deployed or tested before the patch agent reports; meanwhile the other running agents continue."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 bash -c 'grep -rn stobeKnowledgeShareFromSpeech /root/imm26/compose --include=*.php | head -20'",
+  "grep -n 03-b C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md"
+ ]
+}

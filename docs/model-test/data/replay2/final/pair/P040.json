@@ -1,0 +1,41 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op5: 'Coordinator here. Lane 5090-i5 has been idle 6.8 min; your newest activity is a status write. Reply in one line with your current step, your next game command and any blocker with its expected end time, and keep the lane busy. If you are blocked, record BLOCKED with agent-status.ps1 and name the row you are moving to.'",
+   "why": "The lane event says to ask the operator what it is doing first, and a fresh successor may still be reading its lane brief."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op5's reply, a new status line, or a game command on lane 5090-i5 at the next event-stream wake (about 2 min); no lane command from the coordinator in the meantime.",
+   "why": "Shay's rule is no rig idle over 2 min while work exists, so one short wait is the most the operator gets before any replacement."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "TaskStop on imm26-5090-i5-op5 (agent id from the ledger), only if it has not replied and lane 5090-i5 is still idle at that wake",
+   "why": "No reply and no game step after the ask means it is stuck; it is stopped before its successor starts so one operator drives the lane."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "First: powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\lane-brief.ps1 5090-i5 -Out C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op5b.brief.md -Name imm26-5090-i5-op5b. Then Agent name imm26-5090-i5-op5b, description '[case:<operator case from the lane brief>] imm26 5090-i5 operator successor', prompt: 'Read only the brief file you were given. Continue from op5's last checkpoint. Send no game commands until op5 has a handoff file or status DONE-STOPPED.'",
+   "why": "Only if op5 is stuck and stopped, and the ledger check shows it is not owned by a live tail (a tail-owned agent is respawned by that tail, not here); the case tag comes from the brief because it is not in this file."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiTestRuns\\lane-owners.json (Edit tool): map lane 5090-i5 from imm26-5090-i5-op5 to imm26-5090-i5-op5b",
+   "why": "Lane routing follows the successor; done only after op5b is spawned."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id of the open LANE IDLE 5090-i5 alert, read from the open-alerts check> 'op5 resumed' or 'op5 stuck, op5b respawned'",
+   "why": "The alert id is not in this file; ack only after the outcome is known, since an ack only closes and a still-true idle re-opens after 30 min."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op5.status -Tail 5\"",
+  "powershell -NoProfile -Command \"Get-ChildItem C:\\KenshiTestRuns\\alerts\\open | Select-Object Name\"",
+  "powershell -NoProfile -Command \"Get-Content C:\\KenshiTestRuns\\lane-owners.json\"",
+  "powershell -NoProfile -Command \"Select-String -Path C:\\KenshiTestRuns\\programs\\*.json -Pattern 'imm26-5090-i5-op5' | Select-Object -First 5\""
+ ]
+}

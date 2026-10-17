@@ -1,0 +1,24 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Status check from the coordinator: lane 5090-i5 has shown no activity for 6.8 min (newest activity: status). Reply in one line: the row you are on, what you are doing now, and any blocker. If you are stuck, stop sending game commands and say so.",
+   "why": "The event asks the coordinator to ask the lane operator imm26-5090-i5-op5 (newly spawned this session) what it is doing before any fix or respawn."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i5 \"asked imm26-5090-i5-op5 for a status line; op5 is a fresh operator, likely still reading its lane brief; respawn only if no reply\"",
+   "why": "The open-alert ledger needs an ack with the action taken or the Stop hook blocks after 5 min; the alert id is not in the input, so the subject is used."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait up to 5 min for the operator's reply (its status file or a SendMessage answer); if it is still silent and the status file is stale, respawn a fresh successor imm26-5090-i5-op6 from lane-brief.ps1 (add to lane-owners.json) as the next action, not now.",
+   "why": "op5 was only just spawned, so 6.8 min of quiet is plausibly brief reading; a respawn now would overlap a live operator on the same lane."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op5.status -Tail 5\"",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

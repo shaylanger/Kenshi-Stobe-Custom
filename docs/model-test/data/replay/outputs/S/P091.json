@@ -1,0 +1,14 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "Work is genuinely in flight (Kenshi running, 4 fresh lane operators, running sfC2/sfI/sfJ/hxA agents, 19 inflight markers) and the previous waker ended when the chained tail-ack command returned, so the guard is right that no waker is running; restart it now and do not delete any marker."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "tail -3 /c/KenshiTestRuns/agents/imm26-4080-i3op21.status"
+ ]
+}

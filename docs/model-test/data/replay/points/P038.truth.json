@@ -1,0 +1,21 @@
+{
+ "id": "P038",
+ "session": "6cd72ef5",
+ "ts": "2026-10-16T00:58:44.753Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "sed -i '0,/^\\*\\*#8 order #3 DONE/s//**#8 imm26-fix-pq DONE (e7e70c4): 10-a quote-suffix fix = pending-fixes\\/imm26-fix-pq\\/apply.py <tree-root> (+test); apply to compose in WP-C together with trip resume (after tripresume-a DONE), deploy, then rerun 10-a (--allow-retry). &/' testing/HANDOFF.md; echo ok",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 2818
+}

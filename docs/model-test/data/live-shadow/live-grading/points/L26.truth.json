@@ -1,0 +1,19 @@
+{
+ "id": "L26",
+ "batch_id": 26,
+ "class": "relay/hand-back",
+ "window": [
+  "2026-10-16T22:27:36.001Z",
+  "2026-10-16T22:31:08.367Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 3,
+ "action_types": [
+  "spawn",
+  "restart-waker"
+ ]
+}

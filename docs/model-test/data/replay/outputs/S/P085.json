@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "The waker just completed; work is in flight (lanes and agents), so it must be running again before any other step."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-inv-08e, description '[case:investigate] 08-e bored-tick claim gate SETUP-FAIL'. Brief: You are imm26-inv-08e, offline read-only investigator (no game launches, no lane use, never Shay's live install/server/DB). SETUP-FAIL 08-e on lane 4080-i3 (inbox event 20261016-102752-setupfail-08-e.msg, C:\\KenshiTestRuns\\inbox\\events): topic still open after the reload, but no bored tick claimed it in 8 advance chunks although 1 tick had the NPC as speaker; the server-side claim gate (social attention / situated_remark cooldown) is the suspect, BORED_EVENT_CHANCE=100 is not the cause. Use the code maps (bash tools/automation/codemap.sh, /root/imm26/codemap) and grep -n then sed -n ranges, never read a file over 60 KB whole. Find the exact gate that rejects the claim, say whether it is a row/recipe defect or a server defect, and give the smallest fix (pending-fixes anchor patch or recipe change) plus the row command to prove it. Do not edit the live tree. Write the report to C:\\KenshiTestRuns\\agents\\out\\imm26-inv-08e\\latest.md and keep C:\\KenshiTestRuns\\agents\\imm26-inv-08e.status current via agent-status.ps1.",
+   "why": "Shay's 10:10 order is an agent on every SETUP-FAIL row, and 08-e is classified server-fix with no owner yet, while the 4080-i3 operator falls through to its next runnable row."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "imm26-sfD2 DONE status line",
+   "why": "Already handled in the previous turn (recipes pushed, 4080-deploys-before-rows.txt written); nothing new."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ls C:\\KenshiTestRuns\\agents\\out | grep -i 08e",
+  "ls C:\\KenshiTestRuns\\inbox\\events | grep 08-e"
+ ]
+}

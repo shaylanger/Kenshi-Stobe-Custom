@@ -1,0 +1,30 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; never a bare & or disown)",
+   "why": "The restart step only killed the stale event-wait.sh processes and shows no new waker running, while work is in flight so a waker must stay up."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 imm26-fix-19e STOPPED-CONTEXT \"19-e fix\" \"no log, status stale 520 min\" \"none\" \"respawn fresh as imm26-fix-19e2\"",
+   "why": "imm26-fix-19e shows status age 520.9 min with no log and is not in the live tail's owned list, so it is orphaned under the 30-minute rule."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-fix-19e2, description starts [case:generate]. Brief: You are imm26-fix-19e2, the fresh successor of imm26-fix-19e, which stopped with no log for 520 min. Read its status file C:\\KenshiTestRuns\\agents\\imm26-fix-19e.status and any handoff it names, then finish the 19-e fix offline (ready recipe pending-fixes/19e-recipe). Keep C:\\KenshiTestRuns\\agents\\imm26-fix-19e2.status current with agent-status.ps1.",
+   "why": "A fresh successor keeps the 19-e fix moving; the 19-e recipe is already named in the handoff."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-4080-i4 out dir C:\\KenshiTestRuns\\imm26-4080-i4 (reported missing); wait for lane owner imm26-lanes-4080 to finish bring-up",
+   "why": "A missing out dir during lane bring-up is expected and not yet a stall."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "wsl check: ps -ef | grep event-wait (confirm exactly one waker after the restart)",
+  "read the status file C:\\KenshiTestRuns\\agents\\imm26-fix-19e.status (tail only) to confirm it has no newer line before marking it STOPPED-CONTEXT"
+ ]
+}

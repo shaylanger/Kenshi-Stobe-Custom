@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-5090-i5-op6: your status has been silent since 19:35 (about 10 min). Write one status line now with agent-status.ps1 (RUNNING, the NC9 install step, and whether Kenshi has relaunched), then reply to the tail coordinator with SendMessage.",
+   "why": "The tail rule says an agent silent 10 min gets a message; at 20 min it gets TaskStop and the new coordinator is told."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait on the background watcher (bnp0vbz0u) until imm26-wpC-b5 or imm26-5090-i5-op6 reaches DONE, FAILED or STOPPED-CONTEXT. Then save its report, relay it with tail-relay.ps1 to C:\\KenshiTestRuns\\inbox\\coordinator, and wait for the ACK.",
+   "why": "The tail session spawns and decides nothing new; wpC-b5 has been quiet about 5 min, which is normal for a compose and deploy, so the only step now is to wait for the results."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-wpC-b5.status -TotalCount 3; Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op6.status -TotalCount 3",
+  "Get-Content C:\\KenshiTestRuns\\tail\\6cd72ef5-6329-47f2-9c32-981e5e40dc16.flag"
+ ]
+}

@@ -1,0 +1,36 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background=true (no trailing & or disown): MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker just exited with this event; work is in flight (inflight markers, running agents), so a fresh waker must be armed first."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 23-a imm26-sfK",
+   "why": "Shay's order is an agent on every SETUP-FAIL row; the ticket names no plan_path, so none is passed, and the row is recorded as owned by a fresh agent."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sfK, description '[case:investigate] 23-a SETUP-FAIL resolved_speaker not Shay in s3 (5090-i3)'. Brief: Row 23-a SETUP-FAIL on lane 5090-i3 (the ticket says lane=unknown). Reason: resolved_speaker is not Shay in s3; evidence is /c/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt. Find the root cause: row-script speaker setup, the server speaker resolver, or the game state. Propose the smallest fix as a row-script or recipe change, or a server/native change, and name the file. Work only offline or on isolated imm26 lanes, never Shay's live install, server tree or DB. Work package <=120k tokens; no live validation in this agent. Write the plan to inbox\\operators\\sfK-23-a.txt, keep C:\\KenshiTestRuns\\agents\\imm26-sfK.status current via agent-status.ps1, checkpoint every ~40k tokens, and report via save-report.ps1. 4080-i4 op12b also has 23-a queued after the NC20 install, so check the claim dir C:\\KenshiTestRunsclaims\\23-a first and tell the coordinator about any overlap.",
+   "why": "A new or odd failure goes to [case:investigate] first, and a SETUP-FAIL row needs an owner agent without blocking the lane."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Write inbox note C:\\KenshiTestRuns\\inbox\\operators\\5090-i3-23-a-setupfail.txt: '23-a is SETUP-FAIL (resolved_speaker not Shay in s3), owned by imm26-sfK. Take the next runnable row now; do not retry 23-a.'",
+   "why": "Shay's rule is that no lane idles waiting for a fix: after one failed attempt the lane takes the next row. In-session operators are not reachable by SendMessage (PI-36), so an inbox note is used."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the sfK report or relay, and for the next waker event.",
+   "why": "There is nothing else to do until the investigation returns."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "tail -n 20 /c/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt",
+  "ls /c/KenshiTestRuns/claims/",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

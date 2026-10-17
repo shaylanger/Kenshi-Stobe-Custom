@@ -1,0 +1,28 @@
+{
+ "id": "P034",
+ "session": "2b1a8eca",
+ "ts": "2026-10-16T00:06:58.329Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] 4080 i4 lane operator i4op52\nprompt: You are imm26-4080-i4op52, fresh successor of imm26-4080-i4op5 (STOPPED-CONTEXT), operator of lane 4080 i4 (imm26 NPC immersion program; isolated lane only: ssh 4080, C:\\KenshiInst\\4, never Shay's live install/server/DB). Read C:\\KenshiTestRuns\\agents\\imm26-4080-i4op5.handoff.md in full first (helpers, lessons), then testing/NPC_IMMERSION_26_HANDOFF.md top, OPERATOR_COMMON.md/COMMON.md briefs it points to, docs/COORDINATOR_IMPROVEMENTS.md, testing/KNOWN_BLOCKERS.md. Keep C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status current (agent-status.ps1) and write agents\\imm26-4080-i4op52.handoff.md every ~40k tokens. Debug budget = ONE attempt per row, handbacks <= 8 lines; a pass = real game state changed; use go-row.sh/go-batch.sh/preflight.sh where possible. Keep marker 4080-imm26-i4 (the game is up).\n\nRows remaining on this lane: 09-c (needs an ACCEPTED trip; work at the quiet spot -53200 957 4893 or use hub4 + sweep), 04-c, 10-a, 10-b, 08-d, then batch2d reruns 06-c, 08-a, 15-a, 16-c. 08-b is a known FAIL (director-mode bored claim; imm26-fix-batch3 is fixing the server) - skip it until a lane delta lands. Lane runs NC2 E17FC00C; at the next natural relaunch swap to NC5 (25252267...) or NC6 (3ADDE488907B46ECD47DA76354A7BD091C9EA63EFBE8D2C48B68EAE5D174259D, pending-fixes/npc-immersion-26/NC6, not yet run in game) using the 4080 installer pattern in C:\\KenshiTestRuns\\imm26-4080\\inst\\, verifying SHA256. Mark rows in testing/NPC_IMMERSION_26_TESTS.md (git add TESTS only, commit as shaylanger, push). Final report <= 8 lines via save-report.ps1 (agents/out/imm26-4080-i4op52): verdicts and next speed-up.",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "sed -i 's/\"4080-i3\":{/\"4080-i4\":{\"ops\":[\"imm26-4080-i4op52\",\"imm26-4080-i4op5\"],\"dirs\":[\"imm26-4080-i4\"]},\\n \"4080-i3\":{/' /c/KenshiTestRuns/lane-owners.json && python3 -c \"import json;json.load(open('/c/KenshiTestRuns/lane-owners.json'))\" 2>&1 | tail -1; wsl.exe -d DwemerAI4Skyrim3 -u root -- python3 -c \"import json;print(list(json.load(open('/mnt/c/KenshiTestRuns/lane-owners.json'))))\"\nMSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The 4080 i4 operator (`imm26-4080-i4op5`, the hidden one) also ran out of context. Its successor, `imm26-4080-i4op52`, is running in-session and takes the rest of lane i4.\n\n- **Rows:** 09-c, 04-c, 10-a, 10-b, 08-d, then the reruns of 06-c, 08-a, 15-a and 16-c.\n- **Skipped:** 08-b, until `imm26-fix-batch3` delivers its server fix.\n- **DLL:** the lane runs NC2. At its next relaunch it swaps to NC5 or NC6, which has not run in the game yet.\n\nI added the operator to the lane-owners mapping and resta...[truncated 196 chars]"
+ ],
+ "event_text_chars": 382
+}

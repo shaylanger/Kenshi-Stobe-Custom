@@ -1,0 +1,39 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add 'imm26-batch5 DONE f62a91b: pending-fixes/imm26-batch5/apply.py <tree-root> (FIX1 16-c dps_generate counts enabled fields only + anchor traits v2; FIX2 02-bx slavery request regex; FIX3 17-bx imm26IsChallenge); stobe-tests 107 pass, 5 pre-existing fails; not composed, not deployed, no in-game proof'",
+   "why": "the batch5 hand-back is a new checkpoint and HANDOFF must match the repo state after every agent report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "batch5 goes into WP-C: after imm26-tripresume-a is DONE, run pending-fixes/imm26-batch5/apply.py on the compose tree, then php -l, full stobe-tests, mkcompose_patch.sh APPLY-IDENTICAL, commit compose.patch, imm26-install\\b4\\mk.sh before deploy.sh to the lanes (no DLL)",
+   "why": "the handoff puts batch5 in the same compose as trip resume, and the batch5 report says nothing live or composed was touched."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "keep pending-fixes/imm26-batch5 in place until the server commit lands; do not delete it now",
+   "why": "the rule is to delete a patch script only after its fix is committed in its repo, and the server commit has not happened yet."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "rows 16-c, 02-bx and 17-bx: no marks and no reruns until DeepInfra balance is restored (Shay) and batch5 is deployed; then rerun with --allow-retry '<reason: batch5 FIX n applied>' if they were FAILs",
+   "why": "all three depend on a model reply, the 402 is still in the lane logs, and the row guard blocks a FAILED row rerun without a reason."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "17-bx also needs the fixture changes in triageB item 3 before its rerun (test-row work, not yet assigned)",
+   "why": "the batch5 report says 17-bx needs those fixture changes and left them out."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "imm26-batch5 DONE (f62a91b, pushed): three fixes for 16-c, 02-bx and 17-bx, tests 29/29, stobe-tests no new failures. Not yet composed or deployed; reruns wait for DeepInfra balance. Decision still open: delete the stale stobe_action.request in your Steam install (26 bytes, from 19:07, DRAW_WEAPON for a test character)?",
+   "why": "the balance and the stale request file are the only real decisions open, so they go to Shay together once, and batch5 needs a status line."
+  }
+ ],
+ "checks": [
+  "git -C C:\\KenshiModding show --stat f62a91b",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

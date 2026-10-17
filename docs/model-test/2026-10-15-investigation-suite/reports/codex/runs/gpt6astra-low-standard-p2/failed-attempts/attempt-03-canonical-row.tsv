@@ -1,0 +1,2 @@
+run	model	effort	prompt	start_local	end_local	wall_s	tool_uses	input	output	cache_read	cache_create	token_usd	q5h_before	q5h_after	qweek_before	qweek_after	report_bytes	headers	citations	diff_markers	violation_flags	agent
+gpt6astra-low-standard-p2	gpt-6-astra	low	2	2026-10-16T14:46:24.790000-06:00	2026-10-16T14:50:50.663000-06:00	265.873	25	556740	2429	505856	0		n/a	n/a	n/a	n/a	5992	7	0	0	unallowlisted-tool:exec,unallowlisted-tool:wait	gpt6astra-low-standard-p2/attempt-03

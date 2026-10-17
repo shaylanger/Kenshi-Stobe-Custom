@@ -1,0 +1,26 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Starting the startup-context cut now (CLAUDE.md plus the session-start -Brief output). I will report the size before and after, and I will not commit until the session-start output still shows HANDOFF Right now, the agent statuses and the waker status.",
+   "why": "Shay's order has to be acknowledged on the relay session, and nothing in this batch shows the cut has started yet."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/CLAUDE.md: move the session-only rule sections (those not needed on every turn) verbatim to new pages under C:/KenshiModding/docs/claude-md-archive/ with one index line each in the archive index; keep the Short core, Start here, GOAL and the working rules that apply to every turn. Then regenerate C:/KenshiModding/tools/automation/session-start.ps1 -Brief output and compare its size.",
+   "why": "The coordinator does this small doc cut itself, with no subagent, and the archive pattern already exists in CLAUDE.md. The exact section list is not given in this file, so this split is my judgement and is checked by the size comparison before any commit."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git -C C:/KenshiModding add CLAUDE.md docs/claude-md-archive && git -C C:/KenshiModding commit -m 'startup-context cut: move session-only rules to archive pages' -m 'Smaller startup context; verbatim text kept in docs/claude-md-archive. Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git -C C:/KenshiModding push, only after the size check shows a reduction and the session-start output is intact",
+   "why": "One change per commit, pushed right after the commit, and only once the size check and the session-start check have passed."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding config user.email",
+  "git -C C:/KenshiModding status --short -- CLAUDE.md docs/claude-md-archive",
+  "wc -c C:/KenshiModding/CLAUDE.md",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief | wc -c"
+ ]
+}

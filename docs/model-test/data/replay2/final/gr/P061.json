@@ -1,0 +1,41 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-rowtools42 DONE for items 5, 6, 7 (commits 7b3c04d, 37285bd, 4924239 pushed; report C:\\KenshiTestRuns\\agents\\out\\imm26-rowtools42\\latest.md); IMM-10-d now UNRUN (BASE) not SETUP-FAIL (Shay to confirm or revert); 03-b opened needs=server-fix on lane 5090-i4 (5090 hold stands, not run)",
+   "why": "The hand-back is the only new state; the Right now text must carry it so the next session does not re-spawn items 5-7."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Update the imm26 program ledger (C:\\KenshiTestRuns\\programs\\<name>.json, name as printed by session-start.ps1) to mark the rowtools42 package DONE with the three commit shas and the report path.",
+   "why": "Ledger rule: the coordinator updates it after every agent report, not only at the context limit."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'OPEN FOR SHAY' (no message sent now): (a) 10-d status change UNRUN vs SETUP-FAIL, (b) lane-window finding: DISPLAY1 is the Samsung (forbidden, hardware id SAM0B49), DISPLAY2 is the ASUS primary, so the registry's i5 entry has no legal slot and at most two lanes (i3, i4 on DISPLAY2) run until Shay changes the monitor layout.",
+   "why": "Both are real decisions for Shay; they do not block anything while the 5090 hold stands, so they go into the single summary rather than an immediate message."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not run lane-window.ps1 -Action sync (it rewrites the lane registry and deletes preflight-isolation-5090.txt) and do not restart any 5090 lane.",
+   "why": "The 5090 is on hold by Shay; sync is a lane-state change and the i5 entry is still unresolved."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-rowtools44 (item 4 selftest, README_HX.md, operator note), imm26-fix10a, imm26-fix03b, and the 4080 operators imm26-4080-i4op8 and imm26-4080-op2jc.",
+   "why": "Those are the work still in flight; no new spawn is needed for item 4 because rowtools44 already owns it."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "tail-ack.ps1 -Agent imm26-rowtools42 (only if a tail relay file for imm26-rowtools42 exists in C:\\KenshiTestRuns\\inbox\\coordinator)",
+   "why": "If the hand-back was also routed as a tail relay, it must be acked so the tail can end; if no relay file exists this is a no-op."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding log --oneline -6 origin/main (confirm 7b3c04d, 37285bd, 4924239 are on main)",
+  "Read C:\\KenshiTestRuns\\agents\\out\\imm26-rowtools42\\latest.md (full report, grep for 10-d and i5)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (status of rowtools44, fix10a, fix03b, 4080 operators)",
+  "dir C:\\KenshiTestRuns\\inbox\\coordinator (look for an imm26-rowtools42 relay file)"
+ ]
+}

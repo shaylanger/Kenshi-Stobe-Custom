@@ -1,0 +1,24 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3op21 -Kind STOPPED-CONTEXT -Report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i3op21\\out-20261016-130429.md -Summary 'imm26-5090-i3op21 STOPPED-CONTEXT (handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.handoff.md). No scripted row left on 5090-i3; game i3 NC20 still running, lock game-3.lock held. PASS 19-ax, 10-e. FAIL 20-d (sfQ: bare Yes not confirmed after reload), 16-bx and 17-bx (checker/behaviour), 05-cx v2 (roster_has_sleeper only), 23-a v2 (two acks 8 s apart: Shay decision). SETUP-FAIL 23-e, 24-c, 15-bx, 08-d, 11-b. GATED 12-d v2. Needs: row script 22-b, row script 25-b (listed on 5090-i5 op9o, check first), 08-d rerun via 23-a v2 walk, Shay decisions on 05-cx sleeper rendering and 23-a ack count. Tail spawned nothing: coordinator #16 decides successor (op22 with new row scripts) or release of 5090-i3.'",
+   "why": "The op21 hand-back is a STOPPED-CONTEXT result owned by tail 48b778a7, so the tail relays it to coordinator #16 and does not spawn, resume or edit anything; its handoff says a successor only once row scripts exist."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to \"16 coordinator\": Tail #15 to coordinator #16: imm26-5090-i3op21 is STOPPED-CONTEXT with no runnable scripted row left; the relay is in inbox/coordinator (TAIL-RELAY imm26-5090-i3op21). 5090-i3 stays up on NC20 with game-3.lock and the inflight marker held and op21 must not be resumed. Successor op22 and the row scripts for 22-b and the 08-d rerun via the 23-a v2 walk are yours to write or spawn; 25-b is listed on the 5090-i5 op9o lane, so check that first. Shay's two open decisions, to ask once and record in testing/SHAY_DECISIONS.md: 23-a v2 ack count (two acks 8 s apart: one reply or two?) and 05-cx sleeper shown as 'moving' in the prompt while asleep.",
+   "why": "Coordinator #16 must know the stop, the open rows and Shay's two decisions promptly, because the tail's job is to hand the result over rather than act on it."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no spawn, no SendMessage to imm26-5090-i3op21, no HANDOFF or ledger edit, no lane release or lock change, no change to lanes.held, game-3.lock or the respawn marker",
+   "why": "The tail decides nothing and the stopped agent must not be resumed, so the 5090-i3 lane and its guards stay as they are until coordinator #16 acts on the relay."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "head -n 3 /c/KenshiTestRuns/agents/imm26-5090-i3op21.status"
+ ]
+}

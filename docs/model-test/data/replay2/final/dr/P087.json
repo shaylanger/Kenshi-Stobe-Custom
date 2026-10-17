@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' block and the imm26 program ledger under C:/KenshiTestRuns/programs/ (program name as printed by session-start.ps1): mark imm26-sfE3 DONE at b38bd383 (selftest 46/46 in Git Bash; WSL 40/46, the 6 failures are CRLF handling in CLI checks, not recipe defects); 24-c recipe SEEDED, row stays PARTIAL until the region_name fix (pending-fixes/imm26-sfE2-region-name) and Shay's current-town guard decision (area_goal.php:36-37); 26-f recipe ready for lane 4080-i3, needs NC17+ (NC20 is the superset) installed on that lane and a SCENE-OK where Cind sees at least 3 of the 4 bandits; operator notes C:/KenshiTestRuns/inbox/operators/sfE-24c.txt and sfE-26f.txt; report C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md; run line: bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfe.sh <24-c|26-f> <lane> --save <S> [--dry]; next speed-up: run reload-sfe-selftest.sh detached or fix the CRLF handling so it passes under WSL",
+   "why": "State lives in files, so the ledger and HANDOFF must reflect each agent report as soon as it arrives."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Update the imm26 TESTS table rows 24-c and 26-f (currently UNRUN despite the SETUP-FAIL tickets): 24-c = PARTIAL/SEEDED recipe built (b38bd383), 26-f = recipe ready, waiting for NC17+ on 4080-i3 and SCENE-OK; do not mark either PASS",
+   "why": "HANDOFF lists the stale UNRUN state of 24-c and 26-f as an open TODO and this report resolves it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Write C:/KenshiTestRuns/inbox/operators/4080-i3-ready-26f.txt for operator imm26-4080-i3op20: 26-f recipe READY (imm26-sfE3 DONE, b38bd383). Run bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfe.sh 26-f 4080-i3 --save <S> (sheet: inbox\\operators\\sfE-26f.txt) only after NC17+/NC20 is installed on your lane, at your next row boundary, and only if SCENE-OK shows Cind seeing at least 3 of the 4 bandits. Claim the row first (mkdir C:\\KenshiTestRuns\\claims\\26-f). One attempt, then SETUP-FAIL and take the next runnable row. 24-c: run the same script with 24-c only for the SEEDED result; the row stays PARTIAL until the region_name fix exists (sheet: inbox\\operators\\sfE-24c.txt).",
+   "why": "The operator reads its lane notes from inbox/operators, and the same pattern was used for the 08-e recipe, so no lane idles waiting for the recipe."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the 4080-i3 operator's 08-e result (recipe v2) and 26-f run, the NC20 install boundary on 4080-i3, and Shay's decisions on the 24-c region_name fix and the current-town guard (area_goal.php:36-37)",
+   "why": "24-c cannot be completed until those decisions and fixes exist; the design calls belong to Shay and go in the one final summary."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding show --stat b38bd383",
+  "powershell -NoProfile -Command Get-Content C:/KenshiTestRuns/agents/imm26-sfE3.status",
+  "powershell -NoProfile -Command Get-Content C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md -TotalCount 40"
+ ]
+}

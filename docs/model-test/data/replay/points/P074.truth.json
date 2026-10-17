@@ -1,0 +1,21 @@
+{
+ "id": "P074",
+ "session": "bea16970",
+ "ts": "2026-10-16T07:11:45.258Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding/pending-fixes/npc-immersion-26/NC15; sha256sum Stobe.dll | cut -c1-16; grep -c \"ok_sid_keyed\" Stobe.dll; head -4 /c/KenshiTestRuns/agents/imm26-5090-i5-op9g.status | cut -c1-300; cd /c/KenshiModding; sed -i 's/^\\*\\*COORDINATOR #12 (00:05 Oct 16):\\*\\*/**#12 01:45 NC15 built (SHA 9EABD486, af010bd+e8afd0f, not installed; 20 offline checks PASS, sid-keyed camp catalog): install on 5090-i5 AFTER op9g finishes (op9g successor installs it, then 14-c live recipe; offer also needs a hostile member Cind can see inside camp borders, ActivityRuntimeBindings.cpp:629-631).**\\n&\\/' testing/HANDOFF.md",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 2955
+}

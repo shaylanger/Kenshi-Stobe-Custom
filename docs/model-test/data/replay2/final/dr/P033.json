@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Background Bash: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP (add --batch <out-dir> only if a batch is running; this file names none)",
+   "why": "The Stop hook blocks ending the turn while work is in flight (Kenshi running, many inflight markers, four tooling agents and fixers just spawned) and no waker is running, so the waker must be restarted before the turn can end."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not delete any inflight marker from this event alone; superseded operators (e.g. imm26-5090-i3op3 after its hand-back, abandoned by hand earlier) are only cleaned after the status check shows DONE/abandoned and a successor exists",
+   "why": "Most listed agents (5 operators, imm26-fix-batch3/4, imm26-pi06-09, imm26-pi07-08, imm26-pi10, imm26-pi12) are really RUNNING, so markers are not provably stale until the status files are checked."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-mode.ps1 status",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-rollcall.ps1 (compare RUNNING agent status files with the inflight marker names)"
+ ]
+}

@@ -1,0 +1,29 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The 600 s backstop ended the previous waker with no events, and work is still in flight (imm26-26a-recipe, i4op10 on the 4080, game up on 5090-i5), so a waker must stay armed."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no new kenshi-ctl.ps1 idle call",
+   "why": "The batch line only confirms that the 5090-i5 idle reason (60 min) is already recorded and i5 is in lanes.held."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-26a-recipe report (agent a288bea3776dd69b9)",
+   "why": "Its one-call goat recipe decides when the successor imm26-5090-i5-op9g is spawned; spawning op9g before it would repeat the fixture failure."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-5090-i5-op9g not yet spawned; i4op10 (agent a97e05a80e87aab69) status updates on the 4080",
+   "why": "op9g waits on the recipe, and i4op10 is the one running 4080 lane and must keep its 10-minute status cadence."
+  }
+ ],
+ "checks": [
+  "head -4 /c/KenshiTestRuns/agents/imm26-26a-recipe.status | cut -c1-250",
+  "head -4 /c/KenshiTestRuns/agents/imm26-4080-i4op10.status | cut -c1-250"
+ ]
+}

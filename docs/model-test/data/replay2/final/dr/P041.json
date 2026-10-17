@@ -1,0 +1,20 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "TAIL-RELAY imm26-5090-i3-hard FAILED/STOPPED-CONTEXT (inbox 20261015-191556-tail-imm26-5090-i3-hard.msg)",
+   "why": "The relay's order to spawn a fresh imm26-5090-i3-hard2 is already done (lane-brief built, operator-warn registered, tail-ack logged, agent ae381b64fa7651050 spawned), so a relay is a result here, not a new order; no second spawn or second ack."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to ae381b64fa7651050 (imm26-5090-i3-hard2): predecessor relay note. Cind [Hungry Bandit] was NOT FOUND in the world after the last 3 loads (harness said 'no game loaded (phase=loading)' right after 'game load signalled'). Wait about 40 s after a load before lane-setup, or load twice. Load only save kah-imm26-5090-ready; do not use the hxA/hxB/hxC copies. Driver: source C:/KenshiTestRuns/imm26-5090-hx/hx.sh with KAH_PF_ISOLATION=0; use rowtools/trip-run.sh.",
+   "why": "The relay adds load-timing facts that may not be in the successor brief, and the lane operator needs them before its first load; it is not known from this file whether the spawn text already included them."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-5090-i3-hard2.status -TotalCount 6",
+  "Get-Content C:/KenshiTestRuns/lane-owners.json"
+ ]
+}

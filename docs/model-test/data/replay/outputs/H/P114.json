@@ -1,0 +1,15 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File tools/automation/agent-abandon.ps1 imm26-5090-i3op22 5090-i3 parked per coordinator 17 decision a: no runnable row (22-b native N1 gap, 25-b native, 08-d needs 23-a v2 walk); respawn only when a row script exists",
+   "why": "The 5090-i3 lane was parked on purpose in coordinator #17, so a blind respawn would have no runnable row, and the stopped marker should be dropped deliberately instead of being left as NO SUCCESSOR."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File tools/automation/agent-ids.ps1 list -Live (confirm no successor such as imm26-5090-i3op222 or imm26-5090-i3op22b is already running)",
+  "powershell -NoProfile -File tools/automation/session-start.ps1 -Brief (confirm the ORPHANED / NO SUCCESSOR line for imm26-5090-i3op22)",
+  "ls C:/KenshiTestRuns/agents/ (confirm no new 5090-i3 row script exists before abandoning)"
+ ]
+}

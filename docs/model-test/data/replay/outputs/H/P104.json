@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-costaudit2, description [case:generate] imm26-costaudit2 cost audit redo 14 Oct to 16 Oct. Brief: You are imm26-costaudit2. Package: REDO the cost audit for 2026-10-14 00:00 to now (2026-10-16) ONLY. Ignore earlier results (they did not use the current setup and often had Opus as coordinator). Add --since and --until options to tools/automation/cost-audit.py if missing, run it with that window, rebuild agents/out/imm26-costaudit ledger.md and ledger.csv and the docs/cost-audit copy. Needed lines: lane operators as their own category (all imm26-*op* agents) with Sonnet-high actual cost per operator, per operator-hour and per row where rows can be counted; coordinators separately; investigators, fixers and recipe agents separately. Haiku-high what-if for operators using the table ratio, plus a sensitivity case where Haiku needs 1.5x and 2x the turns. Split operator cost by cache read, cache write and output. Fix the unpriced claude-fable-5-1 messages if a price is known, else list them separately for the window. Recheck a few totals by hand. Write the answer (would a Haiku-high lane operator change cost, and what it implies for the pilot) to agents/out/imm26-costaudit2/latest.md. Do not launch Kenshi, do not touch TESTS or claims.",
+   "why": "Shay's order, relayed by the tail, asks for a window-limited redo of the cost audit with operator, coordinator and Haiku what-if lines."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-pilotA: Shay's order (relayed by the tail). In the Haiku pilot shadow ledger record one row per test row with columns: row, lane, model, start, end, wall_s, tokens, cost, operator_verdict, checker_result, agree, false_claims_n, notes. Audit all four areas. COST: tokens and API-price equivalent per row and per hour, from cost-audit.py on the pilot agent transcript. TIME: wall seconds per row, rows per hour, idle gaps, time to first row after start. QUALITY: verdict agreement with the checker RESULT line per row, rows completed, escalations, SETUP-FAIL diagnosis quality against the Sonnet lane diagnosis of the same row, handoff and report quality. FALSE/INCORRECT INFORMATION: every claim in status lines, notes, relays and the final report checked against evidence files; count per row and per report, with the same counting applied to the paired Sonnet lane 5090-i3. Add these columns and the side-by-side summary format to the pilot plan before imm26-5090-i4-hk1 is spawned.",
+   "why": "The pilot audit scope has to be in the ledger before the Haiku operator starts writing rows."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not spawn imm26-5090-i4-hk1 until imm26-pilotA reports. When about 3-4 h of pilot rows exist, produce the side-by-side summary and send it to Shay via message-shay (relay session) together with the cost audit result from imm26-costaudit2.",
+   "why": "The pilot tooling and audit columns must exist before the Haiku operator writes rows, and Shay asked for the report once the rows exist."
+  }
+ ],
+ "checks": [
+  "grep -n -E 'since|until' /mnt/c/KenshiModding/tools/automation/cost-audit.py",
+  "ls C:/KenshiModding/docs/cost-audit C:/KenshiTestRuns/agents/out/imm26-costaudit"
+ ]
+}

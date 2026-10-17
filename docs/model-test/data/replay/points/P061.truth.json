@@ -1,0 +1,21 @@
+{
+ "id": "P061",
+ "session": "2a0cfe9b",
+ "ts": "2026-10-16T03:40:13.638Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding/testing; printf '\\n**#11 21:50: rowtools42 DONE (7b3c04d 37285bd 4924239): 10-d row UNRUN, GATED no longer closes setupfail tickets, 03-b row text, lane-window.ps1 computes slots from live monitors (never Samsung). FINDING for Shay: with DISPLAY1=Samsung (forbidden) and DISPLAY2=ASUS, only two lanes (i3,i4) fit side by side; i5 has no legal slot unless the monitor setup changes. rowtools43 stopped -> rowtools44 (selftest+README+note) RUNNING.**\\n' >> HANDOFF.md",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 2907
+}

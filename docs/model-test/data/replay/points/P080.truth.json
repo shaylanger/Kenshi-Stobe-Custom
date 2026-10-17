@@ -1,0 +1,23 @@
+{
+ "id": "P080",
+ "session": "bea16970",
+ "ts": "2026-10-16T08:52:34.067Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...followups.php:225` the \"closed\" mark is rolled back when the resolved topic is the only ope"
+ },
+ "actions": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "",
+   "why": "The 08-d failure turned out to have three stacked causes, found by `imm26-inv-08d`:\n1. **Real server bug:** at `social_followups.php:225` the \"closed\" mark is rolled back when the resolved topic is the only open one. The existing test always had a second open topic, so it never covered this.\n2. **Test timing:** the bored tick came 18 seconds after the chat, but any chat within 30 seconds blocks the follow-up claim.\n3. **Harness defect:** `i4_bored` sends player names without serials, while the D...[truncated 657 chars]"
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The 08-d failure turned out to have three stacked causes, found by `imm26-inv-08d`:\n1. **Real server bug:** at `social_followups.php:225` the \"closed\" mark is rolled back when the resolved topic is the only open one. The existing test always had a second open topic, so it never covered this.\n2. **Test timing:** the bored tick came 18 seconds after the chat, but any chat within 30 seconds blocks the follow-up claim.\n3. **Harness defect:** `i4_bored` sends player names without serials, while the D...[truncated 657 chars]"
+ ],
+ "event_text_chars": 385
+}

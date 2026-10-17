@@ -1,0 +1,26 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-4080-i4op5 to write its first RUNNING status with a real latest step (C:/KenshiTestRuns/agents/imm26-4080-i4op5.status) and a log line (C:/KenshiTestRuns/agents/out/imm26-4080-i4op5.log); re-check at the next waker event or within 8 min",
+   "why": "SPAWNED printed launcher_pid=75660 and claude_pid=61936, but the status file only says 'launching independent session', so the operator is not yet proven working."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section 'Right now': record that imm26-4080-i4op5 (4080 lane i4 operator, successor of imm26-4080-i4op4) is RUNNING since 17:20; that imm26-4080-i4op4 is abandoned as superseded; that the event waker (background task bsahit8im, event-wait.sh) was restarted; that imm26-install-nc-rest2b was told lane 4080 i4 is free; that commit 6376cff (agent-rollcall evidence heartbeat) is pushed but takes effect only when the agent-host restarts; and that i4op5 was launched through the hidden spawn-wp-session.ps1, which is OFF by default under the in-session standard, so decide at its first heartbeat whether to keep it or respawn it in-session as an Agent-tool subagent with the same brief",
+   "why": "the rules require 'Right now' to be updated the moment an agent starts or a waker is restarted, and the preceding actions did not record it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "agent-host restart (the one that loads agent-rollcall.ps1 commit 6376cff) only at a quiet boundary when no agent is mid-step; not during the i4op5 start-up",
+   "why": "the running agent-host still loads the old monitor, which counts only status updates, and restarting it now would disturb live agents, so the fix stays not-live until a safe moment."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-rollcall.ps1 | grep imm26-4080-i4op5",
+  "head -3 C:/KenshiTestRuns/agents/imm26-4080-i4op5.status",
+  "tail -n 5 C:/KenshiTestRuns/agents/out/imm26-4080-i4op5.log",
+  "git -C C:/KenshiModding status -sb | head -1 && git -C C:/KenshiModding log --oneline -1 origin/main"
+ ]
+}

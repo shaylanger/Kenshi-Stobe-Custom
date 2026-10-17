@@ -1,0 +1,14 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP (Bash, background)",
+   "why": "The event batch is the background waker b7rkz2xpf completing with exit 0, so no waker is running while 25 inflight markers are still set, and the same command the file gives must be restarted at once."
+  }
+ ],
+ "checks": [
+  "tail -n 60 \"C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\2b1a8eca-c7aa-44ff-bda2-326523d5864e\\tasks\\b7rkz2xpf.output\" (read-only: which event woke the waker; the file itself is not in the batch, so this is a check only)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/session-start.ps1 -Brief (read-only: confirm inflight markers, lanes and any open alerts before acting on the woken event)"
+ ]
+}

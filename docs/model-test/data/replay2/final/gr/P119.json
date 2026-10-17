@@ -1,0 +1,27 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "The waker that produced this digest has exited; restart it at once so the running lanes and agents stay watched."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:check] imm26-5090-i4-hk3 5090-i4 row operator'; brief: 'You are imm26-5090-i4-hk3, the row operator for lane 5090-i4. Your predecessor imm26-5090-i4-hk2 finished DONE (report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i4-hk2\\out-20261016-140851.md). Resume the 5090-i4 row queue from testing/HANDOFF.md and testing/NPC_IMMERSION_26_HANDOFF.md. Do NOT re-run row 12-d: it is SETUP-FAIL (PREFLIGHT-FAIL dist_to_target=112.3 >= 80 for Cind on 5090-i4); skip it and report it. Do not edit product code, the live install, the live server or the DB. One RESULT <row> PASS|FAIL <evidence> line per row; run only rows whose preflight passes; keep C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hk3.status current via agent-status.ps1; checkpoint about every 40k tokens.'",
+   "why": "LANE NO-OPERATOR 5090-i4 fired because the only RUNNING operator finished; the idle lane needs a fresh operator now, named with the next number after hk2."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add hk2 DONE with its report path, the 12-d SETUP-FAIL (dist_to_target 112.3 >= 80 for Cind on 5090-i4, setup fix pending) and the respawn of imm26-5090-i4-hk3",
+   "why": "HANDOFF Right now must reflect each agent report and lane change as it happens."
+  }
+ ],
+ "checks": [
+  "head -c 3500 /c/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md",
+  "cat /c/KenshiTestRuns/agents/imm26-5090-i4-hk2.status",
+  "grep -n -A3 '\"5090-i4\"' /c/KenshiTestRuns/lane-owners.json | head -12",
+  "ls /c/KenshiTestRuns/alerts/open/",
+  "head -30 /c/KenshiModding/tools/automation/tail-ack.ps1"
+ ]
+}

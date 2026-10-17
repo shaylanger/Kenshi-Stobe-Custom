@@ -1,0 +1,35 @@
+{
+ "id": "P030",
+ "session": "2b1a8eca",
+ "ts": "2026-10-16T00:04:12.312Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "bad",
+  "why": "abandoned an agent spawned in the point"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] 5090 i3 lane operator i3op4\nprompt: You are imm26-5090-i3op4, fresh successor of imm26-5090-i3op3 (STOPPED-CONTEXT), operator of lane 5090 i3 (imm26 NPC immersion program; isolated lane only, never Shay's live install/server/DB). Read C:\\KenshiTestRuns\\agents\\imm26-5090-i3op3.handoff.md in full first, then testing/NPC_IMMERSION_26_HANDOFF.md top, the OPERATOR_COMMON.md/COMMON.md briefs it points to, docs/COORDINATOR_IMPROVEMENTS.md, testing/KNOWN_BLOCKERS.md. Keep C:\\KenshiTestRuns\\agents\\imm26-5090-i3op4.status current (agent-status.ps1) and write agents\\imm26-5090-i3op4.handoff.md every ~40k tokens. Debug budget = ONE attempt per row, handbacks <= 8 lines; a pass = real game state changed; use go-row.sh/go-batch.sh/preflight.sh where possible. Keep marker 5090-imm26 and the lane lock (game is already up on NC5 25252267).\n\nRows: 23-d (the in-progress redo described in the handoff), then 23-c, 20-b, 21-b, 22-a and the other 22-* rows. Rows 19-a, 22-b, 23-b, 24-a, 24-b FAILED: do not retry them (fix WPs are separate; imm26-fix-batch3 delivers server deltas). Mark each row in testing/NPC_IMMERSION_26_TESTS.md (git add TESTS only, commit as shaylanger, push). Do not touch other lanes. Final report <= 8 lines via save-report.ps1 (agents/out/imm26-5090-i3op4): row verdicts and next speed-up.",
+   "why": ""
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "python3 - 2>/dev/null; sed -i 's/\"5090-i4\":{/\"5090-i3\":{\"ops\":[\"imm26-5090-i3op4\",\"imm26-5090-i3op3\"],\"dirs\":[\"imm26-5090-i3\",\"imm26-5090-i3op3\",\"imm26-5090\"]},\\n \"5090-i4\":{/' /c/KenshiTestRuns/lane-owners.json; cat /c/KenshiTestRuns/lane-owners.json | head -4; powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/tail-ack.ps1 -Agent imm26-5090-i3op3",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "head -c 3500 /c/KenshiTestRuns/agents/imm26-5090-i3op3.handoff.md"
+ ],
+ "narration": [
+  "The 5090 i3 operator (`imm26-5090-i3op3`) hit its context limit too. I've started its successor, `imm26-5090-i3op4`, which takes the rest of the travel and region rows: 23-d first, then 23-c, 20-b, 21-b and 22-*. Its five FAILs stay parked: 19-a, 22-b, 23-b, 24-a and 24-b.\n\nI acked the relay and added `imm26-5090-i3op4` to the lane-owners mapping so the lane-idle check sees it. The waker is running again.\n\nAll five lanes now have a running operator, and two fixers are running (`imm26-fix-batch3`...[truncated 181 chars]"
+ ],
+ "event_text_chars": 722
+}

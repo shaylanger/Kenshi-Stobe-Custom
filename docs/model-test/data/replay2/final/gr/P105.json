@@ -1,0 +1,20 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "First run `powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/lane-brief.ps1 5090-i4 -Name imm26-5090-i4-hk2 -Predecessor imm26-5090-i4-hk1` and use its output as the brief. Agent description: '[model:haiku][effort:high] imm26-5090-i4-hk2 Haiku pilot operator, successor of imm26-5090-i4-hk1 (stopped, lane 5090-i4 had no RUNNING operator)'. Add to the brief: escalation 00-ask (pilot-escalate 13:01:34): wait-world 300 s retry gave 'no answer (loading?)' rc=1 while stobe.log showed live events at 13:01:34, so the world is loaded. Retry wait-world once; if it still reports no answer, write ESCALATE with the stobe.log tail as evidence instead of stopping silently, then run row 02-cx unplaced. Do not SendMessage hk1 (not running).",
+   "why": "The lane has no RUNNING operator, so a successor must start from the lane brief, and the pending 00-ask answer goes into that brief because hk1 is gone."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:investigate] imm26-wwinv1: why stobe-auto wait-world reports no answer (loading?) while stobe.log is live'. Brief: read-only. Use grep and tail only on the 5090-i4 wait-world output and stobe.log around 13:01. Find the root cause in the wait-world checker and write the smallest fix as a proposal under agents/out/imm26-wwinv1. Do not edit any script a queued or running list uses. Report in 8 lines or fewer.",
+   "why": "The same 'no answer' failure stopped the Haiku row while the game was processing events, so it is a tooling bug to root-cause this hour."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live",
+  "powershell -NoProfile -Command \"(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory\""
+ ]
+}

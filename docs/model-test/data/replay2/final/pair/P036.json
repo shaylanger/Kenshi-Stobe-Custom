@@ -1,0 +1,45 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix-batch3, ONLY if C:/KenshiTestRuns/agents/imm26-fix-batch3.status shows RUNNING. Text: '08-b is still FAIL on the 4080 i3 lane (NC5 installed, rerun at commit c0f7bdd, no follow-up claim). Root cause from the 4080 i3 operator (agent af494f7d420e43327): stobeSocialFollowupsClaim needs stobeSocialAttentionOptionalSpeechAllowed (lib/social_attention.php:33-38), which requires in_combat === false. Natural DLL director bored URIs carry no attn= and Cind has no fresh native_ai snapshot, so in_combat is null and the follow-up claim is denied. The NC5 proximity turn (optional=1&attn=) scans squad members only, so non-squad Cind never gets it. Keep the in_combat gate strict: do NOT allow a null in_combat, because a fighting NPC must never get a follow-up speech. Preferred fix is a fresh attn= on the natural director bored URIs; that part is a DLL change, so put the exact DLL change you need in your status file and the coordinator routes it to the native lane. Server part: patch the isolated 4080 i3 lane site via compose.patch only (never Shay live server tree or DB), php -l, offline stobe-tests, then report the commit and one RESULT line for 08-b with evidence once the fix is deployed to the lane. Keep the raw REPAIR_ACTION_TICKETS SAY item in scope. Keep your status file current.'",
+   "why": "imm26-fix-batch3 owns 08-b and needs the verified root cause and the safe fix path (strict in_combat gate, lane-site patch only) so it does not re-investigate from zero."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[case:patch] imm26-fix-batch3-2 | brief = the same text as the message-agent item above, plus: first read C:/KenshiTestRuns/agents/imm26-fix-batch3.status and its handoff file, then continue from the last checkpoint. Spawn ONLY if session-start -Brief shows imm26-fix-batch3 as DONE or STOPPED-CONTEXT with NO SUCCESSOR; otherwise do not spawn.",
+   "why": "If the owner has already stopped, the 08-b fix needs a fresh successor named by the respawn rule, otherwise the fix is orphaned; the message and spawn are mutually exclusive by status."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "testing/NPC_IMMERSION_26_TESTS.md row 08-b: keep FAIL; add evidence: rerun c0f7bdd on 4080 i3 (NC5 installed), no follow-up claim, cause lib/social_attention.php:33-38 (in_combat null gate), natural bored URIs carry no attn=; owner imm26-fix-batch3 (or successor).",
+   "why": "Records the diagnosed cause on the row without marking it PASS, so the next operator and the fixer see the same evidence."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: add a top line under the newest COORDINATOR entry: 08-b rerun still FAIL on 4080 i3 at c0f7bdd; root cause in_combat null gate (follow-up claim denied, natural bored URIs carry no attn=); owner imm26-fix-batch3 (or successor); fix pending; the in_combat gate is not to be relaxed; DLL part (attn= on natural bored URIs) to be routed to the native lane.",
+   "why": "HANDOFF Right now is updated after every agent report, and this result changes the 08-b status."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "The imm26 program ledger under C:/KenshiTestRuns/programs/ (exact file name comes from the session-start -Brief output; it is not shown in this replay): record the 08-b finding, owner imm26-fix-batch3 (or its successor), checkpoint 'waiting for fixer patch, DLL part routing, and 08-b rerun on 4080 i3'.",
+   "why": "The program ledger must hold state after every agent report so a stop or handoff loses nothing."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not message the 4080 i3 operator (agent af494f7d420e43327); it continues 15-a, 16-c, 03-b, 03-cx, 04-ax on its own.",
+   "why": "The operator's message is a status note with no question, and its rows are running on the installed build, so steering is not needed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-fix-batch3 (or its successor) to report the server patch deployed to the 4080 i3 lane site, the DLL-part request, and the 08-b RESULT line; keep the event waker running. Do not rerun 08-b on the lane before the fixed site and a lane relaunch are in place.",
+   "why": "08-b is only meaningful on the fixed build, and the other rows keep running on the installed build so the lane does not sit idle."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "tail -n 5 C:/KenshiTestRuns/agents/imm26-fix-batch3.status",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'grep -n -E stobeSocialFollowupsClaim|stobeSocialAttentionOptionalSpeechAllowed /root/imm26/codemap/*social*'"
+ ]
+}

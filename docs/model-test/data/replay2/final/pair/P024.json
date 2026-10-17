@@ -1,0 +1,49 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Checking all five lanes now (5090 i3, i4, i5; 4080 i3, i4): operator status, age of the last RESULT line, and Kenshi process state. The lane-by-lane answer follows; any stalled lane gets fixed in the same minute.",
+   "why": "Shay asked a direct question, so he gets an immediate acknowledgement while the real state is checked before anything is claimed."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "[only for each lane operator whose status file is RUNNING and whose last RESULT line is 2 or more minutes old while rows remain; owners taken from the rollcall, e.g. imm26-5090-i3op3, imm26-5090-i4op3, imm26-5090-ctxop32, imm26-4080-op2g, imm26-4080-i4op5] Reply in one line: current row id, time of the last RESULT line, and what you are blocked on. Update your status file with the same line. Then run the rest of your lane row list through go-batch.sh if it exists, one RESULT line per row.",
+   "why": "A lane quiet for 2 minutes with rows left is idle time under the rig rule (no rig idle over 2 min while work exists), and asking the operator first is the cheapest check before any respawn."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[only for a lane whose operator is dead in the rollcall (no live process, status frozen more than 10 min), or still silent 10 min after the message above] Name: the next number after the old operator (for example imm26-5090-ctxop33 if the dead or silent operator is imm26-5090-ctxop32). Tag and model from tools/automation/model-policy.json for an operator run. Brief: take over only this lane; resume from the last RESULT line in C:/KenshiTestRuns/agents/<old name>.status; run the lane's remaining row list through go-batch.sh (dry run first); one RESULT line per row; after one failed attempt on a row, record it and move on; full report via tools/automation/save-report.ps1; hand back at most 8 lines; status via tools/automation/agent-status.ps1; no idle reason recorded just to quiet the hook. Keep the old operator's marker until this successor exists.",
+   "why": "A dead or silent operator leaves its lane idle, and the rule is a fresh successor resumed from the checkpoint, used only after the checks show the lane has no live operator."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[only if a lane has Kenshi down, or stalls again after its successor starts] [case:investigate] Find the root cause of the stall on that lane from its status file, its last RESULT lines and its lane logs; propose the smallest fix; do not edit code.",
+   "why": "Odd behaviour gets an investigate run first under the model routing rule, so a repeated stall gets a root-cause check in parallel with the successor instead of another blind respawn."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "TaskStop on a lane operator still silent 20 min after the message above, then its successor from the spawn step; tools/automation/agent-abandon.ps1 only if no successor is wanted.",
+   "why": "The stall ladder is a message, then a successor at 10 min silent, then a stop at 20 min, so a hung operator cannot hold its lane."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Only if pgrep shows no event-wait.sh running: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (as a background task).",
+   "why": "The waker keeps the coordinator woken for lane results, so it must be confirmed running before the answer is given."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Per-lane answer, one line per lane: lane id, operator name, status age, last RESULT row and its time, state (testing / stalled and fixed / down), and the action taken. Then the count of lanes that were running rows at the check, and for each lane that was not, the reason.",
+   "why": "This is the direct answer to his question and must come from the checks, not from memory of earlier status."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-rollcall.ps1",
+  "ls -lt C:/KenshiTestRuns/inflight C:/KenshiTestRuns/agents | head -30",
+  "ssh 4080 'C:\\KAH\\ctl.ps1 status -Instance 3' and the same with -Instance 4 (per-instance Kenshi and operator state)",
+  "Read testing/HANDOFF.md for the 5090 lane status command, then run it for lanes i3, i4 and i5 (Kenshi process state and whether rows are running)",
+  "tail -3 C:/KenshiTestRuns/agents/<operator>.status for each lane operator in the rollcall (last RESULT line and its age)",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh"
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; no --batch because no batch is named in this event)",
+   "why": "Work is in flight (Kenshi running, 19 inflight markers, newest imm26-4080-i3op21 and imm26-4080-i4op13) and no waker is running, so the session would go quiet and miss peer messages and stalls."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no spawn of imm26-4080-i3op20b; keep imm26-4080-i3op21 as the live successor of imm26-4080-i3op20",
+   "why": "The guard's respawn text is stale: successor imm26-4080-i3op21 was already spawned and reported RUNNING at 11:19, so a second successor would duplicate its work on the same lane."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not release any inflight marker and do not delete any inflight file",
+   "why": "Both newest markers belong to live successors (imm26-4080-i3op21 0 min old, imm26-4080-i4op13 2 min old), so the work is real and nothing is stale."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -3 C:/KenshiTestRuns/agents/imm26-4080-i3op21.status",
+  "head -3 C:/KenshiTestRuns/agents/imm26-4080-i4op13.status"
+ ]
+}

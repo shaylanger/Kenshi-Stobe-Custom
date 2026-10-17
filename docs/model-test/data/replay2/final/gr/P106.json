@@ -1,0 +1,25 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3op21 -Kind STOPPED-CONTEXT -Report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i3op21\\out-20261016-130429.md -Summary 'imm26-5090-i3op21 STOPPED-CONTEXT, handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.handoff.md. No scripted runnable row left on 5090-i3; lane still up on NC20 with game-3.lock and inflight held. Results: PASS 19-ax, 10-e; FAIL 20-d, 16-bx (checker), 17-bx, 05-cx v2 (sleeper rendering), 23-a v2 (ack count); SETUP-FAIL 23-e, 24-c, 15-bx, 08-d, 11-b; GATED 12-d v2. Needed from coordinator: row scripts for 22-b (tick driver + checker) and 25-b (FX-MINE native lane), 08-d rerun on the 23-a v2 walk, and Shay decisions on 05-cx sleeper rendering and 23-a ack-count check. Successor imm26-5090-i3op22 only after those scripts exist.'",
+   "why": "The tail relays every agent result to coordinator #16 with tail-relay.ps1 and the tail itself spawns nothing; op21 stopped at its context limit with no runnable row, so it is a STOPPED-CONTEXT with a pending successor, not a closed result."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the tail-relay delivery and the coordinator #16 tail-ack; then, once 22-b, 25-b and 08-d row scripts exist, #16 runs: powershell tools/automation/lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21",
+   "why": "The lane has no runnable scripted row now, so a fresh successor would only burn context; the work is the row scripts, which #16 builds, and the successor is spawned as soon as they exist so the lane is not idle for long."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no message to Shay from the tail now; the two Shay decisions (05-cx sleeper rendering, 23-a ack-count check) go to him from coordinator #16 in its next single summary",
+   "why": "Shay is asked real decisions together once, and the tail decides nothing; sending them early would split the question."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "sed -n 1,6p C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.status",
+  "head -c 3000 C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i3op21\\out-20261016-130429.md"
+ ]
+}

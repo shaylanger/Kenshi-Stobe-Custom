@@ -1,0 +1,65 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/extract.py adb8565711c29f920 /mnt/c/KenshiTestRuns/invest/suite/A3/report.md",
+   "why": "Save the SUITE-A3 hand-back to the round folder first, as was done for A2, so later steps cite a file and not relay text."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiTestRuns/invest/suite/tools/state-check.sh /mnt/c/KenshiTestRuns/invest/suite/A3/state-after.txt",
+   "why": "Record the post-round state so SUITE-A3 closes with the same state evidence as A1 and A2."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/collect.py A3 SUITE-A3",
+   "why": "Close the A3 round folder the same way as A2 (collect), after the report and state receipts exist."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no verifier agent for SUITE-A3",
+   "why": "No-cascade rule (Shay 2026-10-15): the coordinator runs the mechanical checks itself, so the A2-style verify spawn is not repeated."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name: suite-a3-localtravel-p1. Description: [case:patch] [ticket:SUITE-A3-P1] restore the LocalTravel candidate producer. Brief: Read C:/KenshiTestRuns/invest/suite/A3/report.md first (root cause). The NPC travel-candidate producer (LocalTravel::CandidatesJson, which writes travel_destinations into each NPC context) is in the source /root/STOBE-src but is missing from the build that produces the installed Stobe.dll, so every NPC gets an empty destination list and the server rejects the LLM travel reply. Steps: (1) diff -rq /root/STOBE-src against /mnt/c/KenshiModding/components/STOBE and list the differences; /root/STOBE-src is the source of truth; do not edit components/STOBE and do not commit in this step; (2) confirm the producer is compiled in and called from the NPC context builder; (3) compile offline with tools/automation/build-stobe.ps1 into a pending-fixes candidate folder, never into the installed mods folder, and record the DLL path and SHA256; (4) do NOT install to D:/Steam, do NOT launch Kenshi, no 5090 session (standing hold on new 5090 sessions), do not touch the live StobeServer tree, /root/stobe-work/ss-merge or the DB. Keep your status current with tools/automation/agent-status.ps1. Report the changed-file list, the compile result (short log excerpt), the candidate path and SHA256 in one short report.",
+   "why": "Phase 1 of the A3 root-cause fix is the missing producer in the build, so a fresh patch agent builds a candidate offline now, because no install or new 5090 session is allowed."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name: suite-a2-tengu-seed. Description: [case:patch] [ticket:SUITE-A2-P1] bind the Emperor persona to the real emperor rows. Brief: Read C:/KenshiTestRuns/invest/suite/A2/report.md first (root cause). The seed in /var/www/html/StobeServer/data/schema.sql (the five bare 'Tengu' rows, about lines 3404-3408) gives the persona 'Emperor of the United Cities.' to every NPC named Tengu, and the LLM is then told she is the Emperor; the real emperor rows are named 'Emperor Tengu'. Fix the seed so the persona is bound only to the emperor rows. Steps: check git status and git log in the live tree first (Shay also edits there); work in /root/stobe-work/ss-merge: back up, patch with an anchor script (no whole-file copy, no git checkout, no chown), php -l, offline stobe-tests (no game run, STOBE server stays off). Do NOT deploy to the live tree /var/www/html/StobeServer, do NOT commit or push, and do NOT touch the DB: the imm26 rule keeps Shay's live server tree and DB off limits until he says yes. Do NOT repair rows already copied into the DB (for example core_npc_master id 85663); list them as a decision for Shay. Report the diff, the php -l and stobe-tests result, and the rows that need a decision. Keep your status current with tools/automation/agent-status.ps1.",
+   "why": "The A2 finding is a separate server-side seed bug that the input supports, so it gets its own patch agent in the isolated merge copy, with the live deploy, commit and DB repair held for Shay."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "bash tools/automation/event-wait.sh (run in the background from WSL, restarted each time it wakes)",
+   "why": "Two patch agents are now in flight, so the waker must run and no result can be missed."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' section, plus the active program ledger in C:/KenshiTestRuns/programs/ (locate the file by listing that folder; its name is not in this input): record SUITE-A2 PASS (verify agent a74ed16380c1a30fb), the SUITE-A3 root cause, suite-a3-localtravel-p1 and suite-a2-tengu-seed as RUNNING with their outputs, and the open decisions for Shay.",
+   "why": "The program ledger and HANDOFF are updated after every agent report, not only at the context limit."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "via SendMessage to the Shay relay session: SUITE-A3 done (read-only). Root cause of Mouse's loop: the Stobe.dll on the 5090 has no NPC travel-candidate producer (LocalTravel::CandidatesJson), so every NPC gets an empty destination list; her replies that name a place are rejected and replaced by 'I need to find a practical place before promising to lead us there'. Restoring the producer: code and offline build only, now (agent suite-a3-localtravel-p1). Separate server bug from A2 (verified, read-only): the seed gives the Emperor persona to the bare name 'Tengu', so every NPC named Tengu is told she is the Emperor (core_npc_master id 85663 already has it). The fix is being prepared in ss-merge; the live StobeServer deploy, commit/push and the DB row repair wait for you. Decisions for you, one reply please: (1) may the restored Stobe DLL be installed to D:/Steam (your install)? I will not install without your OK. (2) may the Tengu seed fix be deployed to the live StobeServer tree and committed/pushed? (3) OK to repair the Tengu rows already copied into the DB? Reports: C:/KenshiTestRuns/invest/suite/A3/report.md and C:/KenshiTestRuns/invest/suite/A2/report.md.",
+   "why": "Shay needs the root cause, the install and deploy boundaries, and the decisions that are his, in one message."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the suite-a3-localtravel-p1 and suite-a2-tengu-seed reports and the A3 state-after receipt",
+   "why": "The restore build and the seed fix cannot be checked until the patch agents report, and no install, deploy or rig work is allowed in this step."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- grep -rln CandidatesJson /root/STOBE-src /mnt/c/KenshiModding/components/STOBE",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- diff -rq /root/STOBE-src /mnt/c/KenshiModding/components/STOBE",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- git -C /root/STOBE-src status --short",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- grep -c travel_destinations /mnt/d/Steam/steamapps/common/Kenshi/mods/Stobe/Stobe.dll",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- grep -n \"('Tengu', 'personality'\" /var/www/html/StobeServer/data/schema.sql",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- git -C /var/www/html/StobeServer status --short",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- git -C /root/stobe-work/ss-merge status --short",
+  "tail -n 5 C:/KenshiTestRuns/invest/suite/PROGRESS.md"
+ ]
+}

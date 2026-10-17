@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a97e05a80e87aab69 (imm26-4080-i4op10). Text: Coordinator #12 (relayed through the tail, Shay's order): Shay ordered every SETUP-FAIL/GATED row unblocked and the one-call row scripts are ready (testing/live-stobe-queue/imm26-assert/rowtools/unblock*; notes inbox/operators/u-rowsA/B/C.txt). Finish the current 13-ax run, COMMIT your uncommitted rowtools edits (hxdefs.sh etc.), write agents/imm26-4080-i4op10.handoff.md, set status STOPPED-CONTEXT or DONE, then stop. Do not start new hardening rows. Coordinator #12 spawns a fresh 4080-i4 operator (op11) for the unblock rows right after.",
+   "why": "The peer coordinator cannot reach this running agent, and its message carries Shay's order, so the tail relays it without deciding anything itself."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 <args exactly as its header usage says; read the header first> for the op9c relay C:/KenshiTestRuns/inbox/coordinator/20261015-233521-tail-imm26-5090-i5-op9c.msg",
+   "why": "The peer asked the tail to ack the op9c relay it holds once delivered, and the inbox already shows it delivered."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-4080-i4op10 to end (DONE or STOPPED-CONTEXT with its handoff file written and the commit made). Then run: powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-relay.ps1 -Agent imm26-4080-i4op10 -Kind DONE or -Kind FAILED -Report C:/KenshiTestRuns/agents/imm26-4080-i4op10.handoff.md, and keep tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02 armed (current wait task bz0lf5892).",
+   "why": "The tail spawns and decides nothing; it relays each finished agent result to the new coordinator and keeps its own waker running."
+  }
+ ],
+ "checks": [
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op10.status | cut -c1-300",
+  "sed -n 1,12p /c/KenshiModding/tools/automation/tail-ack.ps1 | cut -c1-250",
+  "tail -3 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2a0cfe9b-63fb-4663-b97a-4a00df3b4e02/tasks/bz0lf5892.output | cut -c1-300"
+ ]
+}

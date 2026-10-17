@@ -1,0 +1,35 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Measure what the startup context consists of before cutting anything: byte and token-estimate sizes of C:\\KenshiModding\\CLAUDE.md, C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\memory\\MEMORY.md, the output of 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief', and the HANDOFF.md 'Right now' section that session-start prints (testing/HANDOFF.md).",
+   "why": "Shay said 'Start the startup-context cut' (the item I proposed in my last wrap_up); the exact scope is not defined in this file, so I first find the biggest startup items from real sizes instead of guessing."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Cut only the largest, lowest-value startup items found by the measurement: move stale or verbose text verbatim into archive pages (testing/HANDOFF.md 'Right now' history -> archive/, long CLAUDE.md bullets -> docs/claude-md-archive/ with a pointer line and an entry in RULE_CHECKLIST.md), and shorten session-start.ps1 -Brief output. Do not touch the 2-minute waker/reachability rule, the waker-guard hook, or settings.json; do not reintroduce the reverted --until-event flag or edit batch-health.sh/rig-health.sh.",
+   "why": "Cuts startup tokens without weakening reachability, which Shay just confirmed by agreeing to the revert; fewer tokens must come from smaller startup context, as I told him."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Re-run 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief' and re-measure sizes, then 'git diff --stat' to confirm only the intended files changed.",
+   "why": "Verify the cut actually shrank the startup output and that every WAKER STATUS, agent, alert and handoff line is still printed."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git add <only the files I edited> && git commit -m 'startup-context cut: move verbose startup text to archive pages, shorten session-start -Brief (what + why: fewer startup tokens, no rule removed)' then git push origin HEAD (identity shaylanger, repo-local email; the unrelated modified/untracked files in the tree stay uncommitted).",
+   "why": "One change per commit and push right after, per the Git rules."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Startup-context cut done: startup context went from <before> to <after> tokens (measured). Moved text verbatim to archive pages, no rule changed, waker/reachability rule and hooks untouched. Commit <hash> pushed.",
+   "why": "Report one concise result to Shay via his relay session once the measured numbers exist (placeholders are filled from the measurement; the real values are not known in this file)."
+  }
+ ],
+ "checks": [
+  "wc -c C:\\KenshiModding\\CLAUDE.md C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\memory\\MEMORY.md",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief | wc -c",
+  "git -C C:\\KenshiModding status --short -- CLAUDE.md testing/HANDOFF.md tools/automation/session-start.ps1"
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not send another message about the 19-d root cause: the coordinator already sent it (recipe change, no teleport during a live MOVE order) to a0220684160339b7b in the preceding SendMessage. This notification is only the completion of the imm26-inv19d investigator (a40822a174c298c23) whose report was already read and relayed.",
+   "why": "The draft's message to imm26-fix19 duplicates an action already taken, and the investigator is DONE with nothing further to ack."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, 'Right now': add a line that imm26-inv19d is DONE (agents/out/imm26-inv19d/latest.md): 19-d resume works (post-load OWNED_TRAVEL accepted, stobe.log:18445), the FAIL is the arrival half after a 14.6 km teleport during a live MOVE order (both fall ~620u, order list empties, native_order_ended_before_goal); new recipe sent to operator a0220684160339b7b; 19-d stays FAIL until a rerun PASSes, arrival gate not weakened.",
+   "why": "HANDOFF must carry the finding after every agent report so a successor does not repeat the investigation (coordinator is at 271k, handoff near)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the operator a0220684160339b7b to report the 19-d rerun result under the new recipe (event stream waker stays armed).",
+   "why": "The rerun belongs to the operator who already has the recipe; nothing else to start."
+  }
+ ],
+ "checks": [
+  "grep -n -i 'arrival|recipe|root' C:/KenshiTestRuns/agents/out/imm26-inv19d/latest.md | head -40"
+ ]
+}

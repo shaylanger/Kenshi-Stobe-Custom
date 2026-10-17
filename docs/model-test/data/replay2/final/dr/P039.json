@@ -1,0 +1,19 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 (no -ToSession, so it follows coordinator.current) with the message: imm26-4080-i4op52 (4080 i4, owned by tail 2b1a8eca) interim handback, NOT final: it stopped with its own background work running and may notify again. Lane runs NC6 3ADDE488 (SHA verified both ends), game up, marker 4080-imm26-i4 kept. PASS: 08-b (situated_remark_claim 6255, one Cind line; Cind-in-combat control not run), 09-c (caveat: no no-preference control), 06-c. FAIL: 08-a (travel-consent reply suppresses the followup row; likely the same conflict as the open 08-d note), 10-a (Selika accepted the apology in speech, 0 apology_relief rows). SETUP-FAIL: 10-b (blocker text truncated in the handback). Full report: the agent-message from ae85217f23349ae6e. Coordinator: record the rows in HANDOFF/TESTS, start [case:investigate] for 08-a and 10-a (a FAIL is not rerun without --allow-retry), and read the full report for the 10-b blocker.",
+   "why": "The agent is owned by the live tail, so the tail only relays the result to the current coordinator, which records rows and starts investigations; the tail spawns and edits nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the tail-ack of this relay and for the next task-notification or DONE/FAILED/STOPPED-CONTEXT status of imm26-4080-i4op52 (C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status).",
+   "why": "The handback is interim because the agent is waiting on its own background work, so the final result is not in yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status -Tail 5"
+ ]
+}

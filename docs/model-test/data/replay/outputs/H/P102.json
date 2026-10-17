@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no command; leave task b4rgpc75d completion unactioned (live waker is bvpgoc6vb, confirmed by the check)",
+   "why": "b4rgpc75d was an earlier event-wait run that the coordinator's own rearm-waker.ps1 -KillOnly stopped just before bvpgoc6vb was started, so its exit 0 is expected and needs no action."
+  }
+ ],
+ "checks": [
+  "tail -3 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/245d8ad7-6bab-4115-8188-ea4724f6a5b6/tasks/bvpgoc6vb.output\" | cut -c1-300"
+ ]
+}

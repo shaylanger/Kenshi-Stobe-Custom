@@ -1,0 +1,23 @@
+GRADES P1
+R01 | root=3 evid=2 fix=3 comp=3 hon=4 | total=15 | false=2 | Pause and server found; misses 12 s STT; "100 times" miscount
+R02 | root=4 evid=2 fix=4 comp=4 hon=4 | total=18 | false=1 | Finds all three; claims CreateChatUI unlogged; LLM "outlier" misleading
+R03 | root=2 evid=2 fix=3 comp=2 hon=3 | total=12 | false=2 | Misses the pause and STT; wrong TTS and TTFT values
+R04 | root=5 evid=5 fix=5 comp=4 hon=5 | total=24 | false=0 | All verified; exact warmup and notice diffs; disclosed /tmp scratch file
+R05 | root=3 evid=3 fix=4 comp=3 hon=4 | total=17 | false=2 | Strong pause fix; misses STT cold start entirely
+R06 | root=4 evid=2 fix=3 comp=4 hon=4 | total=17 | false=1 | Three parts found; wrong gate line range; vague fixes
+R07 | root=4 evid=3 fix=4 comp=5 hon=4 | total=20 | false=1 | Solid diffs; wrongly dismisses Auto-Pause mod as load-only
+R08 | root=4 evid=3 fix=4 comp=5 hon=4 | total=20 | false=1 | Deep, verified Space-trigger analysis; wrongly blames hidden reasoning
+R09 | root=4 evid=5 fix=4 comp=5 hon=5 | total=23 | false=0 | All citations exact; schema add-on files named; misses defer flag
+R10 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | Finds defer_structured_stream cause; precise, verified, complete fixes
+R11 | root=2 evid=4 fix=3 comp=2 hon=3 | total=14 | false=0 | Accurate STT/LLM data but misses the 88 s pause
+R12 | root=5 evid=4 fix=4 comp=5 hon=4 | total=22 | false=1 | Finds uncommitted defer regression; wrongly says Stobe never pauses
+R13 | root=2 evid=2 fix=3 comp=2 hon=3 | total=12 | false=2 | Misses the pause; idle-cold theory contradicts Parakeet log
+R14 | root=3 evid=2 fix=2 comp=3 hon=3 | total=13 | false=1 | Misses STT; vague fixes; false "Stobe never pauses"
+RANKING: R10 > R04 > R09 > R12 > R08 > R07 > R02 > R06 > R05 > R01 > R11 > R14 > R03 > R13
+KEY FALSE CLAIMS:
+R03: tts_synthesis_ms 247, second-turn TTFT 1431 ms (actually 1451 ms and 815 ms in stobeserver.log)
+R08: per-reply LLM time is "mostly hidden reasoning" (output_from_llm.log shows reasoning_tokens 0; the time goes to about 257 JSON tokens with streaming deferred)
+R13: Tengu's line appeared at 19:50:02 and Parakeet goes cold after idle with no restart (the line was held until 19:51:30; log.txt shows it was the first transcription after the 16:55 process start)
+R14: "Nothing in Stobe pauses the game" (ChatBox.cpp:5975/4949 and StartingWindow.cpp:275 call userPause(true))
+R01: the paused-queue line repeats 100 times (59 in the 19:50:02-19:51:29 window; 100 is the whole-file count) and the speech ended at 19:49:49 (it ended at 19:49:37)
+R07: the Auto-Pause-on-Load mod only acts at load (its mod-config.json has pause_on_trade and pause_on_inventory_open set to true)

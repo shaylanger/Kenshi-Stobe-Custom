@@ -1,0 +1,30 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Write the tail closing-review decisions file process-ideas/review-ded82aa7-d30d-451d-8954-28e72d95c908-tail.json (directory per testing/AGENT_PROMPTS.md step 2b; exact parent path not in this file) after reviewing this tail session's conversation since the handoff (about 10:55 to now). Max 3 NEW entries, big ideas only, each with a concrete example from this session, and nothing that weakens a timeout/stall/idle/dead-agent catch. Candidate 1: a tail session should be a script-only relay (tail-wait + autorelay, no LLM turns) or a tiny fresh-context session, not a 300k+ context coordinator. Example: each Stop-hook block (5 in a row for imm26-hxA between 11:07 and 11:14) and each status check re-read the whole large context for no new information. Candidate 2: tail-relay should deliver an agent's DONE report and the owning-agent bookkeeping to the new coordinator in one automatic step, so the tail never needs turns to relay. Example: imm26-hxA DONE took a status poll, a report lookup, tail-relay.ps1, a hand-back message and a re-armed tail-wait, all while the tail was meant to be winding down. Also update any existing PI entry these overlap with instead of adding a duplicate; keep the active list at 15 or fewer.",
+   "why": "Shay asked for a review of the conversation since the handoff with PI updates (big ideas only, same rules), and CLAUDE.md requires a tail closing review file before tail-close.ps1 will accept the close."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\process-ideas.ps1 review <path of the review-ded82aa7-d30d-451d-8954-28e72d95c908-tail.json file just written>",
+   "why": "This applies the review to docs/PROCESS_IDEAS.md, as the handoff review step requires; the decisions file's exact path is unknown here, so it is the one written in the previous step."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Done: I reviewed the conversation since the handoff and updated the process-ideas list (big ideas only, same rules, nothing that weakens a stall or timeout catch). The new entries: (1) make the tail session a script-only relay or a tiny-context session instead of a large-context coordinator, (2) make the relay of an agent's DONE report fully automatic. You are right about the cost: each hook block and status poll re-reads my large context. To cut it, the tail wait (tail-wait.ps1) is armed over the three remaining lane operators (imm26-5090-i3op20, imm26-4080-i4op12b, imm26-4080-i3op20). I will not reply to individual Stop-hook blocks and will wake only when an agent finishes or needs a relay. The imm26-hxA report is already relayed to coordinator #15.",
+   "why": "Shay needs a short confirmation, and the reply states the token-saving behavior he asked about; it goes to his relay session and does not block on any question."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the armed tail-wait (task bj26uv2kf) to exit when imm26-5090-i3op20, imm26-4080-i4op12b or imm26-4080-i3op20 finishes or needs a relay; then save the report, run tail-relay.ps1 and end the turn.",
+   "why": "The tail owns three running agents and may not decide or spawn anything new, so the only remaining work is a quiet wait for their results."
+  }
+ ],
+ "checks": [
+  "ls C:\\KenshiTestRuns\\process-ideas 2>nul",
+  "grep -c . C:\\KenshiModding\\docs\\PROCESS_IDEAS.md",
+  "ls C:\\KenshiTestRuns\\tail"
+ ]
+}

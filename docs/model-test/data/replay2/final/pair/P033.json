@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash tool, run_in_background=true: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP (no --batch: no batch is named in the handoff; do not edit event-wait.sh while it runs)",
+   "why": "The Stop guard found real in-flight work (Kenshi running, live operators on 5090 i3/i4/i5 and 4080 i3/i4, fixers and PI agents with inflight markers) and no waker is running, so peer messages, stalls and lane-idle wakes would be missed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the restarted waker to wake the session; no new spawns, acks, or inflight-marker deletions in this step",
+   "why": "The waker is the only missing piece; running agents report through it and the handoff lists no other action for this event; stale-marker candidates are checked read-only first, never released here."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root -- pgrep -af event-wait.sh (confirm no second waker is already running before starting one)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "for each name in C:/KenshiTestRuns/inflight: confirm a RUNNING status line in C:/KenshiTestRuns/agents/<name>.status; only markers with no RUNNING line (candidates: imm26-setupfail-scope, imm26-setupfail-scope2, imm26-compose-fix-batch2c) are stale; release nothing in this step, every other marker stays"
+ ]
+}

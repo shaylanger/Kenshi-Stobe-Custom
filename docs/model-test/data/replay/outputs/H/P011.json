@@ -1,0 +1,15 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'cd /mnt/c/KenshiModding && exec bash tools/automation/event-wait.sh' (run as a background task, run_in_background: true)",
+   "why": "The Stop hook blocks because work is in flight (Kenshi running, inflight markers, RUNNING agents imm26-wpA3 and imm26-wpB3) and no waker is running, so the session would go quiet and miss peer messages and stalls; nothing is released because the work is real."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'pgrep -af event-wait.sh'",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-ChildItem C:\\KenshiTestRuns\\inflight"
+ ]
+}

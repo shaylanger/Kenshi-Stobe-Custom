@@ -1,0 +1,53 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker delivered this digest and exited, so it must restart at once or lane and relay events stop arriving."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 20261016-140902-tail-imm26-5090-i4-hk2.msg (confirm the argument form from the script header first; not shown in this file)",
+   "why": "The hk2 TAIL-RELAY DONE is a delivered result that this coordinator must acknowledge so the tail session can close."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "row 12-d, lane 5090-i4: SETUP-FAIL (PREFLIGHT-FAIL dist_to_target=112.3 >= 80 for Cind); setup problem, not a product FAIL; leave it out of the operator brief and do not dispatch it until the 12-d investigator returns a recipe or a moved target",
+   "why": "The hk2 pilot's 12-d failed the preflight distance gate, which is a setup problem, so no operator should retry it as-is."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: '[case:investigate] imm26-inv12d 12-d setup diagnosis'. Prompt: 'You are imm26-inv12d, a read-only investigator: diagnose, do not edit product code, do not touch live lanes, the game, the server or the DB. Question: row 12-d on lane 5090-i4 fails PREFLIGHT-FAIL dist_to_target=112.3 >= 80 for Cind (native people list drops NPCs beyond range). Decide whether the target choice in the row recipe or the preflight distance gate is at fault and propose the setup root fix (a recipe or a moved target). Do not weaken the 80 limit. Evidence: C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md. Write findings to C:/KenshiTestRuns/agents/out/imm26-inv12d/latest.md and keep C:/KenshiTestRuns/agents/imm26-inv12d.status current with tools/automation/agent-status.ps1.'",
+   "why": "The SETUP-FAIL escalation explicitly needs the coordinator, and odd behaviour gets an investigate-first pass before any row is retried."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: '[case:check] imm26-5090-i4op33 lane operator'. Prompt: 'You are imm26-5090-i4op33, the RUNNING operator for lane 5090-i4, replacing the ended operators imm26-5090-i4op32, imm26-5090-i4op3 and imm26-5090-i4-hk2. Read C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md (head -c 3500) and the latest handoff of imm26-5090-i4op32 under C:/KenshiTestRuns/agents/out/. Run the next queued non-PASS rows for lane 5090-i4 in handoff order on the installed build. SKIP row 12-d (SETUP-FAIL; the coordinator is diagnosing it). Print one RESULT <row> PASS|FAIL <evidence> line per row and open only the excerpt file of a FAIL. Keep C:/KenshiTestRuns/agents/imm26-5090-i4op33.status current with tools/automation/agent-status.ps1. Do not edit product code, the DLL, the server or the DB, and do not install NC25 (the coordinator installs at a row boundary). If context nears the limit, checkpoint and report STOPPED-CONTEXT.'",
+   "why": "Lane 5090-i4 has no RUNNING operator while its queue is non-empty and it is not parked in lanes.held, so a fresh operator keeps the rig busy (no rig idle over 2 min while work exists)."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-5090-i4op33 <agentId from the op33 spawn result> 3a21a7b9-2954-4145-be31-079880e2e887; powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-5090-i4op33 RUNNING '5090-i4 operator' 'spawned by coord 18 after LANE NO-OPERATOR' '' 'next queued rows on 5090-i4 (12-d skipped)'; powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-inv12d <agentId from the inv12d spawn result> 3a21a7b9-2954-4145-be31-079880e2e887; powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-inv12d RUNNING '12-d setup diagnosis' 'spawned by coord 18 after SETUP-FAIL' '' 'diagnose dist_to_target 112.3 vs 80'",
+   "why": "Registers both agents so the waker, the Stop guard and session-start count them as in-flight work."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 5090-i4 'hk2 DONE relayed; op33 respawned from the handoff; 12-d SETUP-FAIL with imm26-inv12d'",
+   "why": "The respawn answers the NO-OPERATOR alert; acking by subject closes it, and a still-true condition would re-open after 30 min."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: add hk2 DONE (tail relay acked); 5090-i4 respawned as imm26-5090-i4op33 (12-d skipped); imm26-inv12d diagnosing 12-d SETUP-FAIL; 4080-i3 still parked in lanes.held; imm26-inv22b investigating 22-b; NC25 waits for a 5090 row boundary.",
+   "why": "The coordinator updates Right now after every agent report so a context stop loses nothing."
+  }
+ ],
+ "checks": [
+  "Get-Content C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md -TotalCount 60 (read the hk2 DONE report before any spawn)",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-5090-i4-hk2.status",
+  "Get-Content C:/KenshiTestRuns/lanes.held; Select-String -Path C:/KenshiTestRuns/lane-owners.json -Pattern '5090-i4' -Context 0,12",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-5090-i4op32.status",
+  "Get-ChildItem C:/KenshiTestRuns/alerts/open",
+  "Get-Content C:/KenshiModding/tools/automation/model-policy.json -TotalCount 80 (confirm the case:investigate and case:check tiers before spawning)"
+ ]
+}

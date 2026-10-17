@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "run_in_background Bash: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP",
+   "why": "The background event-wait task exited (code 0) after returning one event, and work is in flight (imm26-4080-i4op5, other running agents), so the waker must be restarted at once or the Stop hook and silence detection fail."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 --read-only is not needed; instead update HANDOFF 'Right now' (testing/HANDOFF.md) with: wpT2 (tail handoff WP-T2 ledger side) DONE; imm26-4080-i4op4 abandoned, superseded by imm26-4080-i4op5; agent-rollcall evidence-heartbeat fix 6376cff pushed but not live until the agent-host restarts",
+   "why": "The ledger and HANDOFF must be updated after every agent report, and the wpT2 DONE event is the new fact in this batch; the exact ledger/program command for wpT2 is not in the file, so only the HANDOFF edit is certain."
+  }
+ ],
+ "checks": [
+  "cat C:\\KenshiTestRuns\\agents\\wpT2.status | head -5",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1 | cut -c1-150"
+ ]
+}

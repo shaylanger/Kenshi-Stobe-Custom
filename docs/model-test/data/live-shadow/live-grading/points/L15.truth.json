@@ -1,0 +1,16 @@
+{
+ "id": "L15",
+ "batch_id": 15,
+ "class": "other",
+ "window": [
+  "2026-10-16T22:09:02.146Z",
+  "2026-10-16T22:12:32.188Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": true,
+ "real_action_count": 1,
+ "action_types": []
+}

@@ -1,0 +1,26 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i3op3 \"superseded: successor imm26-5090-i3op4 already spawned this session from agents\\imm26-5090-i3op3.handoff.md (lane-owners.json updated, tail-ack done); hook only looks for the names i3op3b/i3op32\"",
+   "why": "The hook's respawn suggestion (imm26-5090-i3op3b) would start a duplicate operator on lane 5090 i3 next to the already-running imm26-5090-i3op4, so the stopped agent's marker is closed on purpose rather than respawned."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\docs\\PROCESS_IDEAS.md: add a new entry (counts toward the max-3-new limit at the next handoff review, do not apply it): the Stop-hook successor check should recognise any successor named in the program ledger or lane-owners.json (here imm26-5090-i3op4), not only a fixed suffix name; this moment is the concrete example. It touches hooks, so it goes to Shay only. If PI-11 already covers it, add this moment to PI-11 instead.",
+   "why": "The false 'no successor' block is the PI-11 situation (successor recognition by ledger), and ideas that touch hooks are for Shay to decide, so I record the moment rather than change the hook."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the running event-wait waker (background task bm61fdplg) and wait for the imm26-5090-i3op4 hand-back plus the imm26-fix-batch3 and imm26-nc6 results; re-end the turn once the Stop hook no longer lists i3op3.",
+   "why": "All five lanes have an operator and the waker is active, so no other action is needed for this event."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i3op4.status",
+  "type C:\\KenshiTestRuns\\lane-owners.json",
+  "ls C:\\KenshiTestRuns\\respawn\\imm26-5090-i3op3.todo"
+ ]
+}

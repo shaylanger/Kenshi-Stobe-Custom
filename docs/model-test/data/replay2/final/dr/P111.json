@@ -1,0 +1,25 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To tail 245d8ad7 / the imm26-4080-i3op22 owner (send by agent id from agent-ids.ps1 list -Live): SETUP-FAIL 20-a from EVENT INBOX 20261016-131540-setupfail-20-a.msg, lane 4080-i3, no ACCEPTED travel_agreement while setting up the trip (propose/accept legs failed, same defect as 14-a and 19-a). Evidence is at the C:/KenshiTestRuns/imm26-4080/ path named in the event. Do not rerun 20-a until the propose/accept defect is diagnosed; continue the other op22 rows.",
+   "why": "The 4080-i3 operator is owned by live tail 245d8ad7, so the coordinator routes the ticket instead of respawning or steering the isolated lane."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Row 20-a: SETUP-FAIL, ticket 20261016-131540-setupfail-20-a.msg, unblock owner tail 245d8ad7 / op22. Not PASS or FAIL.",
+   "why": "The row never ran, so it must not be recorded as a game result."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent imm26-inv20a, description '[case:investigate] trip propose/accept defect 14-a/19-a/20-a'. Brief: read-only. Find the common root cause of the missing ACCEPTED travel_agreement in the SETUP-FAIL tickets for 14-a, 19-a and 20-a (20-a evidence: C:/KenshiTestRuns/imm26-4080/, files s1/s1b/s2/s2b named in inbox 20261016-131540-setupfail-20-a.msg). Check first whether an existing investigation (e.g. imm26-inv26) already covers it. Do not touch any lane, game, server or DB. Report cause and smallest fix in <= 8 lines.",
+   "why": "Third round on the same defect, so the rules say investigate the cause first instead of rerunning; it is read-only and does not touch the tail-owned lane."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "grep -n ACCEPTED C:/KenshiTestRuns/imm26-4080/ (the 20-a s1/s2 files named in the event)"
+ ]
+}

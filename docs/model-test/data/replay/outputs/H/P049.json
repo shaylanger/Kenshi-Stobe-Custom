@@ -1,0 +1,23 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix19: 19-d root cause is in C:/KenshiTestRuns/agents/out/imm26-inv19d/latest.md. The resume WORKS (post-load OWNED_TRAVEL accepted, stobe.log:18445). The FAIL is the arrival half: the row teleports Cind and Shay about 14.6 km during a live MOVE order, both land near y~950 and fall ~620u, the native order list empties, Cind ends more than 8u from the stored point, so FAILED native_order_ended_before_goal. Fix the 19-d recipe, not the product: teleport only when no live order is running (or re-issue the order from the new position) and confirm ground height before the arrival check. Do not weaken the arrival gate. Keep the 19-d FAIL mark until a rerun PASSes.",
+   "why": "The investigation found the cause, and the row-19 tooling owner is the one who can fix the recipe."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, 'Right now': add a line that 19-d root cause is found (resume works, arrival fails after a teleport during a live MOVE order), 19-d stays FAIL, and the rerun waits for the fixed recipe.",
+   "why": "The canonical state file must carry the finding so a successor does not repeat the investigation."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-fix19 to report the fixed 19-d recipe, then rerun 19-d on the 5090-i3 lane.",
+   "why": "No rerun should start until the recipe is fixed, and the fixer owns that change."
+  }
+ ],
+ "checks": [
+  "grep -n -i 'arrival|recipe|root' C:/KenshiTestRuns/agents/out/imm26-inv19d/latest.md | head -40"
+ ]
+}

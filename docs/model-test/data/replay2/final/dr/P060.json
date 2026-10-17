@@ -1,0 +1,25 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:patch] imm26-rowtools432: hx one-call row scripts (item 4)\", subagent_type kenshi-generator; prompt = fresh brief: you are imm26-rowtools432, successor of imm26-rowtools43 (STOPPED-CONTEXT). Read C:\\KenshiTestRuns\\agents\\imm26-rowtools43.handoff.md and continue the same work dir from its checkpoint (hx one-call row scripts, item 4); standard block in testing/AGENT_PROMPTS.md and sizing in docs/WP_SIZING.md (target <= 120k tokens, checkpoint every milestone or ~40k tokens, commit and update the handoff). Keep your status current with tools/automation/agent-status.ps1 imm26-rowtools432 RUNNING|DONE|STOPPED-CONTEXT \"<task>\" \"<step>\" \"<outputs>\" \"<next>\". Do not run `find /`. Do not touch the live tree, Shay's install or DB. Report your result when done.",
+   "why": "imm26-rowtools43 is STOPPED-CONTEXT with no successor, and the guard rules require a fresh agent named with the next suffix; the event's path text is malformed so the plain handoff path is used."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append a line to C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' and update the imm26 program ledger (program-ledger.ps1, exact arguments not in this file): rowtools43 STOPPED-CONTEXT, successor imm26-rowtools432 RUNNING (item 4, handoff C:\\KenshiTestRuns\\agents\\imm26-rowtools43.handoff.md). Leave C:\\KenshiTestRuns\\respawn\\imm26-rowtools43.todo until the successor's status file exists.",
+   "why": "state must be recorded after every agent change, and the respawn marker must not be removed before the successor exists."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-rowtools432 status file and its result; rowtools42 and the two 4080 operators keep running.",
+   "why": "nothing else depends on this event."
+  }
+ ],
+ "checks": [
+  "ls C:/KenshiTestRuns/agents | grep -i rowtools43",
+  "ls C:/KenshiTestRuns/inflight C:/KenshiTestRuns/respawn",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-rollcall.ps1"
+ ]
+}

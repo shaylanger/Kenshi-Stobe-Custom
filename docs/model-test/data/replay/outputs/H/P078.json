@@ -1,0 +1,35 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op11 (agent id is not in this file; address it by the name in its status file): 'Coordinator ping: your status file has been silent since 02:13. Post your current row result and next step now, and keep updating every 10 min.'",
+   "why": "imm26-4080-i4op11 is 17 min silent at 02:30, past the 10-min ping threshold of the lane-stall rule, so a ping comes first and TaskStop plus respawn only at 20 min."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-u5-route, tag [case:investigate] (kenshi-debugger). Brief: op9i reports the 26-a family SETUP-FAIL, ACCEPT needs a route re-bind (see row 26-a in C:/KenshiTestRuns/agents/imm26-5090-i5-op9i.handoff.md). Confirm the exact reject text first (grep ACTIVITY_REJECT_REASON in the newest 26-a run folder under C:/KenshiTestRuns/imm26-5090-i5/26a). Then find why the persisted route candidate (travel_destinations rows, valid 300 s) is not re-bound at accept (ActivityService.php, ActivityAgreementAdapter.php accept phase). Propose the smallest fix, implement it in the compose tree only, add a test, and report. Never touch the live tree or ss-merge, and do not edit any script a running lane uses (op9i, op11).",
+   "why": "op9i found the accept needs a route re-bind, and the u4-ground note named a route re-bind fix as the next step if the 300 s route window was not the whole cause; the bug needs investigate before any patch."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section 'Right now': add a line '#12 02:30 op9i: 26-a family SETUP-FAIL, accept needs route re-bind; imm26-u5-route spawned [case:investigate]; imm26-4080-i4op11 silent since 02:13, ping sent'. Also update the program ledger for U4a (done, b320c66) and U5 (route re-bind, running) with program-ledger.ps1.",
+   "why": "CLAUDE.md requires HANDOFF 'Right now' and the program ledger to be updated the moment an agent starts or its status changes."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background, not a bare &)",
+   "why": "The backstop waker has finished while op9i, op11 and imm26-u5-route are in flight, so a waker must stay armed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op9i to finish its UNRUN rows 12-d, 19-e, 19-f, for the imm26-4080-i4op11 ping reply, and for the imm26-u5-route report.",
+   "why": "The 26-a family cannot be re-run until the route re-bind fix exists, and the other rows are already running on their lanes."
+  }
+ ],
+ "checks": [
+  "sed -n 1,3p C:/KenshiTestRuns/agents/imm26-5090-i5-op9i.status",
+  "sed -n 1,3p C:/KenshiTestRuns/agents/imm26-4080-i4op11.status",
+  "grep -n ACTIVITY_REJECT_REASON C:/KenshiTestRuns/imm26-5090-i5/26a/run19-27 (newest run only)"
+ ]
+}

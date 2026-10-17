@@ -1,0 +1,23 @@
+GRADES P3
+R01 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | Every checked claim held; hashes, backups, obj dir, 10-13 baseline
+R02 | root=5 evid=4 fix=4 comp=5 hon=5 | total=23 | false=0 | Sound; spots second problem via the 5090 receipt
+R03 | root=5 evid=3 fix=5 comp=5 hon=5 | total=23 | false=1 | Strong fix; wrongly says ChatBox.cpp:6437 sends context every chat
+R04 | root=5 evid=3 fix=5 comp=4 hon=4 | total=21 | false=1 | Precise minimal patch; time-zone slip implies the DLL is not on disk
+R05 | root=4 evid=3 fix=3 comp=3 hon=4 | total=17 | false=1 | Right DLL cause; vague fix; wrongly says build src never refreshed
+R06 | root=3 evid=2 fix=2 comp=3 hon=4 | total=14 | false=1 | Never checked DLL or prompt; vague, design-questionable fallback fix
+R07 | root=4 evid=3 fix=3 comp=4 hon=4 | total=18 | false=1 | Right source gap; fix omits build_portable.bat SOURCES, DLL unhashed
+R08 | root=3 evid=3 fix=4 comp=4 hon=5 | total=19 | false=1 | Good server fix; root cause left as three hedged options
+R09 | root=5 evid=3 fix=5 comp=5 hon=4 | total=22 | false=1 | Found no per-turn refresh; wrongly calls build tree clean
+R10 | root=5 evid=3 fix=5 comp=5 hon=5 | total=23 | false=1 | Strong, honest; misattributes CACHE_CITY guard to chat_helper_functions
+R11 | root=3 evid=3 fix=4 comp=3 hon=4 | total=17 | false=0 | Server-only view; never checked DLL; "scarce candidates" unsupported
+R12 | root=3 evid=3 fix=4 comp=3 hon=4 | total=17 | false=1 | Missed the DLL cause; claims ChatBox sends envelope per chat
+R13 | root=5 evid=4 fix=5 comp=5 hon=5 | total=24 | false=0 | Verified 9-line Context.cpp diff; flagged design conflict
+R14 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | Diff, line counts, DLL strings all verified; design caveat noted
+RANKING: R01 > R14 > R13 > R02 > R10 > R03 > R09 > R04 > R08 > R07 > R05 > R11 > R12 > R06
+KEY FALSE CLAIMS:
+R03: ChatBox.cpp:6437 sends the context with every chat (SendChatToStobeServer has no callers; the file only defines it at line 6401)
+R12: the chat envelope at ChatBox.cpp:6437 carries travel_destinations on each chat (same dead function, nothing calls it)
+R05: nothing in C:\StobeBuild\src was refreshed after Oct 1 (main.cpp there is dated 2026-10-14 19:35)
+R09: /root/STOBE-src is a clean checkout at dedc49d (git status shows many modified files)
+R06: the log does not record Mouse's candidate payload (context_sent_to_llm.log shows `Observed local choices: []` for every Mouse prompt)
+R04: installed DLL is 20:37, so the running DLL is gone from disk (it is 19:37 local, before the 19:47:51 launch, so it was the one loaded)

@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none (no spawn, no tail-ack)",
+   "why": "The relay's ask is already done: imm26-5090-i3-hard2 was spawned (agent ae381b64fa7651050, brief C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2.brief.md, registered for lane 5090-i3) and tail-ack.ps1 -Agent imm26-5090-i3-hard already acked; a second spawn would put two operators on lane 5090-i3."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to: 'ae381b64fa7651050' (imm26-5090-i3-hard2), text: Predecessor relay notes: Cind [Hungry Bandit] was NOT FOUND in the world after the last 3 loads (harness printed 'no game loaded (phase=loading)' right after 'game load signalled'). Wait about 40 s after each load before lane-setup, or load twice. Load only save kah-imm26-5090-ready; do not use the hxA/hxB/hxC copies. Use rowtools/trip-run.sh with KAH_PF_ISOLATION=0 (lane windows overlap on DISPLAY2). Driver: source C:/KenshiTestRuns/imm26-5090-hx/hx.sh. Report only through your status file.",
+   "why": "The relay's successor-specific load-timing and save warnings may not be in hard2's brief, and one message to the live successor (never the stopped predecessor) avoids a repeated failed load cycle."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-5090-i3-hard2 to report RUNNING with its first lane row via event stream bex36zvf2; if it reports STOPPED-CONTEXT with no successor, spawn imm26-5090-i3-hard3 from its handoff file (never SendMessage the stopped agent)",
+   "why": "Lane 5090 i3 already has an operator, so nothing else is due on it until hard2 reports."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2.status",
+  "Test-Path C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2.brief.md",
+  "Get-ChildItem C:\\KenshiTestRuns\\respawn; Get-ChildItem C:\\KenshiTestRuns\\alerts\\open"
+ ]
+}

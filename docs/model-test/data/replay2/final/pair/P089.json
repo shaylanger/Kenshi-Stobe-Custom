@@ -1,0 +1,37 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Write process-ideas/review-ded82aa7-d30d-451d-8954-28e72d95c908-tail.json (relative to C:/KenshiModding), in the format of testing/AGENT_PROMPTS.md step 2b (read that step first). Content: a re-check of every open PI entry in docs/PROCESS_IDEAS.md, plus at most 2 NEW big-idea entries from the conversation since the 10:55 handoff: (a) Stop-hook blocks: five unchanged blocks (about 10:55 to 11:07) each got a Holding turn that re-read the whole context; idea: one armed tail-wait is the only wait, and an unchanged block gets no reply. (b) Report carry: the full hxA hand-back text was carried in the tail context before relay; idea: tail-relay gives the new coordinator the report path plus a one-line result only. Neither touches a timeout, stall, idle or dead-agent catch, so neither goes to Shay only; neither is applied.",
+   "why": "CLAUDE.md requires this tail closing review file, and tail-close.ps1 refuses to run without it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/process-ideas.ps1 review process-ideas/review-ded82aa7-d30d-451d-8954-28e72d95c908-tail.json",
+   "why": "Applies the review through the PI tool so docs/PROCESS_IDEAS.md is updated (max 15 active) and the tail-close gate can pass; its printed output gives the N and titles for the Shay message."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Via SendMessage to Shay's relay session, after the run above: Got it. I reviewed the conversation since the 10:55 overlap handoff and updated docs/PROCESS_IDEAS.md: [N] new entries ([titles as the tool printed them]), none applied. The context growth came from answering each repeated Stop-hook block with a turn and from full report text carried in the tail. From now on the tail gives no per-block replies, keeps one armed tail-wait, and relays report paths only. Still running: imm26-5090-i3op20, imm26-4080-i4op12b, imm26-4080-i3op20; the tail closes when each finishes and its relay is delivered.",
+   "why": "Shay asked for this review and the PI update and raised the cost; every message for Shay goes through the relay session, and one summary after the work is the rule."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the armed tail-wait bj26uv2kf (tail-wait.ps1 -Session ded82aa7-d30d-451d-8954-28e72d95c908) running; do not re-arm it while it is alive, and send no per-block replies. When it exits for a finished operator: save that report under C:/KenshiTestRuns/agents/out/<name>/, run tail-relay.ps1 -Agent <name> -Report <path>, SendMessage the relay to C:/KenshiTestRuns/inbox/coordinator, then re-arm tail-wait.ps1 for the operators still running.",
+   "why": "Re-arming is the one allowed way to stop the Stop-hook blocks while the three operators still run, and the tail may end only after each finished operator's relay is delivered."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-close.ps1",
+   "why": "Closes the tail, but only once the review file exists, all three operators are DONE and every relay is delivered, acked, or 5 min old; until then it is not run."
+  }
+ ],
+ "checks": [
+  "grep -n 'PI-' C:/KenshiModding/docs/PROCESS_IDEAS.md | tail -40",
+  "grep -n -i 'step 2b\\|tail closing' C:/KenshiModding/testing/AGENT_PROMPTS.md",
+  "for n in imm26-5090-i3op20 imm26-4080-i4op12b imm26-4080-i3op20; do sed -n 1,3p C:/KenshiTestRuns/agents/$n.status | cut -c1-120; done",
+  "tail -2 /c/KenshiTestRuns/tail/ded82aa7-d30d-451d-8954-28e72d95c908.autorelay.log | cut -c1-250",
+  "ls -l C:/KenshiTestRuns/tail/ded82aa7-d30d-451d-8954-28e72d95c908.flag"
+ ]
+}

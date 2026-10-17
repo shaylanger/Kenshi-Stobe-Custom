@@ -1,0 +1,29 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the next task-notification or a DONE/FAILED status for imm26-4080-i4op52 (status file C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status); the handback is interim while the agent's own background work runs.",
+   "why": "The agent stopped with background work still running, so its results are not final yet."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Record in testing/HANDOFF.md and the TESTS list from the i4op52 handback: 08-b PASS (batch4, situated_remark_claim 6255, one Cind line), 06-c PASS (go-row on i4), 09-c PASS with caveat (no no-preference control), 08-a FAIL (travel-consent reply suppresses the followup row), 10-a FAIL (0 apology_relief rows after accepted apology), 10-b SETUP-FAIL (blocker text truncated in the file, reason unknown).",
+   "why": "Each row needs its recorded result, and FAILs stay FAIL and are not rerun without --allow-retry."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-inv-08a, tag [case:investigate]. Brief: diagnose row 08-a FAIL on 4080 i4: a travel-consent reply suppresses the followup row. Use the lane evidence under C:\\KenshiTestRuns\\imm26-4080\\rows\\08-a. Report the root cause and the smallest fix. Do not edit code and do not run game commands.",
+   "why": "A FAIL is a bug, so the investigate case runs first, before any retry or fix."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-inv-10a, tag [case:investigate]. Brief: diagnose row 10-a FAIL on 4080 i4: Selika accepted the specific apology in speech but 0 apology_relief rows were written. Use the lane evidence under C:\\KenshiTestRuns\\imm26-4080\\rows\\10-a. Report the root cause and the smallest fix. Do not edit code and do not run game commands.",
+   "why": "A FAIL is a bug, so the investigate case runs first, before any retry or fix."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status -Tail 5"
+ ]
+}

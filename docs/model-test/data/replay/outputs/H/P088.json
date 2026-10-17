@@ -1,0 +1,29 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File tools/automation/setupfail.ps1 list",
+   "why": "Read-only check first: confirm 23-a is listed as SETUP-FAIL on lane 5090-i3 and see the existing unblock plans before assigning."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sf23a, description '[case:investigate] 23-a SETUP-FAIL on 5090-i3: resolved_speaker is not Shay in s3', brief: Read /c/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt and the row's s3 files; find why the speaker resolves to a non-Shay identity in s3 (the row's speaker-resolution step, not the game); write the smallest unblock plan as a row-script candidate under the 23-a row tools (no edits to any running script); report the file path and the exact 'needs:' line; status via tools/automation/agent-status.ps1 imm26-sf23a RUNNING/DONE.",
+   "why": "Per Shay's order a SETUP-FAIL gets one unblock attempt by an agent, and the speaker-resolution cause is unknown, so it needs diagnosis first."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File tools/automation/setupfail.ps1 assign 23-a imm26-sf23a",
+   "why": "Record the owner of the 23-a unblock so the ticket is not orphaned and the lane is not blocked on it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mkdir C:/KenshiTestRuns/aims/<next-runnable-row> (claim the next runnable row from the TESTS file, not 23-a)",
+   "why": "Shay's order: a stuck row is SETUP-FAIL after one attempt and the lane takes the next runnable row, so lane 5090-i3 keeps running; the specific row id is not determinable from this file, so it is left as a placeholder and must be chosen from the TESTS file."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File tools/automation/setupfail.ps1 list",
+  "cat C:/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt"
+ ]
+}

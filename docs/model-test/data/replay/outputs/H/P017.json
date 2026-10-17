@@ -1,0 +1,23 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "docs/COORDINATOR_IMPROVEMENTS.md: delete the item 'a cheaper model for operators' from the numbered improvement list (keep the other nine items unchanged)",
+   "why": "Shay ordered this item removed from the improvements list, and it is the only item that is his instruction to edit rather than a process rule to keep."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\memory\\coordinator-improvements.md: drop 'a cheaper model for operators' from the description/list if it appears there",
+   "why": "The memory copy of the list must match the repo file so future coordinators do not reapply the item."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Removed 'a cheaper model for operators' from docs/COORDINATOR_IMPROVEMENTS.md (and the memory copy). The other nine items stay.",
+   "why": "Shay should get a one-line confirmation that his order was carried out."
+  }
+ ],
+ "checks": [
+  "grep -n -i \"cheaper model\" C:/KenshiModding/docs/COORDINATOR_IMPROVEMENTS.md C:/Users/Shay/.claude/projects/C--KenshiModding/memory/coordinator-improvements.md"
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 15-bx imm26-sfU2",
+   "why": "fxA already classed 15-bx as a test defect and sfU2 (asserters v2 incl. 15-bx, still running) owns that fix, so the unblock ticket goes to it rather than a new agent; plan path is unknown so none is passed."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append to C:\\KenshiTestRuns\\inbox\\operators\\coordinator16-server-fixes.txt: '15-bx SETUP-FAIL (no reply of Cind within 150s in P1, C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt) assigned to imm26-sfU2 (asserter v2). Lane 5090-i3: do not retry 15-bx on the old tooling, take the next row; rerun 15-bx when sfU2 posts its runner.'",
+   "why": "The lane operator must move on after one attempt and not burn the lane on a row with a known tooling defect."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the waker running; wait for the imm26-sfU2 completion notification, then route its 15-bx runner to lane 5090-i3.",
+   "why": "Nothing else is actionable until sfU2 delivers; the other DONE and WARN items are already handled."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "tail -n 15 C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

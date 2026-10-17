@@ -1,0 +1,44 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Not yet. The travel accept bug is still open and blocks gates 19-c, 20, 21, 23-a, 23-c and 23-d. Rows 04-b, 06-d, 14-b, 18-a and 18-b on lane i5, and all i4 rows, are still to run under imm26-5090-ctxop32. I am checking the travel investigator, starting a root-cause diagnosis for every FAIL row that has no fix commit, and will re-queue each row once its fix is committed and deployed to the lanes. I will send you the per-row table (fixed and re-queued, or still open with the reason) when the reports are in.",
+   "why": "Shay asked a yes-or-no status question; the file answers no, so he gets that answer and the plan through his relay session (SendMessage), not a bare reply."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "First read C:\\KenshiTestRuns\\agents\\imm26-travel-investigate.status. If it says RUNNING, SendMessage to imm26-travel-investigate: 'Shay asks whether every bug and failure has a fix in place and is re-queued. Report now: (1) the fix commit or patch path for the travel accept bug (gates 19-c, 20, 21, 23-a, 23-c, 23-d); (2) the lane re-run plan. Once the fix is installed, re-queue those gates on lanes i3, i4 and i5 and send one RESULT line per row. Update your status file with agent-status.ps1 after each step.' If it says DONE or STOPPED-CONTEXT, do not message it: spawn imm26-travel-investigate2 from C:\\KenshiTestRuns\\agents\\out\\imm26-travel-blocker with the same text, as a fresh agent.",
+   "why": "The travel accept bug blocks six gates and its investigator knows whether a fix exists, but a dead agent cannot answer, so the status check comes first and a successor is spawned instead of messaging a dead one."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: '[case:investigate] imm26-fixfail: root cause for every FAIL row in testing/NPC_IMMERSION_26_TESTS.md with no fix commit newer than its last FAIL run'. Name: imm26-fixfail. Brief: list those FAIL rows with their latest RESULT line and excerpt= file; for each, find the function under test with grep -n and read it by sed line ranges (never whole large files); write the root cause and the smallest anchor-checked patch proposal to C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\ (no whole-file copies, no weakened assertions). Do not edit any script a queued or running row list uses. Update the status with agent-status.ps1 imm26-fixfail RUNNING|DONE|FAILED after every row and at least every 8 minutes. Report one line per row: row id, root cause, patch path, ready to re-queue yes/no. Patches are applied afterwards by a [case:patch] generator, not by this agent.",
+   "why": "Shay asked whether every failure is fixed and the rows show open FAILs with no fix; the routing rule sends a bug to [case:investigate] first, so diagnosis runs now in parallel while the patch step waits for its report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for: the imm26-fixfail report; the travel investigator reply (C:\\KenshiTestRuns\\agents\\out\\imm26-travel-blocker, or the imm26-travel-investigate2 result); the patch notices in C:\\KenshiTestRuns\\agents\\imm26-wpA4.status and imm26-wpB4.status; and the imm26-5090-ctxop32 RESULT lines. Then spawn one [case:patch] generator per diagnosed fix, one at a time per runner file.",
+   "why": "A row re-queued before its fix is committed and deployed would only produce another FAIL, and one fixer per batch keeps the runner files from colliding."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "After each fix commit is deployed to all lanes, re-queue only that row through the existing row queue named in the lane briefs under C:\\KenshiTestRuns\\agents\\briefs\\ (no new queue), add a queued-for-retest note to that row in C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md, then update the 'Right now' section of C:\\KenshiModding\\testing\\HANDOFF.md and C:\\KenshiTestRuns\\programs\\imm26.json. Never mark a row PASS without a RESULT line from a real run.",
+   "why": "Re-queueing is the closing step once a fix is in place, and HANDOFF and the ledger must record it at once so a new coordinator sees the state."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not touch the tail-handoff agents wpT1, wpT2 or wpT3, or the imm26-5090-ctxop32 row order.",
+   "why": "They run under their own briefs and this event concerns only the imm26 FAIL rows; both revised decisions agree on leaving them alone."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "grep -n FAIL C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md | tail -n 80",
+  "git -C C:\\KenshiModding log --oneline -60 -- testing pending-fixes/npc-immersion-26",
+  "type C:\\KenshiTestRuns\\agents\\imm26-travel-investigate.status",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-ctxop32.status",
+  "grep -rn travel C:\\KenshiTestRuns\\agents\\out\\imm26-travel-blocker* | tail -n 20",
+  "ls C:\\KenshiTestRuns\\alerts\\open"
+ ]
+}

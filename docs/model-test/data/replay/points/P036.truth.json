@@ -1,0 +1,33 @@
+{
+ "id": "P036",
+ "session": "2b1a8eca",
+ "ts": "2026-10-16T00:28:25.045Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=aeeb63a109723255f: Coordinator: add item 7 to imm26-fix-batch4. 08-b still FAILS after batch3 on 4080 i3 (evidence commit c0f7bdd): follow-up was due, Cind was the director bored speaker twice, but no claim. Cause: stobeSocialFollowupsClaim needs stobeSocialAttentionOptionalSpeechAllowed, which needs in_combat===false (lib/social_attention.php:33-38); natural DLL bored URIs carry no attn= and Cind (non-squad) has no fresh native_ai snapshot, so in_combat is null and the claim is denied; NC5's proximity turn (optional=1&attn=) only scans squad members. Fix server-side: in DIRECTOR BORED turns allow the follow-up claim when attention is entirely UNKNOWN (null/missing), but still deny when in_combat is true or attention says busy/KO/asleep (keep every existing safety). Offline test for both cases (unknown => allowed, in_combat true => denied). Deploy with the rest of batch4.",
+   "why": ""
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=ab8dae50b1a986aea: Coordinator: the 4080 i3 operator (imm26-4080-op2h) is already running 03-b, 03-cx and 04-ax. Before each of those rows check testing/NPC_IMMERSION_26_TESTS.md (git pull first) and SKIP the row if it is already marked; do them last, only if still unmarked.",
+   "why": ""
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=a9e4e38992bd98bf4: Coordinator: the 4080 i3 operator (imm26-4080-op2h) is already running 03-b. Before running it check testing/NPC_IMMERSION_26_TESTS.md (git pull first) and SKIP it if already marked; run it last, only if still unmarked.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The two 5090 lanes are running again.\n\n- **New operators:**\n  - **`imm26-5090-i3-hard`** runs 11-b, 11-d, 01-bx, 01-cx, 02-ax, 02-bx, 02-cx, 02-dx, 03-cx, 04-ax and 05-cx. It also reinstalls NC6 on both of the lane's DLL copies first, because they currently differ (4D18E32C and NC5).\n  - **`imm26-5090-i4-hard`** runs 03-b, 13-ax, 15-bx, 16-bx, 17-bx, 18-cx and 19-ax. That lane already runs NC6.\n  - Both started from the generated lane briefs, which came out at about 5.7 KB each. That is the firs...[truncated 672 chars]"
+ ],
+ "event_text_chars": 842
+}

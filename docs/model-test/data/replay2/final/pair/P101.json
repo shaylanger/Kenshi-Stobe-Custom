@@ -1,0 +1,71 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash tool, run_in_background=true; never a bare & or disown)",
+   "why": "The waker exited with code 0 after printing this digest and work is still in flight, so it must be re-armed at once."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-fix-19e STOPPED-CONTEXT \"orphaned: no status update for 520.9 min, no live log\" \"reading\" \"pending-fixes/19e-recipe\" \"respawn fresh as imm26-fix-19e2 unless the recipe is already committed (then agent-abandon)\"",
+   "why": "A RUNNING agent silent for 8.7 h and not owned by a live tail is an orphan; it is marked STOPPED-CONTEXT and its marker is kept until a successor or abandon decision exists."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:patch] imm26-fix-19e2 19-e fix (successor of imm26-fix-19e)\". Brief: You are imm26-fix-19e2, a fresh successor of imm26-fix-19e, which was marked STOPPED-CONTEXT. Read C:/KenshiTestRuns/agents/imm26-fix-19e.status first; it is stale and its notes are the only record. Run git -C C:/KenshiModding log --oneline -3 -- pending-fixes/19e-recipe. If that recipe is already committed and complete, report that in one line and stop. Otherwise finish the 19-e test-defect fix in pending-fixes/19e-recipe offline only: no game, no lane, no rig, no install, no row runs. Commit with identity shaylanger <shaylanger2@gmail.com> and push. Keep C:/KenshiTestRuns/agents/imm26-fix-19e2.status current with tools/automation/agent-status.ps1 and deliver the report with save-report.ps1 under agents/out/imm26-fix-19e2.",
+   "why": "Spawn only if the recipe check shows it is not complete; if it is complete, run agent-abandon.ps1 imm26-fix-19e \"recipe already committed\" instead, because the stopped predecessor cannot be messaged and a successor must exist before its marker is cleared."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-fix-19e2 <agentId from the spawn result>",
+   "why": "PI-36: record the agent id after every spawn; skip if no spawn was made."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 imm26-fix-19e \"orphaned agent marked STOPPED-CONTEXT; successor imm26-fix-19e2 spawned (or abandoned if the recipe was complete)\"",
+   "why": "Closes the ORPHANED open alert once its successor or abandon decision exists; skip if the alert ledger has no open entry matching imm26-fix-19e."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:investigate] imm26-inv-26b 26-b FAIL root cause\". Brief: You are imm26-inv-26b. Lane imm26-5090-i5-op9n marked row 26-b FAIL (Malzin plus inject accepts). Read the row's RESULT line and the excerpt= evidence file it names, then the row script. Find the root cause and propose the smallest fix. No edits to any lane, no game runs, no lane or rig use. Keep C:/KenshiTestRuns/agents/imm26-inv-26b.status current with tools/automation/agent-status.ps1, save findings with save-report.ps1 under agents/out/imm26-inv-26b, and return the verdict.",
+   "why": "A FAIL on a live row is a bug to investigate first; this investigator runs in parallel while operator imm26-5090-i5-op9n goes on to 26-c."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-inv-26b <agentId from the spawn result>",
+   "why": "PI-36: record the agent id after every spawn."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:investigate] imm26-inv-17bx 17-bx FAIL root cause\". Brief: You are imm26-inv-17bx. Lane imm26-5090-i3op21 marked row 17-bx FAIL. Read the row's RESULT line and the excerpt= evidence file it names, then the row script. Find the root cause and propose the smallest fix. No edits to any lane, no game runs, no lane or rig use. Keep C:/KenshiTestRuns/agents/imm26-inv-17bx.status current with tools/automation/agent-status.ps1, save findings with save-report.ps1 under agents/out/imm26-inv-17bx, and return the verdict.",
+   "why": "The second FAIL in this batch is on a different lane and row, so a separate investigator keeps both root-cause hunts parallel; the operator on i3op21 keeps its next row."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-inv-17bx <agentId from the spawn result>",
+   "why": "PI-36: record the agent id after every spawn."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "SWEEP MARKER 4080-imm26-i4 (owner imm26-lanes-4080, out dir 4080:C:/KenshiTestRuns/imm26-4080-i4 missing): check that directory on 4080 and clear or re-create the marker only after it shows whether the i4 bring-up finished. Lane agent imm26-4080-i4op14 is alive (log 0 min old), so do not touch the lane.",
+   "why": "The lane is alive and still reading its brief; the marker can only be cleared or re-created after the directory check."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Completion notifications from imm26-4080-i4op14, imm26-5090-i3op21 (next row after the lane deploy), imm26-5090-i5-op9n (26-c), imm26-costaudit and imm26-sfR2 (selftest, 83 cases); look at a lane again only if its log goes stale over 10 min.",
+   "why": "These agents show fresh logs and nothing for the coordinator to act on yet."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "SWEEP MARKER 4080-imm26, SWEEP MARKER 5090-imm26 and SWEEP MARKER 5090-imm26-i5 (no out dir in the marker); the 15-bx SETUP-FAIL on imm26-5090-i3op21 (already routed in coordinator16-server-fixes.txt)",
+   "why": "Markers with no out dir carry no live state, and the 15-bx setup fail is already routed to the operator note."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -Command \"Get-Content C:/KenshiTestRuns/agents/imm26-fix-19e.status\"",
+  "git -C C:/KenshiModding log --oneline -3 -- pending-fixes/19e-recipe",
+  "ssh 4080 \"dir C:/KenshiTestRuns/imm26-4080-i4\""
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1 ; powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+   "why": "Read-only first step to see which lane operators are RUNNING with fresh status, which are stale, and any open alerts, before answering Shay with facts."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Short answer: not verified yet. Per my last state all 5 lanes have an operator (4080 i3 imm26-4080-op2g, 4080 i4 imm26-4080-i4op5 just restarted from save, 5090 i3 imm26-5090-i3op3, 5090 i4 imm26-5090-i4op3, 5090 i5 imm26-5090-ctxop32), but an operator existing is not the same as rows running. I am checking each lane's operator status, its last RESULT line and the game process now, and I will fix the stalled 5090 lane (respawn a fresh operator from its status file, or relaunch the game) this minute; you will get one message with the per-lane table (lane, operator, current row, last progress time).",
+   "why": "Shay asked a direct question and reported a stalled 5090 lane; he gets an honest interim answer without claiming anything unverified, and work continues without blocking."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the rollcall/status/lane-health output to identify which 5090 lane (i3, i4 or i5) is stalled (operator status stale, no new RESULT line, or game idle); then respawn a fresh operator for that lane (name+suffix, pointed at its status file) or relaunch the lane, and ack any matching open alert with alert-ack.ps1 stating the action. The lane id and operator state are unknown until the checks return.",
+   "why": "The stalled lane and its cause (dead operator vs. stuck game vs. finished batch) are not in this file, so the corrective action must follow the read-only checks; a stalled lane is fixed at the root the same minute per project rules."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\alert-scan.ps1",
+  "dir C:\\KenshiTestRuns\\agents\\imm26-5090-*.status and read the top 5 lines of imm26-5090-i3op3, imm26-5090-i4op3 and imm26-5090-ctxop32 status files",
+  "tail the newest RESULT lines of each 5090 lane operator's batch output to compare last-progress timestamps"
+ ]
+}

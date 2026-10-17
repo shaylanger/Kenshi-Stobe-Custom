@@ -1,0 +1,14 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; do not start a second one if b7965hfaz is still alive)",
+   "why": "The Stop hook reports work in flight (imm26-sfA, imm26-4080-i3op20 and 9 other markers) with no waker running, so the earlier waker b7965hfaz has exited and the session would go quiet; the guard's prescribed fix is to restart event-wait.sh in the background."
+  }
+ ],
+ "checks": [
+  "tail -2 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/ded82aa7-d30d-451d-8954-28e72d95c908/tasks/b7965hfaz.output\" | cut -c1-400",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

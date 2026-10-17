@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next EVENT line from the running waker bwp1pu36n (output file /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2b1a8eca-c7aa-44ff-bda2-326523d5864e/tasks/bwp1pu36n.output); no restart, no command",
+   "why": "The batch only reports that the restart wrapper bonprnl0a exited 0 after starting waker bwp1pu36n, so the waker is back and no new lane, agent or relay event needs action yet."
+  }
+ ],
+ "checks": [
+  "tail -c 800 \"/c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2b1a8eca-c7aa-44ff-bda2-326523d5864e/tasks/bwp1pu36n.output\""
+ ]
+}

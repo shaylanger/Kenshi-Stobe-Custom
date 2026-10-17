@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-5090-i4op3",
+   "why": "The TAIL-RELAY from the stopped lane-5090-i4 operator asks for an ack, and its successor imm26-5090-i4op32 was already spawned from its handoff."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiTestRuns\\lane-owners.json: set the 5090-i4 lane operator to imm26-5090-i4op32, keeping the other lane entries (format as read by tools\\automation\\lane-idle.ps1; create the file from the lane-idle.ps1 defaults if it is absent)",
+   "why": "lane-idle.ps1 still maps 5090-i4 to the stopped imm26-5090-i4op3, so LANE NO-OPERATOR would keep firing against the live successor."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id of the open LANE NO-OPERATOR 5090-i4 alert, taken from the alerts\\open listing> \"respawned imm26-5090-i4op32 from imm26-5090-i4op3 handoff; lane-owners.json updated\"",
+   "why": "The LANE NO-OPERATOR alert for 5090-i4 stays open until acked or cleared, and this closes it with the action taken."
+  }
+ ],
+ "checks": [
+  "Get-ChildItem C:\\KenshiTestRuns\\alerts\\open | Select-Object -First 10",
+  "Get-Content C:\\KenshiTestRuns\\lane-owners.json -ErrorAction SilentlyContinue",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.status -TotalCount 3 -ErrorAction SilentlyContinue"
+ ]
+}

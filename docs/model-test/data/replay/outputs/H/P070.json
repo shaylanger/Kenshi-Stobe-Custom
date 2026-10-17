@@ -1,0 +1,24 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 -NoMemory; cat C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.status",
+   "why": "Op9d was spawned about 6 min before this alert from the op9c handoff, so I first confirm whether it is alive (fresh RUNNING status, game/lane activity) before acknowledging anything."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 5090-i5 \"op9d alive: fresh status after spawn from op9c handoff, reading brief and starting 26-a tight loop\"",
+   "why": "Only if the check shows op9d is RUNNING with a fresh status; ack closes the alert with evidence and a still-true condition would reopen after 30 min."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[case:generate] 5090-i5 operator successor (op9e) from C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.handoff.md, same brief generator (lane-brief.ps1 5090-i5 -Predecessor imm26-5090-i5-op9d)",
+   "why": "Only if op9d shows no status and no game activity (stuck or dead): respawn fresh from its checkpoint rather than wait, since the 5090-i5 lane is the only active 5090 lane."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 -NoMemory",
+  "cat C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.status"
+ ]
+}

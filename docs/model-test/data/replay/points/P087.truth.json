@@ -1,0 +1,21 @@
+{
+ "id": "P087",
+ "session": "ded82aa7",
+ "ts": "2026-10-16T16:48:01.994Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cat >> /c/KenshiTestRuns/inbox/operators/5090-i5-ready-nc17.txt <<'EOF'\n\nROW SCRIPT READY: 26-f (imm26-sfE3, b38bd383): bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfe.sh 26-f 5090-i5 --save <S> (sheet inbox\\operators\\sfE-26f.txt). Uses the 14-c 4-bandit recipe (NOT the 5-bandit 14-d one), needs NC17+ on the lane (so after the NC20 install, with 26-d/26-dx/26-e) and SCENE-OK (Cind sees >=3 of 4 bandits). Accept within ~5 min of the offer.\nEOF\ncat > /c/KenshiTestRuns/inbox/operators/lane-24c-seeded.txt <<'EOF'\n24-c READY on ANY lane (imm26-sfE3, b38bd383): bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfe.sh 24-c <lane> --save <S> [--dry]. It SEEDS a regional_goal on a real native trip and tests the save/load RESUME leg only: every RESULT line starts with SEEDED and the row stays PARTIAL (mark it as PARTIAL/SEEDED, not a full PASS) until the natural 24-...[truncated 328 chars]",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 2848
+}

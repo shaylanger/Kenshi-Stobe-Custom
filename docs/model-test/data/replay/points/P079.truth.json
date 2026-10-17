@@ -1,0 +1,23 @@
+{
+ "id": "P079",
+ "session": "bea16970",
+ "ts": "2026-10-16T08:36:53.234Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...followups.php:225` the \"closed\" mark is rolled back when the resolved topic is the only ope"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "Update on the unblock queue:\n- **`op11`, 4080-i4:** 08-e passed. 13-b also passed, 03-b is SETUP-FAIL (partial) and 27-a failed. It is on its second 08-d rerun, after fixing a token-header bug in `i4_bored`.\n- **`op9i`, 5090-i5:** it should be starting the 26-a family on the route re-bind fix. I'll know when its status updates.\n\nThe waker is armed."
+ ],
+ "event_text_chars": 913
+}

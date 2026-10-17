@@ -1,0 +1,31 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' and the imm26 program ledger: add 'imm26-fix-pq DONE (e7e70c4): social_repair_dialogue quote-match fix for the 10-a no_valid_repair drops; apply.py in pending-fixes/imm26-fix-pq NOT yet applied to /root/imm26/compose or the live tree; 10-a rerun pending'",
+   "why": "The coordinator records every agent report in HANDOFF and the ledger, and this report changes the state of row 10-a."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-tripresume-a to show DONE in C:/KenshiTestRuns/agents/imm26-tripresume-a.status before touching /root/imm26/compose",
+   "why": "tripresume-a is editing the same compose tree, so apply.py must not race it; the fix-pq handback names this as the gate."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "after tripresume-a is DONE: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'cd /root/imm26/compose && python3 /mnt/c/KenshiModding/pending-fixes/imm26-fix-pq/apply.py /root/imm26/compose', then php -l on the changed files, then the stobe-tests run with pattern repair|pq_quote|social_dialogue on compose",
+   "why": "This is the handback's stated next step: apply the fix to the compose tree and check it before any lane rerun."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "rerun 10-a on a free lane (5090 i5 operator lane is listed for 10-a; 4080 i4 also lists it) only after the compose patch is built and deployed to that lane, with: --allow-retry 'social quote-decoration fix e7e70c4 applied' (the row guard applies because 10-a already failed)",
+   "why": "The rerun is the only proof of the fix (the agent could not see the model output), and the PI-06 row guard requires an explicit reason to rerun a FAILED row."
+  }
+ ],
+ "checks": [
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-fix-pq.status",
+  "head -c 400 C:/KenshiTestRuns/agents/imm26-tripresume-a.status",
+  "git -C C:/KenshiModding show --stat --oneline e7e70c4 | head -5",
+  "git -C C:/KenshiModding status --short pending-fixes | head -5"
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3op21 -Kind DONE -Report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i3op21\\out-20261016-130429.md -Summary \"imm26-5090-i3op21 STOPPED-CONTEXT (handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.handoff.md, last commit 447bd8c9, all rows marked+pushed). PASS 19-ax, 10-e (repairprobe.php fix c2c3a9ce). FAIL 20-d (pending change survives load, bare Yes not confirmed), 16-bx (checker defect), 17-bx (F3 ROLEPLAY_ACTION, T3 invented 'I saw', T2 did not hold), 05-cx v2 (only roster_has_sleeper, prompt shows sleeper as moving), 23-a v2 (ack count 2 = two lines 8 s apart). SETUP-FAIL 23-e, 24-c, 15-bx, 08-d (trip native order ended before goal, same as 23-a), 11-b. GATED 12-d v2 (LLM declined 3 clean affinity-85 asks). Lane 5090-i3 still up on NC20 7A5AF9EA, lock game-3.lock held, lane-deploy bundle on private backend. NEEDS: row scripts for 22-b (tick driver + checker) and 25-b (FX-MINE on native lane), 08-d rerun with 23-a v2 walk, decisions on 05-cx sleeper rendering and 23-a ack-count check, successor op22 via lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21.\"",
+   "why": "Tail session spawns/decides nothing itself; this is the last owned agent result and must be delivered to current coordinator #16 (relay target 245d8ad7-6bab-4115-8188-ea4724f6a5b6) with the report path; the STOPPED-CONTEXT status file and handoff were already read."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to '16 coordinator': Tail #15 to coordinator #16: imm26-5090-i3op21 (5090-i3) hit its context limit (STOPPED-CONTEXT, handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.handoff.md, report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i3op21\\out-20261016-130429.md; full relay in inbox/coordinator). Lane is up on NC20 with game-3.lock and inflight held; it needs a fresh successor (lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21) once row scripts exist for 22-b and 25-b, plus 08-d rerun on the 23-a v2 walk. Open decisions for you/Shay: 05-cx sleeper 'moving' rendering, 23-a ack-count check (2 acks 8 s apart), 12-d v2 LLM declines at affinity 85, 20-d bare Yes after reload not confirmed. This was my last owned agent; I am closing the tail after delivery.",
+   "why": "Gives coordinator #16 the successor command and open decisions in one note, since the tail cannot spawn or decide."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-close.ps1 (after writing the tail closing PI review process-ideas/review-48b778a7-13d7-4f96-bc6b-30dba5670ae0-tail.json; exact argument syntax unknown from this file, check script usage first)",
+   "why": "With no agents left owned by the tail and the relay delivered or 5 min old, the tail may close; tail-close refuses without the closing process-ideas review."
+  }
+ ],
+ "checks": [
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-5090-i3op21.status | cut -c1-400",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live"
+ ]
+}

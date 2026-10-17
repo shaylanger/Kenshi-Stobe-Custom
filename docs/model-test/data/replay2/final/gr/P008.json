@@ -1,0 +1,15 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (run_in_background)",
+   "why": "the previous waker has just completed while six agents are still RUNNING, and the Stop hook blocks the handoff without a live waker."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-5090-op2.status",
+  "ls C:/KenshiTestRuns/agents/imm26-5090-op2.handoff.md"
+ ]
+}

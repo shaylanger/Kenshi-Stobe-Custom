@@ -1,0 +1,28 @@
+{
+ "id": "P115",
+ "session": "60ad9d7d",
+ "ts": "2026-10-16T19:51:00.430Z",
+ "class": "lane-alert",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "cd /c/KenshiModding; for a in $(ls /c/KenshiTestRuns/alerts/open | sed 's/.json//'); do powershell -NoProfile -File tools/automation/alert-ack.ps1 $a \"lane parked on purpose: operator done, fixers building candidates (sfTrav, fix26f11b, fix20a19e, fix15bx05cx); fresh operator spawns when they land\" | tail -1 | cut -c1-120; done",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The 4080-i4 lane-idle wake is expected: its operator finished and the lane is waiting for the fixers' candidates (`imm26-sfTrav`, `imm26-fix26f11b`, `imm26-fix20a19e`, `imm26-fix15bx05cx`). There was no open alert to acknowledge, because the digest waker had already suppressed it. I'll spawn a fresh 4080-i4 operator when the candidates land. The waker is running."
+ ],
+ "event_text_chars": 677
+}

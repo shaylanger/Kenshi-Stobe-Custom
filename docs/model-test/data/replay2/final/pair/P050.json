@@ -1,0 +1,32 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Only if the pgrep check below shows no event-wait.sh running. Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (no --batch: no batch is in flight in this input)",
+   "why": "The waker ended on this event and the tail's Stop hook needs a live waker while 9 tail-owned agents are still running."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-fix19: tail 6d1f3011 check-in. The Stop hook lists you as [no status, not acknowledged]. Reply in one line with your current step, and write agent-status.ps1 imm26-fix19 RUNNING|DONE|FAILED now. If you are not running, say so; the new coordinator decides on a successor.",
+   "why": "fix19 has no status file and no acknowledged output, so it is the stalled agent; the stall ladder says message it first (at 10 min silent)."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "TaskStop on imm26-fix19, only if it has neither answered nor written a status 10 min after the message above (20 min silent in total). Find its task id with ListAgents first; the id is not in this file, so if it cannot be matched say so in the relay instead of guessing. Then send the new coordinator a tail-relay.ps1 -Agent imm26-fix19 note so the new coordinator respawns a fresh successor.",
+   "why": "Stall ladder: silent 20 min -> TaskStop and tell the new coordinator; the tail does not respawn, and the successor must exist before the old marker is dropped."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait on the restarted event-wait.sh; spawn nothing new and send no relay yet",
+   "why": "The tail may spawn and decide nothing new; the other 8 owned agents (imm26-5090-i3-hard2b, imm26-5090-i4-hard2b2, imm26-5090-i5-op7, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-wpR1, imm26-wpR2, imm26-pi21) have no finished result in this batch, so there is nothing to relay."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh (WSL; restart the waker only if none is running)",
+  "Test-Path C:/KenshiTestRuns/agents/imm26-fix19.status; Get-ChildItem C:/KenshiTestRuns/agents/out/imm26-fix19 -ErrorAction SilentlyContinue (PowerShell; confirm fix19 still has no status or output)",
+  "ListAgents (start age and task id of each running subagent; needed for the 10 and 20 min stall thresholds and for the imm26-fix19 task id)",
+  "Get-ChildItem C:/KenshiTestRuns/agents -Filter imm26-*.status | Select-Object Name,LastWriteTime (PowerShell; read-only status check of all imm26 agents)",
+  "Get-ChildItem C:/KenshiTestRuns/inbox/coordinator | Sort-Object LastWriteTime | Select-Object -Last 4 Name,LastWriteTime (PowerShell; confirm the wpR3 and pi13 relays were picked up)"
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "id": "P055",
+ "session": "4cdf261b",
+ "ts": "2026-10-16T02:57:55.117Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: Restart a trip immediately after load: should a trip restart right away instead of waiting for the n"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; ls | grep -i \"^KenshiTestRuns\"; for f in KenshiTestRunsagents*.brief.md; do n=${f#KenshiTestRunsagents}; [ -e /c/KenshiTestRuns/agents/$n ] && echo \"EXISTS $n\" || { cp \"$f\" /c/KenshiTestRuns/agents/$n && echo \"copied $n\"; }; done",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 1959
+}

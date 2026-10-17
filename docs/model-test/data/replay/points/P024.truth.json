@@ -1,0 +1,31 @@
+{
+ "id": "P024",
+ "session": "5720e5b8",
+ "ts": "2026-10-15T23:25:59.955Z",
+ "class": "shay-message",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiTestRuns; & C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1 | ForEach-Object { $_.Substring(0,[Math]::Min(230,$_.Length)) }; \"---evidence\"; foreach($d in 'imm26-5090-i3','imm26-5090-i4','imm26-5090-ctxop3','imm26-4080','imm26-4080-i4','imm26-5090'){ if(Test-Path $d){ $f=Get-ChildItem $d -Recurse -File -ErrorAction SilentlyContinue | Sort LastWriteTime -Desc | Select -First 1; \"{0,-20} {1:HH:mm:ss}  {2}\" -f $d,$f.LastWriteTime,$f.Name } }; Get-Date -Format HH:mm:ss; \"---games\"; Get-Process kenshi_x64 | Select Id,@{n='MB';e={[int]($_.WorkingSet64/1MB)}},@{n='cpu';e={[int]$_.CPU}},StartTime | Format-Table -Auto | Out-String",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "$d='C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\5720e5b8-42a8-4aaf-9e29-db0072586324\\subagents'; Get-ChildItem $d -Filter *.jsonl | Sort LastWriteTime -Desc | Select -First 8 | % { \"{0:HH:mm:ss} {1} {2}KB\" -f $_.LastWriteTime,$_.Name,[int]($_.Length/1KB) }; Get-Date -Format HH:mm:ss; Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.status",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; ls pending-fixes/npc-immersion-26/ | head -30; ls pending-fixes/npc-immersion-26/NC2 2>/dev/null | head; sha256sum $(ls pending-fixes/npc-immersion-26/NC2*/Stobe.dll 2>/dev/null) 2>/dev/null | cut -c1-16",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 147
+}

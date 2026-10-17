@@ -1,0 +1,30 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "bash tools/automation/event-wait.sh (background, WSL; restart it on every wake)",
+   "why": "The event waker task just completed with exit 0, and lanes are in flight, so an event waiter must keep running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the isolation-check result for 4080 lane i4 before starting any row operator on it",
+   "why": "The interim only says i4 is UP; per the coordinator's own rule a lane counts as up only after it passes the lane isolation check."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-lanes-4080: send the full lane-isolation-check result for i4 (own ports, DB, save, window; no shared files; no cross-lane log lines), the 4080 llama stop with RAM before and after, and CPU/GPU use with i3 and i4 running. Never print the key. Start the i4 row operator only after the isolation check passes.",
+   "why": "The interim reports i4 UP and DeepInfra applied to the i3 and i4 DBs, but the isolation check, the llama stop and the resource numbers are still unconfirmed (the interim text is truncated after 'DeepInfra applied to i3+i4 DBs')."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-lanes-5090 to confirm a real DeepInfra chat reply on lane i3; only then kill llama PID 74148 and its bridge on the 5090",
+   "why": "The plan set in this session was to kill the 5090 llama only after i3 passes its chat check, and this batch does not report that pass."
+  }
+ ],
+ "checks": [
+  "ssh 4080 tasklist to see whether a llama-server process is still running on the 4080",
+  "grep -n -i 'isolation\\|llama\\|RAM' on the event inbox file 150721-imm26-lanes-4080.txt (path as printed by the waker)",
+  "tasklist to confirm llama-server PID 74148 is still running on the 5090 before any kill"
+ ]
+}

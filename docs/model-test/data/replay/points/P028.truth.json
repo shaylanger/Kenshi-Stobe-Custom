@@ -1,0 +1,21 @@
+{
+ "id": "P028",
+ "session": "2b1a8eca",
+ "ts": "2026-10-15T23:59:15.296Z",
+ "class": "lane-alert",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] 5090 i4 lane operator i4op32\nprompt: You are imm26-5090-i4op32, fresh successor of imm26-5090-i4op3 (STOPPED-CONTEXT), operator of lane 5090 i4 (imm26 NPC immersion program, isolated lane only, never Shay's live install/server/DB). Read C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md in full first, then testing/NPC_IMMERSION_26_HANDOFF.md top, the OPERATOR_COMMON.md/COMMON.md briefs it points to, docs/COORDINATOR_IMPROVEMENTS.md, testing/KNOWN_BLOCKERS.md. Keep C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.status current (agent-status.ps1) and write agents\\imm26-5090-i4op32.handoff.md every ~40k tokens. Debug budget = ONE attempt per row, handbacks <= 8 lines; a pass = real game state changed; use go-row.sh/go-batch.sh/preflight.sh where possible. Keep inflight marker 5090-imm26-i4.\n\nLane i4 already runs NC5 (25252267) and the h4.sh helpers described in the handoff. Run the TODO rows that are feasible: 10-d, 13-c, 12-c/12-d (if a Cind without broken-promise history is available; otherwise skip), 14-b, 15-a, 16-c, 19-a, 20-a, 24-a, 24-b, 19-c, 23-*, 22-a/b, 14-c; mark each in testing/NPC_IMMERSION_26_TESTS.md (git add TESTS only, commit as shaylanger, push). Note: server fixes for 08-b and the raw REPAIR_ACTION_TICKETS SAY are being made by imm26-fix-batch3 and will land as lane deltas; 13-b needs a native fixer (AbandonTracker GapSeconds game-vs-real time), do not retry it; 18-a/25/26 stay SETUP-FAIL unless you can build the fixture cheaply. Do not touch the other lanes. Final report <= 8 lines via save-report.ps1 (agents/out/imm26-5090-i4op32): row verdicts and the next speed-up.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 523
+}

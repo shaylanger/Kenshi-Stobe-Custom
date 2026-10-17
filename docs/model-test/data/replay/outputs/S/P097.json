@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1",
+   "why": "The hook names one stale 24.1h item (4080 logs\\20261015-110406-before-launch, 0.7 MB); it is an old before-launch log, not corpus, inflight or a fixture, so the standing clean-up rule says run the sweep to remove it. I do not know the script's exact delete flag, so the first check below decides."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "If the listing shows that the item is cited by a lab check or a Misses row, run testruns-sweep.ps1 -Keep \"C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch\" \"<reason>\" instead of deleting. Whether it is cited is unknown from this file.",
+   "why": "Sweep and -Keep are the two outcomes the rule allows, and the choice depends on the listing; nothing else in the batch needs action (waker is running, the agents are in flight)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 (list only, read the STALE lines and confirm that only the 4080 before-launch log is past 24 h)",
+  "grep -rl 20261015-110406-before-launch C:\\KenshiModding\\testing C:\\KenshiTestRuns\\inbox (is the log cited anywhere?)"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not end the turn. Keep the single background wait (task bm22iu58s, over the five owned agents imm26-5090-i3-hard2b, imm26-5090-i4-hard2b2, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-fix19) armed; restart it only when it wakes; send no per-block replies; spawn nothing, edit nothing.",
+   "why": "The tail session still owns five RUNNING agents and must keep relaying their results; a tail decides nothing new, so the Stop guard correctly blocks the end."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "After the check below, only for each agent whose status file is still unchanged (imm26-4080-i4op7c, imm26-4080-op2jb, imm26-fix19, imm26-5090-i3-hard2b), SendMessage: 'TAIL 6d1f3011 status check: your status file has not changed for more than 10 minutes. Reply with your current step and update your status now with agent-status.ps1.'",
+   "why": "Their last status writes (20:29 to 20:36 Win clock, against about 20:47 now) are 11 to 18 minutes old, past the tail contract's 10-minute stall threshold; the message is conditional on the check so a file that moved is left alone."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "imm26-5090-i4-hard2b2 (status 20:43): no action",
+   "why": "It is about 4 minutes silent, under the stall threshold."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "If imm26-4080-i4op7c's status file is still unchanged at about 20:49 Win clock (20 minutes silent), TaskStop imm26-4080-i4op7c and put the stop in the next relay note to the new coordinator.",
+   "why": "The tail contract's second stall step is TaskStop plus notice after 20 minutes of silence; it applies only if the status is still unchanged on the re-check."
+  }
+ ],
+ "checks": [
+  "cd /c/KenshiTestRuns/agents; for a in imm26-5090-i3-hard2b imm26-5090-i4-hard2b2 imm26-4080-op2jb imm26-4080-i4op7c imm26-fix19; do echo \"$a: $(head -1 $a.status | cut -c1-120)\"; done",
+  "date '+%H:%M:%S'; ls /c/KenshiTestRuns/tail/ | grep 6d1f3011",
+  "tail -c 400 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/6d1f3011-2310-4986-85aa-5667f654842c/tasks/bm22iu58s.output"
+ ]
+}

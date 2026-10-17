@@ -1,0 +1,40 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 19-e imm26-inv19e",
+   "why": "Records the owner first so no second agent takes SETUP-FAIL 19-e."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:investigate] imm26-inv19e - read-only root cause + minimal unblock plan for SETUP-FAIL 19-e (lane 4080-i4). Brief: SYMPTOM (event 20261016-131605-setupfail-19-e.msg): no trip proposed after two asks (s1/s1b), nothing to accept; lane=4080-i4, owner unknown. READ-ONLY: find why no trip proposal happens for 19-e and propose the smallest recipe or fix. Cap 3 rows (19-e first; 19-a/14-a only as same-defect evidence). Evidence: ticket json in C:/KenshiTestRuns/setupfail/ (19-e) and the 19-e rows dir named in it; row spec: grep IMM-19-e in C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md. Do not touch lane 4080-i4 or its operator imm26-4080-i4op14 (tail 245d8ad7 owns them), do not rerun rows, do not edit game or server files. Do not wait for imm26-inv20a: its symptom is failed propose/accept legs (20-a), while 19-e has no proposal at all. Save the plan with save-report.ps1 (agents/out/imm26-inv19e) and keep agent-status.ps1 imm26-inv19e current.",
+   "why": "19-e is an unowned SETUP-FAIL with a different symptom from 20-a, and imm26-inv20a is already at its 3-row cap, so it needs its own read-only investigator."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-inv19e <agentId returned by the spawn call>",
+   "why": "Records the id so SendMessage can reach the investigator later."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mv /c/KenshiTestRuns/inbox/coordinator/20261016-131605-setupfail-19-e.msg /c/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "The relay is handled, and moving it out of inbox stops the waker re-waking on it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md, section 'Right now': add 'imm26-inv19e (investigate, read-only) started for SETUP-FAIL 19-e; owner set by setupfail assign; lane 4080-i4 untouched'",
+   "why": "Right now must show a started agent the moment it starts."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The previous waker exited after it woke the coordinator, and agents imm26-inv20a, imm26-inv01cx and imm26-inv19e are in flight, so a waker must keep running."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list | grep -E '^19-e'",
+  "cat /c/KenshiTestRuns/inbox/coordinator/20261016-131605-setupfail-19-e.msg | cut -c1-800",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

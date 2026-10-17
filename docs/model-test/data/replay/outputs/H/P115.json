@@ -1,0 +1,20 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Coordinator -> imm26-4080-i4op12: lane 4080-i4 has been idle 6.5 min. Reply in one line: the row you are on, what you are waiting for, and whether you are stuck. If you are stuck, say on what and the coordinator will fix the root or respawn you.",
+   "why": "A lane idle more than 2 min while work exists is a LANE STUCK case, so the operator has to state its state before anything is fixed or respawned; the operator id is not in this file, so the name is used and the id comes from agent-ids.ps1."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait about 5 min for the imm26-4080-i4op12 reply in inbox/coordinator; if it is stuck or silent, respawn a fresh 4080-i4 operator from its handoff as a successor (imm26-4080-i4op13) with lane-brief.ps1, and keep the lane's inflight marker.",
+   "why": "A reply decides whether the lane needs a fix or a successor, and a silent operator is treated as stuck."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-4080-i4op12.status",
+  "tail -n 20 C:/KenshiTestRuns/imm26-4080-i4/report.txt",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

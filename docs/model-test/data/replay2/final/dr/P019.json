@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background Bash task)",
+   "why": "The waker exited after delivering the imm26-hidden-test2 DONE event, and other work is still in flight (inflight markers 4080-imm26, imm26-compose-fix-batch2c, imm26-5090-ctxop3 and others), so the Stop hook would block without a waker."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no respawn, no message to any agent or Shay for imm26-hidden-test2",
+   "why": "The test agent finished its six heartbeats (DONE) and its inflight marker is already gone from the ls output; it was only a proof run of the hidden agent-host mechanism, which the coordinator already reported to the peer session, so nothing else follows."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/out/imm26-hidden-test2/latest.md",
+  "ls C:/KenshiTestRuns/inflight"
+ ]
+}

@@ -1,0 +1,28 @@
+{
+ "id": "P006",
+ "session": "277ebe12",
+ "ts": "2026-10-15T20:22:16.618Z",
+ "class": "other",
+ "outcome": {
+  "label": "bad",
+  "why": "Shay strong-negative: PLease use the 5090 as well and update the file to say that i said you can use both"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1 idle \"Shay 2026-10-15: imm26 program is 4080-only, nothing may affect the 5090 until he says so\" 2>&1 | Select-Object -Last 3",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The event wait then reported the 5090 as idle with no reason. That is by design: Shay ordered the imm26 program to run on the 4080 only. I recorded that as the idle reason (good for 60 minutes) and restarted the wait.\n\nThe six agents are still running; I'm waiting on their reports."
+ ],
+ "event_text_chars": 616
+}

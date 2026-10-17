@@ -1,0 +1,23 @@
+{
+ "id": "P037",
+ "session": "2b1a8eca",
+ "ts": "2026-10-16T00:34:43.648Z",
+ "class": "other",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:patch] tail relay follows coordinator + tail auto-close\nprompt: You are imm26-tailfix, a tooling agent. Shay's orders (2026-10-15): (A) build the 'relay follows the current coordinator' fix, and (B) when a TAIL session has finished all its sub-tasks, it must tell the current coordinator and CLOSE, so finished sessions are not left open. Read docs/TAIL_HANDOFF_CONTRACT.md, tools/automation/tail-mode.ps1, tail-relay.ps1, tail-ack.ps1, program-ledger.ps1 (route/ack), hooks/kenshi-waker-guard.ps1 (tail branch), agent-guard-lib.ps1, session-start.ps1 (tail section), the tail selftests (tail-hooks-selftest.ps1 PASS, tail-ledger selftest 33/33), and the context-meter handoff text only for reading (do NOT edit ~/.claude/hooks/context-meter.ps1, .claude/settings.json or any user-level hook). Keep C:\\KenshiTestRuns\\agents\\imm26-tailfix.status current (agent-status.ps1).\n\n(A) Pointer: C:\\KenshiTestRuns\\coordinator.current (JSON: session id, pid, name/label, started iso). The live coordinator writes it (put the write in session-start.ps1 when it is run by a coordinator session, and expose `tail-mode.ps1 current [set -Session ..]`). tail-relay.ps1 reads it at relay time: if -ToSession is not given, or the target is itself in tail mode / not alive, send to the CURRENT coordinator and always also write the shared inbox file; print the target it chose. If the pointer is missing/unreadable, fall back to today's behaviour (inbox only). Add a contract rule: a coordinator that hands off while an older tail is alive re-routes that tail's agents (or acks them) first; implement `tail-mode.ps1 adopt` (or equivalent) that makes the new current coordinator the relay target for all live tails' agents (ledger route owner stays the tail; only the target changes) and have session-start list it.\n(B) Auto-close: when all of a tail's agents are done+acked: (1) the tail sends one message TAIL-DONE <session> to the current coordinator inbox + session (`tail-relay.ps1 -Kind TAILDONE` or `tail-close.ps1`) saying 'tail <id> finished all agents, closing'; (2) the tail leaves tail mode (flag removed) and its process is closed: a new `tools/automation/tail-close.ps1 -Session <id>` terminates the tail's claude process (pid in the flag) after a short delay (default 20 s, so the final text/relay is delivered), with SAFETY: only if the flag exists, every agent in the flag is done+acked (re-check), the pid still exists AND its process name/start time matches the flag (guard against pid reuse), it is not the current coordinator's pid (coordinator.current) and not t...[truncated 1598 chars]",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "I've started `imm26-tailfix` to build both things you asked for, and re-armed the waker.\n\n**Relay follows the current coordinator**\n- A `coordinator.current` pointer file records which session is the live coordinator.\n- `tail-relay.ps1` reads it at relay time, so reports go to whoever is current. If the pointer is missing it falls back to the shared inbox as today.\n- A coordinator that hands off while an older tail is alive can adopt that tail's relays.\n\n**Finished tails close themselves**\n- Whe...[truncated 1121 chars]"
+ ],
+ "event_text_chars": 950
+}

@@ -1,0 +1,31 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section 'Right now': record imm26-n5a DONE (N5a, row 13-b server half): commit ee28e15 on main, pushed; compose.patch regenerated at pending-fixes\\npc-immersion-26\\compose\\compose.patch (APPLY-IDENTICAL); deployed file by file to 5090 i3/i4/i5 and 4080 i3/i4; row 13-b rerun pending.",
+   "why": "The state file is updated after every agent report, and this one arrived as a completed subagent hand-back; the report text is truncated in this replay, so only the fields shown are recorded."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "program-ledger.ps1: record imm26-n5a DONE against the imm26 program (commit ee28e15, compose.patch regenerated). The exact verb and ledger name are not in this file, so look them up with session-start.ps1 before running.",
+   "why": "The program ledger must show the N5a package as done so no successor respawns it."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Inbox message to imm26-4080-op2b (lane 4080 i3, rows 06-e, 08, 12, 13): 'N5a server fix ee28e15 is live on your lane (compose deployed to 4080 i3). At your next row boundary, rerun row 13-b on the installed build and send one RESULT 13-b PASS|FAIL line with evidence. Do not change the DLL or the server.' If that agent shows DEAD, respawn it fresh first.",
+   "why": "Row 13-b was blocked on the server half, which is now deployed on this lane, so the operator must rerun it; the message goes only after the checks below come back as expected."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for a possible second task notification from agent a91b48e8b761d5f7b (imm26-n5a). It stopped with its own background work still running and may notify again; on a repeat, read its status file and ignore the notification if it says DONE.",
+   "why": "The report was already delivered in the hand-back, and the note says the result may be interim, so no second action is needed unless the status changes."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c \"git -C /var/www/html/StobeServer log --oneline -3; git -C /var/www/html/StobeServer status --short | head -5; git -C /var/www/html/StobeServer branch -r --contains ee28e15\"",
+  "type C:\\KenshiTestRuns\\agents\\imm26-n5a.status (read only, tail for the final line)",
+  "grep -n \"imm26-n5a\\|ee28e15\\|13-b\" C:\\KenshiModding\\testing\\HANDOFF.md",
+  "Read the offline stobe-tests output that imm26-n5a quoted (97 passed, 6 FAILED) and confirm the 6 failing suites are the 5 known pre-existing failures plus playthrough_rollback_lock. Compare only; do not rerun. If any other suite failed, hold the 13-b message."
+ ]
+}

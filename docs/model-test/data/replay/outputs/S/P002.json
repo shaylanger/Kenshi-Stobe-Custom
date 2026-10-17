@@ -1,0 +1,20 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Short answer: the last usage read shows Pro weekly all-models at 100% (resets in about 34 min), 5-hour window 0%, extra usage enabled with $70.41 spent. So everything run now is billed as extra usage credits, not plan quota. I am checking whether our model-routing/test setup (docs/MODEL_ROUTING.md, docs/MODEL_TEST.md, tools/automation/model-policy.json) records per-run token/cost and whether it separates plan quota from credits. I have not verified that yet, so I will not claim it does. Until I have the answer I am not starting new paid agent work. Rule of thumb for any cost comparison from this window: cost numbers taken now are credit-billed and not comparable with runs made under plan quota; I will tag every run with the billing state and the get_usage extraUsage.spent value before and after, so the data stays valid. I will report back once the check is done: either 'already recorded, nothing to change' or the exact small change needed. Also open: the uncommitted .claude/settings.json deny-list change is waiting for your commit OK.",
+   "why": "Shay asked a question about whether the setup handles credit billing; answer honestly with the known numbers and state that recording coverage is unverified until the read-only check returns."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the read-only grep results on whether the routing/test tooling logs per-run usage and billing mode; then send Shay one follow-up (or a small tooling fix + selftest + commit if the billing state is not recorded).",
+   "why": "The answer depends on files not shown in this replay, and no new paid agents should be spawned until it is known."
+  }
+ ],
+ "checks": [
+  "grep -n -i -E 'extraUsage|get_usage|billing|credit|quota|cost|usage' C:\\KenshiModding\\docs\\MODEL_TEST.md C:\\KenshiModding\\docs\\MODEL_ROUTING.md C:\\KenshiModding\\tools\\automation\\model-policy.json",
+  "grep -rn -i -E 'extraUsage|get_usage|plan.?quota|credit' C:\\KenshiModding\\tools\\automation --include=*.ps1 --include=*.sh --include=*.py --include=*.json -l",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

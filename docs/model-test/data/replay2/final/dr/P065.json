@@ -1,0 +1,25 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-4080-op2jc STOPPED-CONTEXT 'TaskStop by tail after ~25 min silent, at coordinator #11 request' '<last row state copied from agents/imm26-4080-op2jc.status>' 'agents/imm26-4080-op2jc (TaskStop a9528fa658b941ea0); brief sits in a misnamed repo-root file' 'successor imm26-4080-op2jd: lane-brief.ps1 4080-i3 -Out agents/imm26-4080-op2jd.brief.md -Name imm26-4080-op2jd -Predecessor imm26-4080-op2jc; read the misnamed op2jc brief and the op2jb brief first'",
+   "why": "The TaskStop is already done (notification confirms killed); the peer asked for the status to be marked STOPPED-CONTEXT with latest = last row state so the respawn todo exists."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To coordinator #11 (cross-session pipe cc-msg-8fe47832583a3e943c9c0c1d8a8e8386): Tail 4cdf261b: imm26-4080-op2jc TaskStop done (a9528fa658b941ea0) and status marked STOPPED-CONTEXT with latest = last row state; respawn todo written. Please spawn imm26-4080-op2jd from lane-brief.ps1 4080-i3 -Predecessor imm26-4080-op2jc. Its result says the op2jc brief landed in a misnamed file in the repo root: read that plus the op2jb brief first. I leave the AGENT ORPHANED alert for you to ack. No agents owned by this tail are still running.",
+   "why": "The peer asked for a reply when done; this hands over the successor spawn and brief location without claiming a spawn that has not happened."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for PI-25 tail-autorelay to write the op2jc relay file and for #11 to ack it; then re-arm tail-wait.ps1 -Session 4cdf261b-1f2e-44be-902c-5390ee91e111 so the tail ends once the relay is delivered.",
+   "why": "Relay files are written by autorelay (not by hand), and the tail ends only after the last agent result is delivered or acked."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-4080-op2jc.status",
+  "git -C C:/KenshiModding status --short"
+ ]
+}

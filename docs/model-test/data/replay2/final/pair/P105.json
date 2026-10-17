@@ -1,0 +1,39 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i4-hk2, description '[case:bench][model:haiku][effort:high] imm26 5090-i4 Haiku-high pilot operator successor (predecessor imm26-5090-i4-hk1)'. Brief = the text printed by powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/lane-brief.ps1 5090-i4 -Name imm26-5090-i4-hk2 -Predecessor imm26-5090-i4-hk1, plus this paragraph: 'PILOT-ESCALATE 00-ask answer: the 5090-i4 stobe.log showed the game loaded and active at 13:01:34 (combat and SOCIAL_CAPTURE lines), so the wait-world no-answer looks like a probe fault, not a load wait. Make one fresh wait-world retry only if stobe.log is still advancing; no unchanged retries. If it still gives no answer, leave 00-ask unmarked, write a *pilot-escalate* message to inbox/coordinator as a tooling snag (not a row FAIL), and do not mark PASS. Resume at the row after the last RESULT in the pilot ledger (verdicts CSV and rows-i4.txt as named in the lane brief; 02-cx unplaced is the handoff resume point). Stop the pilot lane on any RAM or GPU trouble. One RESULT line per row; checkpoint agent-status latest.'",
+   "why": "The LANE NO-OPERATOR alert means 5090-i4 has no RUNNING operator, and hk1 stopped at 00-ask, so the named Haiku-high successor takes the lane, with the escalation answer in its brief because hk1 can no longer receive messages."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-5090-i4-hk2 <agent id returned by the spawn>",
+   "why": "Records the new id so the tail and coordinator can SendMessage it (PI-36 rule)."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 \"LANE NO-OPERATOR 5090-i4\" \"respawned imm26-5090-i4-hk2 from hk1 on the Haiku-high pilot; 00-ask answer in its brief\"",
+   "why": "Closes the open lane alert once the successor is spawned; a still-true condition re-opens after 30 min. Run only after the spawn succeeds."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': 5090-i4 operator is now imm26-5090-i4-hk2 (hk1 stopped at 00-ask, wait-world no answer while the game log was active); Haiku pilot still ACTIVE; 5090-i4 still lifted in lanes.held for the pilot only",
+   "why": "Rule: update Right now the moment an agent starts or stops."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Haiku pilot: imm26-5090-i4-hk1 stopped at row 00-ask (wait-world no answer, although the 5090-i4 game log was active). Lane 5090-i4 respawned as imm26-5090-i4-hk2 on the same Haiku-high pilot, with the answer in its brief. Say if you want the pilot stopped instead. lanes.held must be restored (re-add 5090-i4) after the pilot.",
+   "why": "Shay asked for a report on any pilot problem, so he gets one line via his relay session."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (confirm no live 5090-i4 operator and read the 5090-i4 lane line for its stobe.log path)",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live (no second live operator on 5090-i4)",
+  "Read C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk1/latest.md and C:/KenshiTestRuns/agents/imm26-5090-i4-hk1.status (last state and step before the stop)",
+  "Check that C:/KenshiTestRuns/pilot/haiku-i4/ACTIVE exists and that C:/KenshiTestRuns/lanes.held lists 5090-i4 only as the pilot exception",
+  "powershell -NoProfile -Command \"(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory\" and the GPU logger tail (RAM headroom with 3 Kenshi running; 6 GB free at 12:55 per the handoff), before the spawn",
+  "Tail the 5090-i4 stobe.log to confirm it is still advancing before the successor's wait-world",
+  "ls C:/KenshiTestRuns/alerts/open (confirm the LANE NO-OPERATOR 5090-i4 alert is open and get its id if the subject form is rejected)"
+ ]
+}

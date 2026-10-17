@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: cd /c/KenshiModding; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP",
+   "why": "The previous waker (bee9yyh59) completed and was not restarted; the tail session must keep a waker running while it owns imm26-5090-ctxop322 (running) and awaits the ack for imm26-5090-i3op3."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not end the turn and do not use tail-mode.ps1 leave -Force (the flag is correct). Wait for (a) imm26-5090-ctxop322 to reach DONE/FAILED/STOPPED-CONTEXT, then save its report to a file and relay it with tail-relay.ps1 plus SendMessage to kenshimodding-44, and (b) the new coordinator's tail-ack/program-ledger ack for imm26-5090-i3op3. I spawn and decide nothing new.",
+   "why": "The Stop hook is a legitimate block: 2 owned agents are not finished or not acknowledged, and the tail contract allows ending only when all are done and acked. ctxop322 status was last updated 18:18, so it is not yet stalled (10 min silent means message it, 20 min means TaskStop and tell the new coordinator)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1 records imm26",
+  "head -4 C:/KenshiTestRuns/agents/imm26-5090-ctxop322.status | cut -c1-320; date +%H:%M:%S",
+  "ls C:/KenshiTestRuns/inbox/coordinator | tail -5"
+ ]
+}

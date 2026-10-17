@@ -1,0 +1,20 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP (Bash, run_in_background)",
+   "why": "The background waker just completed on this event and work is still in flight, so a new waker must run; it is restarted every time it wakes."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the TAIL-RELAY of imm26-5090-i4op3 in C:\\KenshiTestRuns\\inbox\\coordinator (its status and handoff: C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md), then tail-ack it.",
+   "why": "The ledger routes imm26-5090-i4op3 to the live tail session 5720e5b8-42a8-4aaf-9e29-db0072586324, and a coordinator must not respawn an agent owned by a live tail; the relay hands over the STOPPED-CONTEXT result, and the fresh successor imm26-5090-i4op32 is spawned from it (checkpoint from the handoff file) if no successor already runs. The waker's respawn text is only a hint, so the wait is the policy-compliant action."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (look for a running successor of imm26-5090-i4op3, its tail owner, and any TAIL-RELAY line)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 status (confirm the tail 5720e5b8 is still live)",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.status (confirm STOPPED-CONTEXT and its next step)"
+ ]
+}

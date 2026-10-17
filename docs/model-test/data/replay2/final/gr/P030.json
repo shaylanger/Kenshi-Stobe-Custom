@@ -1,0 +1,35 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:debug] lane 5090-i3 successor operator; name: imm26-5090-i3op32; brief: You are imm26-5090-i3op32, the successor operator for lane 5090-i3 (travel/region rows, NC5 Stobe.dll) of the imm26 program. Your predecessor imm26-5090-i3op3 stopped at its context limit. Read C:\\KenshiTestRuns\\agents\\imm26-5090-i3op3.handoff.md first and continue its open rows, starting with 23-b (fix rowcheck c_23b first, report to agents\\out\\imm26-inv-23b). Follow the standard operator rules in testing/AGENT_PROMPTS.md: one debug attempt per row, handbacks of 8 lines or fewer, check the NC5 SHA per lane before a run. Keep C:\\KenshiTestRuns\\agents\\imm26-5090-i3op32.status current with tools/automation/agent-status.ps1 and checkpoint C:\\KenshiTestRuns\\agents\\imm26-5090-i3op32.handoff.md every ~40k tokens. Touch only lane 5090-i3. Do not respawn imm26-5090-i3op3.",
+   "why": "Lane 5090-i3 has no running operator and the stopped agent has no successor, so the Stop hook and lane-idle check need a fresh successor from the predecessor handoff; the [case] tag is my choice because the file does not show the operator's tag."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cat > /c/KenshiTestRuns/lane-owners.json <<'EOF' {\"5090-i3\":{\"ops\":[\"imm26-5090-i3op32\",\"imm26-5090-i3op3\"],\"dirs\":[\"imm26-5090-i3\",\"imm26-5090-i3op3\",\"imm26-5090-i3op32\"]},\"5090-i4\":{\"ops\":[\"imm26-5090-i4op32\",\"imm26-5090-i4op3\"],\"dirs\":[\"imm26-5090-i4\",\"imm26-5090-i4op3\",\"imm26-5090-i4op32\"]},\"4080-i3\":{\"ops\":[\"imm26-4080-op2h\",\"imm26-4080-op2g\"],\"dirs\":[\"imm26-4080\"]}} EOF (write it as three lines inside the heredoc, same keys)",
+   "why": "lane-owners.json is the override lane-idle.ps1 reads, and it must map 5090-i3 to the successor or the next lane check reports NO-OPERATOR; the 5090-i4 and 4080-i3 entries are kept unchanged."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <subject of the STOPPED-CONTEXT open alert for imm26-5090-i3op3 as listed by session-start.ps1 -Brief> \"respawned fresh as imm26-5090-i3op32 from agents\\imm26-5090-i3op3.handoff.md\"",
+   "why": "The stopped-agent alert stays open until acked with the action taken; the exact subject is not in this file, so it is taken from the session-start listing."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP (run_in_background: true)",
+   "why": "The waker that delivered this event has exited, and work is still in flight, so it must be restarted at once."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-5090-i3op32 to show RUNNING in its status file and for lane 5090-i3 to show activity in the next lane-idle check; no message to the tail session.",
+   "why": "The successor is only confirmed once it runs; the tail session handles relays and must not be asked to act on this stop."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (confirm no RUNNING successor for 5090-i3 already exists and read the exact OPEN ALERTS subject)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 status (confirm the tail has relayed the STOPPED-CONTEXT result and owns no live 5090-i3 agent)",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i3op3.status (confirm STOPPED-CONTEXT and that the handoff file exists)"
+ ]
+}

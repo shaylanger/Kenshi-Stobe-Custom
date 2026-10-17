@@ -1,0 +1,31 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; check with ps -W | grep event-wait first so there is only one)",
+   "why": "The batch is the waker's own completion, so no waker is watching while sfS/sfX-era runs and the 4080-i4 lane are still in flight; it must be re-armed at once."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "append to C:/KenshiTestRuns/inbox/operators/coordinator16-server-fixes.txt: 'sfS DONE (commit a85c7b7a, pushed, new files only in testing/live-stobe-queue/imm26-assert/rowtools). 05-cx v2 = hxrun_cx2.sh 05-cx <lane> --allow-retry (distinct names, pinned). 08-d v2 = the sfS runner named in agents/out/imm26-sfS/latest.md. Run on the next free slot; the v1 go-row.sh path is unchanged.'",
+   "why": "sfS finished row tooling the operators need, and this note is where every tooling output is routed (as was done for sfX)."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "append to C:/KenshiTestRuns/inbox/operators/coordinator16-server-fixes.txt for lane 4080-i4 (imm26-4080-i4op13): 'SETUP-FAIL 08-d unblock plan: at the next lane boundary (never mid-row) install NC22 (supersedes NC21; report agents/out/imm26-sfN) with install-dll.ps1 on 4080, deploy bundle ba83148e5fa0 with lane-deploy-4080.sh, then ONE attempt of 08-d with the sfS v2 runner (fallback: unblockrun_a.sh 08-d --back 120). Report PASS or FAIL with evidence. No third attempt.'",
+   "why": "The SETUP-FAIL allows exactly one more attempt with a new DLL and server, so the unblock goes to the lane operator as one bounded attempt at a boundary."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no tail-ack for the three TAIL-RELAY imm26-sfS messages or for imm26-ctxfix2; no respawn",
+   "why": "tail-ack fails by design for non-ledger agents (per the handoff), and ctxfix2 output was already routed to inbox/operators/ctxfix.txt before this batch."
+  }
+ ],
+ "checks": [
+  "find /c/KenshiTestRuns/inbox -name '20261016-121056-setupfail-08-d.msg' then cat the file in full (the event is truncated and the unblock plan detail is there)",
+  "cat /c/KenshiTestRuns/agents/out/imm26-sfS/latest.md | head -80 (to name the 08-d v2 runner exactly)",
+  "ps -W | grep event-wait (confirm no second waker before restart-waker)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (waker status, lane state, open alerts)"
+ ]
+}

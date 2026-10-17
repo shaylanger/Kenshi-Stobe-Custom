@@ -1,0 +1,32 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add a #10 entry (time = the batch arrival, not invented): imm26-wpL2 DEPLOYED to 5 lanes (5090 i3/i4/i5, 4080 i3/i4; server commit 30a4ec9 pushed; new sha 9ac36d57; old sha 388071a8 matched on every lane; backups in <lane>/bak-pre-wpL2; no backend restart, no game launched); imm26-wpL2-deploy DONE; 4080-i4 19-a LANDMARK rerun pending per inbox\\operators\\wpL2-deployed.txt; 5090 rows stay on hold (Shay order).",
+   "why": "HANDOFF Right now must reflect the deploy the moment it lands, and it is the resumable checkpoint."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "program ledger update via tools\\automation\\program-ledger.ps1 for the imm26 program: work package wpL2 -> DEPLOYED (5 lanes, 30a4ec9), owner agent imm26-wpL2-deploy -> DONE, output C:\\KenshiTestRuns\\agents\\out\\imm26-wpL2-deploy\\latest.md. The ledger file name is not in this file: find it via session-start.ps1 (programs\\*.json).",
+   "why": "The ledger is updated after every agent report, not only at the context limit."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the 4080-i4 operator's 19-a LANDMARK rerun result (one post-load OWNED_TRAVEL with accepted=1 near -51316 1577 3592 and no local_plan_expired_or_unknown) through its status or inbox file, and for the next event on the event stream.",
+   "why": "The deploy is done; the proof that the fix works on the 4080-i4 lane is the operator's rerun, and the coordinator does not steer isolated arms."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No message to the 4080-i4 operator and no new agent: the operator note C:\\KenshiTestRuns\\inbox\\operators\\wpL2-deployed.txt already carries the rerun request, and the 5090 lanes stay unused under Shay's no-new-5090-sessions order.",
+   "why": "Nothing else is needed for this batch; the inbox note already delivers the instruction to the operator, and new 5090 work is held by Shay."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls C:\\KenshiTestRuns\\inflight\\imm26-wpL2-deploy (expect absent after DONE)",
+  "read C:\\KenshiTestRuns\\agents\\imm26-wpL2-deploy.status (expect DONE)",
+  "grep -n \"DEPLOYED\\|wpL2\" C:\\KenshiTestRuns\\agents\\out\\imm26-wpL2-deploy\\latest.md (expect sha 9ac36d57 and 30a4ec9)",
+  "git log --oneline -3 in the server repo (WSL live tree) to confirm 30a4ec9 is pushed to origin HEAD:stobe"
+ ]
+}

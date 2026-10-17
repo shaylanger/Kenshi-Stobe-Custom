@@ -1,0 +1,28 @@
+{
+ "id": "P053",
+ "session": "6d1f3011",
+ "ts": "2026-10-16T02:49:37.641Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...\") while the stored quote wasn't. So no apology is recorded. The location is `lib/soci"
+ },
+ "actions": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "cd /c/KenshiModding; head -c 2200 /c/KenshiTestRuns/agents/imm26-5090-i3-hard2b.handoff.md; echo; powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/tail-relay.ps1 -Agent imm26-5090-i3-hard2b -Kind FAILED -Report 'C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md' -Summary \"5090-i3 operator STOPPED-CONTEXT (10-a FAIL marked); lane i3 needs a successor\" 2>&1 | tail -1",
+   "why": "Relaying the 5090-i3 operator's stop to the new coordinator."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "to=kenshimodding-76: TAIL-RELAY from tail 6d1f3011: imm26-5090-i3-hard2b STOPPED-CONTEXT 20:49 (~150k; handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md; status task text '5090-i3 operator'). LANE 5090-i3 NEEDS A SUCCESSOR NOW (lane-brief.ps1 5090-i3 -Name imm26-5090-i3-hard2c -Predecessor imm26-5090-i3-hard2b, [case:generate]). Marked this session: 19-a PASS (598b2d9, rowcheck fixed), 19-d FAIL (resume works; arrival half is the row teleport; ticket imm26-inv19d; new recipe = stage squad ~150u from Squin BEFORE proposing, save+load, let her WALK; wait for inbox\\operators\\row19-fixed.txt from imm26-fix19), 10-a FAIL (875f7ce): REAL BUG: em dash in npc_quote vs sanitized response_message at lib/social_repair_dialogue.php:250 (apology quote match) -> needs a server fixer (not just the quote-suffix fix). Open for the successor: 19-ax (--allow-retry), 02-cx, 05-cx, 01-bx, 01-cx, 11-b (isolated Cind-vs-one-enemy fight, BORED_EVENT_CHANCE=100 in lane general_settings), 19-d walk variant. Lessons: lane DB core_npc duplicate storage_id (Kasmet 634 vs Malzin) disables the repair ledger: delete the stale row (rename is overwritten on reload); `protect` must be off for hit damage (head 130 KOs, 200 kills; protect on clears KO); trip destination is LLM-chosen: force 'Take me to Squin.'; reload then wait for `where <npc>` to resolve; export KAH_PF_ISOLATION=0; driver source C:/KenshiTestRuns/imm26-5090-hx/hx.sh. Tail still owns: imm26-5090-i4-hard2b2 (17-bx FAIL 2636431, 18-cx PASS 5f77847, next 16-bx), imm26-4080-op2jb (04-ax PASS, next 03-cx), imm26-4080-i4op7c (started), imm26-fix19 (edits done in copies, replace+commit pending).",
+   "why": "Relaying the 5090-i3 operator's stop to the new coordinator."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "Relaying the 5090-i3 operator's stop to the new coordinator."
+ ],
+ "event_text_chars": 1544
+}

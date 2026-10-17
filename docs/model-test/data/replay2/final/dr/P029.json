@@ -1,0 +1,34 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-ack.ps1 -Agent imm26-5090-i4op3",
+   "why": "The TAIL-RELAY from imm26-5090-i4op3 asks for an ack, and its result is handled as data, not an order."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not respawn imm26-5090-i4op3 and do not spawn a second 5090 i4 operator",
+   "why": "The successor imm26-5090-i4op32 was already spawned for lane 5090 i4 (agentId ab44ec9769f258fd8) before this batch, so the LANE NO-OPERATOR event is stale."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/lane-owners.json: map lane 5090-i4 to imm26-5090-i4op32",
+   "why": "lane-idle.ps1 maps 5090-i4 only to imm26-5090-i4op3, as the relay says, so it would keep raising LANE NO-OPERATOR for the successor."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "record the successor in ledger imm26/live-rows with program-ledger.ps1 (route or ack for imm26-5090-i4op3 -> imm26-5090-i4op32; exact args from its usage text, not shown in this file)",
+   "why": "The ledger must show the new owner of lane 5090 i4 so cold-start and supervisor logic do not treat the old agent as dead."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:investigate] ProvenWild rejects harness-spawned animals\"; brief: find the root cause of ActivityPolicySupport.cpp:23 rejecting harness-spawned wild animals (wild goats squads, faction Wildlife) with animal_ownership_not_proven_wild, and propose the smallest fix or a design option that lets Hunt rows 25-a and 26 run; Shay's standing order (2026-10-15) is that animals in no real faction must pass ProvenWild, relaxing template-ref clauses; diagnose only, no edits; the NC5 actor-cache fix already works (observedSource.candidates kind=Hunt)",
+   "why": "The relay's KEY FINDING makes the Hunt rows SETUP-FAIL until this is diagnosed, and the coordinator investigates odd behaviour first."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (confirm imm26-5090-i4op32 is RUNNING and the LANE NO-OPERATOR line clears)",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-5090-i4op32.status (confirm it is current)"
+ ]
+}

@@ -1,0 +1,38 @@
+{
+ "id": "P093",
+ "session": "5270be03",
+ "ts": "2026-10-16T17:40:01.837Z",
+ "class": "shay-message",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: can we createa  new backup folder in the  model testing folder, taht cotnains the fully restroed bac"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1\necho \"== KenshiTestRuns top\"; ls -la /c/KenshiTestRuns | head -60\necho \"== fixtures\"; ls -la /c/KenshiTestFixtures | head -40\necho \"== Kenshi dir (D:)\"; ls -la \"/d/Steam/steamapps/common/Kenshi\" | head -60\necho \"== backups anywhere named like backup/bak under Kenshi/KenshiModding top levels\"\nls -d /d/Steam/steamapps/common/Kenshi/*backup* /d/Steam/steamapps/common/Kenshi/*bak* /c/KenshiModding/*backup* /c/KenshiModding/*bak* /c/Kenshi*backup* 2>/dev/null\necho \"== invest fixes backup\"; ls -la /c/KenshiTestRuns/invest/fixes/backup 2>/dev/null; ls /c/KenshiTestRuns/invest/fixes/backup/* | head -40",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1\nwsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s <<'EOF'\necho \"== server git refs\"; cd /var/www/html/StobeServer && git for-each-ref --format='%(refname) %(objectname:short) %(creatordate:iso)' refs/snapshots | head; git log -1 --format='HEAD %h %cd'\necho \"== workspace refs\"; cd /mnt/c/KenshiModding && git for-each-ref --format='%(refname) %(objectname:short) %(creatordate:iso)' refs/snapshots | head\necho \"== pg dumps / backups in WSL\"; ls -la /root/*.sql /root/*.dump /root/*.sql.gz /var/backups 2>/dev/null | head -20; find / -xdev \\( -name '*.sql' -o -name '*.dump' -o -name '*.sql.gz' -o -name '*.pg_dump' \\) -size +100k -mtime -10 2>/dev/null | grep -v '^/proc' | head -20\necho \"== db size\"; cd /tmp && sudo -u postgres psql -d stobe -tAc \"SELECT pg_size_pretty(pg_database_size('stobe'))\"\necho \"== stobe-work\"; ls -la /root/stobe-work | head -20\necho \"== sour...[truncated 142 chars]",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1\necho \"== KenshiTestRuns/backups\"; ls -la /c/KenshiTestRuns/backups | head -30; du -sh /c/KenshiTestRuns/backups 2>/dev/null\necho \"== logs archive (launch archives)\"; ls -lt /c/KenshiTestRuns/logs 2>/dev/null | head -10\necho \"== Kenshi saves\"; ls -la \"/c/Users/Shay/AppData/Local/kenshi/save\" 2>/dev/null | head -30; ls -la \"/d/Steam/steamapps/common/Kenshi/save\" 2>/dev/null | head -30\necho \"== mods stobe dir\"; ls -la \"/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe\" | head -30\necho \"== sizes of sql.gz in WSL tmp\"; ls -la /mnt/wsl 2>/dev/null | head -1\nwsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s <<'EOF'\nls -la /tmp/stobe-imm26-5090/bak-pre-compose-20261015.sql.gz /tmp/stobe-imm26-5090-i5/bak-pre-compose-20261015.sql.gz 2>&1\nzcat /tmp/stobe-imm26-5090/bak-pre-compose-20261015.sql.gz 2>/dev/null | head -5 | cut -c1-160\nls -la /var/backups/stobe-relati...[truncated 32 chars]",
+   "why": ""
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Partly. I only read files, and nothing was changed. The server code and the validated Stobe.dll are backed up. The game folder, your settings and the full database are not.\n\n**Backed up**\n- **Your \"Fresh start\" save:** it is still in the Kenshi `save` folder, last modified 12 Oct 13:08. That is before the test (14 Oct), so nothing has been saved over it since. You may have moved or copied it.\n- **Server code:** the git ref `refs/snapshots/fresh-20261014` in `/var/www/html/StobeServer` holds the ...[truncated 1642 chars]",
+   "why": "reply to Shay"
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "Partly. I only read files, and nothing was changed. The server code and the validated Stobe.dll are backed up. The game folder, your settings and the full database are not.\n\n**Backed up**\n- **Your \"Fresh start\" save:** it is still in the Kenshi `save` folder, last modified 12 Oct 13:08. That is before the test (14 Oct), so nothing has been saved over it since. You may have moved or copied it.\n- **Server code:** the git ref `refs/snapshots/fresh-20261014` in `/var/www/html/StobeServer` holds the ...[truncated 1642 chars]"
+ ],
+ "event_text_chars": 66
+}

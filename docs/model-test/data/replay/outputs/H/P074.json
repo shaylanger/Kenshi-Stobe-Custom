@@ -1,0 +1,25 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-u3-nc15 DONE (commits af010bd and e8afd0f, DLL SHA256 9EABD486FBF8F996D2153DDA5FD8FE057DBC55AF93D1DCAA433A046841CE5748, not installed, not run in game); next step is the 14-c live check accepted>0 and reasons=ok_sid_keyed:N",
+   "why": "Each agent result goes into the state file as it arrives, so a stop loses nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait until 5090-i5 finishes op9g and WP-5 (26-b, 26-c, 22-a), then queue the NC15 install; no second 5090 lane",
+   "why": "Shay's order is one 5090 lane running op9g, then WP-5, then NC15, and installing mid-run would kill op9g."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "On 5090-i5 after WP-5: stop the game, copy C:/KenshiModding/pending-fixes/npc-immersion-26/NC15/Stobe.dll over the lane Stobe.dll, relaunch, run lane-setup.sh 5090 5 kah-imm26-i5 --clear-faction none, then run the 14-c live recipe and check accepted>0 and reasons=ok_sid_keyed:N",
+   "why": "NC15 fixes the handle-serial-0 catalog rejection that blocks 14-c, but the offer still needs a hostile member Cind can see inside the camp borders (ActivityRuntimeBindings.cpp:629-631), so the live result decides whether a fixer is needed next."
+  }
+ ],
+ "checks": [
+  "certutil -hashfile C:/KenshiModding/pending-fixes/npc-immersion-26/NC15/Stobe.dll SHA256 (expect 9EABD486FBF8F996D2153DDA5FD8FE057DBC55AF93D1DCAA433A046841CE5748)",
+  "git -C C:/KenshiModding log --oneline -3 (expect af010bd and e8afd0f)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

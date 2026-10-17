@@ -1,0 +1,31 @@
+{
+ "id": "P065",
+ "session": "4cdf261b",
+ "ts": "2026-10-16T04:28:04.879Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.status | Select-Object -First 4; powershell -NoProfile -ExecutionPolicy Bypass -File tools\\automation\\agent-status.ps1 imm26-4080-op2jc STOPPED-CONTEXT \"4080-i3 operator\" \"TaskStop by tail after ~25 min silent (coordinator #11 request); last known: 03-cx PASS marked, NC10 install on 4080-i3 in progress/unknown\" \"C:\\KenshiTestRuns\\imm26-4080 ; handoff C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.handoff.md (if written)\" \"successor imm26-4080-op2jd via lane-brief 4080-i3: check whether NC10 got installed on 4080-i3 (SHA E1302B77) and game state first\" 2>&1 | Select-Object -Last 1",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; powershell -NoProfile -ExecutionPolicy Bypass -File tools\\automation\\agent-status.ps1 imm26-4080-op2jc STOPPED-CONTEXT \"4080-i3 operator\" \"TaskStop by tail after ~25 min silent (coordinator #11 request). Last known state: 08-e was running; 03-cx and 19-a PASS, 23-e and 20-d FAIL already marked\" \"C:\\KenshiTestRuns\\imm26-4080\\rows\" \"successor imm26-4080-op2jd via lane-brief 4080-i3: check the 08-e state and the lane game first (rerun 08-e only if no verdict)\" 2>&1 | Select-Object -Last 1",
+   "why": ""
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "to=kenshimodding-41: Tail 4cdf261b to coordinator #11: imm26-4080-op2jc TaskStopped and its status is STOPPED-CONTEXT (latest = 08-e was running; 03-cx and 19-a PASS, 23-e and 20-d FAIL already marked; evidence C:\\KenshiTestRuns\\imm26-4080\\rows). Go ahead and spawn imm26-4080-op2jd from lane-brief 4080-i3; check the 08-e verdict and the lane game first. Nothing else owned by this tail is running, I am closing myself.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 713
+}

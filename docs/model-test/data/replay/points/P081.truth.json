@@ -1,0 +1,21 @@
+{
+ "id": "P081",
+ "session": "1aac0ede",
+ "ts": "2026-10-16T09:12:13.762Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:patch] 27-a recipe threshold fix staged\nprompt: Fixer, test-tooling only, NO game, NO lane, NO DLL/server changes. Budget <=60k tokens; status via tools/automation/agent-status.ps1 imm26-fix27a RUNNING|DONE (checkpoint after each file). Diagnosis report: C:\\KenshiTestRuns\\agents\\out\\imm26-inv-27a\\latest.md (read it first, section \"Smallest fix\"). Implement exactly that: c_27a in testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py (<=35 -> <=BG_NEAR default 100, env RW_BG_NEAR; post closes = b1<=BG_NEAR and b1<b0), rd_27a in unblockdefs_b.sh (and reloaddefs_a.sh equivalent) with RW_AWAY=${RW_AWAY_BG:-200} and a negative-control chase before the hire written to chase_ctrl.txt (c_27a asserts control end >= 0.8*start else SETUP-FAIL), fakes + selftests (reloadfake.py, unblockfake_b.py, reload-selftest.sh, unblock_b_selftest.sh), TESTS.md 27-a wording (leave row FAIL until live rerun).\nIMPORTANT: a live 4080-i4 operator (imm26-4080-i4op12) is running rows from unblockdefs_b.sh right now, and editing a script a running job uses kills it. So DO NOT edit the live files. Work on a copy of the whole rowtools dir under C:\\KenshiModding\\pending-fixes\\27a-recipe\\ (assert anchors, reproducible), run the selftests there (WSL, python3 in WSL; ~5 min per selftest run, run them in background if needed) and prove: fake evidence set (pre 200->60, post 200->66, control 200->200) gives RESULT 27-a PASS and fails on old c_27a. Output: a patch script apply.sh that applies the change to the live rowtools dir (idempotent, anchor-asserted) plus a README with the exact live rerun command from the report. Commit only your pending-fixes dir (git add that path only, never commit -am; identity shaylanger already set repo-local) and push. Do not apply to live; report when ready.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 7822
+}

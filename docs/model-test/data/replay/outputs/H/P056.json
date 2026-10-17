@@ -1,0 +1,30 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Recorded: option A (yes), the rumor hook also runs in director-mode turns. Building it offline now (imm26-rumorhook-dir). Row 03-b runs on 4080 only, since no new 5090 sessions stands. Stobe server goes on only for the 03-b batch and off after.",
+   "why": "Shay answered A with yes, and the relay session should confirm the decision and the 4080-only constraint."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add line '#10 SHAY DECISION (yes): rumor hook also runs in director-mode turns (option A, row 03-b); agent imm26-rumorhook-dir'; memory file for the rumor hook decision: same one-line note.",
+   "why": "The decision must be recorded where the next coordinator reads it, and the open question removed from the ask list."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:patch] imm26-rumorhook-dir'. Prompt: You are imm26-rumorhook-dir. Shay decided (yes, option A): the rumor-share hook (stobeKnowledgeShareFromSpeech) must also run on director-mode BORED_EVENT turns (mode=director), not only on mode=autochat turns. Read the investigation report C:/KenshiTestRuns/agents/out/imm26-inv-03b/latest.md (sections 0 and 1), testing/NPC_IMMERSION_26_TESTS.md row 03-b, and CLAUDE.md server rules. Use the codemap (grep -n funcname in /root/imm26/codemap) and read functions with sed, never whole large files. Goal: a server-only change that runs the same rumor share on director turns, with an anchor-script patch applied to BOTH the live tree /var/www/html/StobeServer and /root/stobe-work/ss-merge (back up, stage, php -l, offline stobe-tests must pass, deploy both, rotate logs, commit as shaylanger and push origin HEAD:stobe in the live tree). Do NOT touch the 5090 rig: no new 5090 sessions (Shay order). Test row 03-b only on 4080 (ssh 4080, C:/KAH/ctl.ps1): run stobe-server.sh on for the batch and off after. Status via tools/automation/agent-status.ps1 imm26-rumorhook-dir RUNNING/DONE/FAILED. Checkpoint at each milestone. Report the commit, the test result line per row, and the next speed-up.",
+   "why": "Option A is a server-only change that Shay approved, so it is built now by one patch agent on the right model; rows run on 4080 only per the no-new-5090 order."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-rumorhook-dir completion notification and its status file; then deploy result is checked and row 03-b assigned to a 4080 lane.",
+   "why": "The rumor hook change is not yet built, so nothing can be tested before the agent reports."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 bash -c 'git -C /var/www/html/StobeServer status --short | head -20; git -C /var/www/html/StobeServer log --oneline -3'",
+  "wsl.exe -d DwemerAI4Skyrim3 bash -c 'grep -rn stobeKnowledgeShareFromSpeech /root/stobe-work/ss-merge --include=*.php | head -20'",
+  "grep -n 03-b C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md"
+ ]
+}

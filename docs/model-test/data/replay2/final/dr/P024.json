@@ -1,0 +1,21 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Not confirmed yet. I am checking the real state of every lane now (5090 i3, i4, i5; 4080 i3, i4) and will tell you which lanes are running tests right now and which are idle. Any lane found idle with rows queued gets fixed the same minute.",
+   "why": "Shay asked a direct question and nothing in this file shows live lane activity, so the honest answer is unverified until the status checks return."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the lane status check output (rollcall, 4080 ctl status, inflight markers, operator status files), then send Shay one factual per-lane answer and act on any lane that is idle with rows still queued",
+   "why": "the file does not say which 5090 lane looks stalled, so no fix can be aimed yet and no lane should be guessed at."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ssh 4080 C:\\KAH\\ctl.ps1 status",
+  "C:\\KenshiTestRuns\\inflight (list markers) and the newest C:\\KenshiTestRuns\\agents\\*.status lines for the 5090 operators"
+ ]
+}

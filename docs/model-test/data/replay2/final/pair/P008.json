@@ -1,0 +1,30 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, Right now section: update the existing imm26-5090-op2 entry in place (do not add a second line) so it reads 'imm26-5090-op2 STOPPED-CONTEXT 14:44; handoff C:\\KenshiTestRuns\\agents\\imm26-5090-op2.handoff.md; no successor yet; respawn FRESH only after Shay's FIRST ACTION (llama-server kill, DeepInfra switch)'",
+   "why": "The stop is new (RUNNING 14:38 to STOPPED-CONTEXT 14:44) and the checkpoint rule requires it recorded, but the handoff already names this agent, so the existing entry is updated rather than duplicated."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The previous waker exited on this event and six agents are still RUNNING, so a live waker is required while work is in flight."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for STOPPED-CONTEXT or DONE from claude-md-reviewer, imm26-4080-op2, imm26-nativecomp, imm26-wpA3, imm26-wpB3 and program-ledger; about 10 minutes after the stop message, message-agent or stop-agent any straggler and record it in the Right now section",
+   "why": "Every stop report must land in HANDOFF before handoff-ready.ps1 runs and the new coordinator opens."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not spawn an imm26-5090-op2 successor now; leave the 5090 lane game and marker 5090-imm26 running",
+   "why": "Shay's FIRST ACTION (llama-server kill and DeepInfra switch) must run before any 5090 row, so the next coordinator respawns it fresh from its handoff file; until then the Stop guard will report it as NO SUCCESSOR."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "sed -n 1,40p C:/KenshiTestRuns/agents/imm26-5090-op2.handoff.md",
+  "for n in claude-md-reviewer imm26-4080-op2 imm26-nativecomp imm26-wpA3 imm26-wpB3 program-ledger imm26-5090-op2; do sed -n 1p C:/KenshiTestRuns/agents/$n.status | tr -d '\\r'; done"
+ ]
+}

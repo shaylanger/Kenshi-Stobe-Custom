@@ -1,0 +1,38 @@
+{
+ "id": "P058",
+ "session": "4cdf261b",
+ "ts": "2026-10-16T03:03:04.902Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; for l in i4 i5 i3; do echo \"== $l\"; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- env LANE_I3_STOP=yes bash /mnt/c/KenshiModding/tools/automation/lane-backend.sh stop $l 2>&1 | tail -3; done; sleep 3; wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c \"ps -eo pid,args | grep -E 'stobe-imm26-5090|lane-bridge|18086|18087|18088' | grep -v grep | cut -c1-140 | head; echo ---; ps -eo pid,args | grep -E 'php -S|postgres -D' | grep -v grep | cut -c1-120 | head -8\"",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'rig-runner|goal-watch|run-batch|agent-host|go-row|go-batch|lane-window|kenshi-ctl|stobe-auto' -and $_.Name -match 'powershell|bash|python|wsl|pwsh' } | Select ProcessId,Name,@{n='c';e={$_.CommandLine.Substring(0,[Math]::Min(150,$_.CommandLine.Length))}} | Format-Table -Auto | Out-String -Width 220; cd C:\\KenshiModding; foreach ($i in 3,4,5) { $env:KAH_INSTANCE=\"$i\"; $env:KAH_OWNER=@{3='rig5090-imm26';4='rig5090-imm26-i4';5='rig5090-imm26-i5'}[$i]; powershell -NoProfile -ExecutionPolicy Bypass -File tools\\automation\\kenshi-ctl.ps1 release 2>&1 | Select-Object -Last 2 }; Remove-Item Env:KAH_INSTANCE,Env:KAH_OWNER; Get-ChildItem C:\\KenshiTestRuns\\game*.lock | Select Name",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "$p=Get-CimInstance Win32_Process -Filter \"ProcessId=102524\"; $p.CreationDate; $p.CommandLine; Get-ChildItem C:\\KenshiTestRuns\\agent-host* -ErrorAction SilentlyContinue | Select Name,LastWriteTime | Format-Table | Out-String; Get-ChildItem C:\\KenshiTestRuns -Directory -Filter \"agent-host*\" | Select Name",
+   "why": "The three 5090 lane games, their lane backends and their locks are all stopped. A last check is on a leftover `agent-host.ps1` process, which I'm looking at before touching."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; Remove-Item C:\\KenshiTestRuns\\inflight\\5090-imm26,C:\\KenshiTestRuns\\inflight\\5090-imm26-i4,C:\\KenshiTestRuns\\inflight\\5090-imm26-i5 -ErrorAction SilentlyContinue; powershell -NoProfile -ExecutionPolicy Bypass -File tools\\automation\\kenshi-ctl.ps1 idle \"Shay 2026-10-15: stop all 5090 testing (games, lane backends, locks stopped); only 4080 + offline work continue until he says otherwise\" 2>&1 | Select-Object -Last 2; Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Measure-Object | Select Count",
+   "why": "The three 5090 lane games, their lane backends and their locks are all stopped. A last check is on a leftover `agent-host.ps1` process, which I'm looking at before touching."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The three 5090 lane games, their lane backends and their locks are all stopped. A last check is on a leftover `agent-host.ps1` process, which I'm looking at before touching."
+ ],
+ "event_text_chars": 580
+}

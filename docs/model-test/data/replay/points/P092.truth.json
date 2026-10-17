@@ -1,0 +1,23 @@
+{
+ "id": "P092",
+ "session": "48b778a7",
+ "ts": "2026-10-16T17:22:18.966Z",
+ "class": "relay",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: so it seems llike onyl 4 things have moved to done in the last 1.2 hours. why is that? how can we sp"
+ },
+ "actions": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "",
+   "why": "The recipes for 20-d and 23-e are done, and I've routed them to the operators.\n\n- **23-e:** the old check could never pass. A follower keeps a 40\u201360 u stand-off, and the check required 35 u or less. The new recipe runs a control chase first, then passes at 70 u or less.\n- **20-d:** the destination-change wording never made the NPC answer \"replace\", so there was nothing to confirm after the save and load. The recipe now sends up to three insistence wordings and stops at the first one that works. ...[truncated 468 chars]"
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The recipes for 20-d and 23-e are done, and I've routed them to the operators.\n\n- **23-e:** the old check could never pass. A follower keeps a 40\u201360 u stand-off, and the check required 35 u or less. The new recipe runs a control chase first, then passes at 70 u or less.\n- **20-d:** the destination-change wording never made the NPC answer \"replace\", so there was nothing to confirm after the save and load. The recipe now sends up to three insistence wordings and stops at the first one that works. ...[truncated 468 chars]"
+ ],
+ "event_text_chars": 875
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To tail 245d8ad7 (owner of imm26-4080-i3op22): SETUP-FAIL 20-a from EVENT INBOX 20261016-131540-setupfail-20-a.msg, lane 4080-i3, no ACCEPTED travel_agreement while setting up the trip (propose/accept legs failed, same defect as 14-a and 19-a). Please fold it into the op22 owner's triage. Evidence is at the C:/KenshiTestRuns/imm26-4080/ path named in the event.",
+   "why": "The 4080-i3 operator is owned by live tail 245d8ad7, so the coordinator routes the ticket instead of respawning or steering the isolated lane."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Row 20-a: SETUP-FAIL, ticket 20261016-131540-setupfail-20-a.msg, unblock owner tail 245d8ad7. Not PASS or FAIL.",
+   "why": "The row never ran, so it must not be recorded as a game result."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Move the event file 20261016-131540-setupfail-20-a.msg from inbox/coordinator to inbox/coordinator/delivered/ once the message above is sent.",
+   "why": "The event is handled by routing, so it leaves the inbox and does not re-wake the coordinator."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "20-a is the third SETUP-FAIL with no ACCEPTED travel_agreement (14-a, 19-a, 20-a). Proposal: one root-cause investigation of the propose/accept legs before more trip rows run on 4080-i3. Speed estimate to follow after that investigate pass.",
+   "why": "Three rounds on the same defect meets the rule to question the method and propose the change to Shay at once."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "grep -n ACCEPTED C:/KenshiTestRuns/imm26-4080/ (the 20-a s1/s2 files named in the event)"
+ ]
+}

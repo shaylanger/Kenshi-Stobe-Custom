@@ -1,0 +1,14 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-5090-i3op21 'no runnable 5090-i3 row; lane parked by coordinator #17 until new row scripts (22-b, 25-b, 08-d rerun) exist; handoff kept at C:/KenshiTestRuns/agents/imm26-5090-i3op21.handoff.md; respawn later with lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21'",
+   "why": "The op21 STOPPED-CONTEXT agent has no successor and is intentionally not respawned while i3 has no runnable row, so it is dropped on purpose to clear the no-successor alert and the Stop-hook block; its handoff file is kept for the later respawn."
+  }
+ ],
+ "checks": [
+  "ls /c/KenshiTestRuns/game-3.lock /c/KenshiTestRuns/inflight/5090-imm26 2>&1 | head",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/lane-window.ps1 -Lane i5 -Action show"
+ ]
+}

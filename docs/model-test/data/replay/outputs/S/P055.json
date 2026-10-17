@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add line '#10: imm26-wpL2 DONE (c022ae3) and imm26-wpL2-deploy DONE (30a4ec9): landmark-resume fix (lib/commitment_native_bridge.php, sha 9ac36d57) deployed to 5090 i3/i4/i5 and 4080 i3/i4 lane trees only, live tree/ss-merge untouched, no game launched. Operator note inbox\\operators\\wpL2-deployed.txt asks 4080-i4 (imm26-4080-i4op8) to rerun the 19-a LANDMARK variant (TR_S1, needs --save), expect one post-load OWNED_TRAVEL accepted=1 near -51316 1577 3592 and no local_plan_expired_or_unknown. 5090 rows stay on hold by Shay order.' and update the program ledger entry for wpL2 to deployed",
+   "why": "Handoff and ledger must be updated after every agent report so a context stop loses nothing."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief  (only to confirm imm26-wpL2-deploy status DONE and its inflight marker is gone; if the marker remains, rm C:\\KenshiTestRuns\\inflight\\imm26-wpL2-deploy)",
+   "why": "Make sure the finished deploy agent is not counted as in-flight work and does not block the Stop hook."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to the running 4080-i4 operator imm26-4080-i4op8 (only if the check shows it alive; otherwise rely on the note): 'wpL2 landmark-resume fix is deployed on your lane tree (sha 9ac36d57). Read C:\\KenshiTestRuns\\inbox\\operators\\wpL2-deployed.txt and rerun the 19-a LANDMARK variant (TR_S1 Anywhere you want to go?, with --save) as your next row; expect one post-load OWNED_TRAVEL accepted=1 near -51316 1577 3592 and no local_plan_expired_or_unknown. Record PASS/FAIL with evidence.'",
+   "why": "The inbox note already exists but the operator should be pointed at the one row that validates the fix; the 4080 lanes are allowed and the 5090 stays on hold."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the event-stream waker running; wait for the imm26-4080-i4op8 19-a landmark row result and for the other running fixers (rowtools4, fix10a, fix17bx, reloadrows-A2/B2, op2jc).",
+   "why": "No further spawn is needed; no 5090 sessions (Shay's order) and nothing else is ready to do."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-wpL2-deploy.status",
+  "Get-Content C:\\KenshiTestRuns\\inbox\\operators\\wpL2-deployed.txt",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-i4op8.status"
+ ]
+}

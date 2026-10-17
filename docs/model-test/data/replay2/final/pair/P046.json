@@ -1,0 +1,31 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i5-op7, description \"[case:<tag from op7 brief header>] Lane operator 5090-i5\"; prompt: Read and follow C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op7.brief.md (lane 5090-i5, predecessor imm26-5090-i5-op6). Addendum: NC10 is built and pushed (commit e3ab90a). Before any row, check the NC10 DLL at C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC10\\Stobe.dll has SHA256 E1302B7777BB0DC524351B8466550758B4B29716C8CD858CA56EE08D17180651 (stop and report if it differs), then install it on lane 5090-i5 with the lane install recipe in your brief, only when Kenshi is closed on that lane and its game lock is free. Verify the installed SHA256 after the copy. Then run rows 25-b, 25-a, 22-a and 26-abc with go-row (--allow-retry where the row needs it) and send one RESULT line per row with evidence. Report status with agent-status.ps1. Do not touch Shay's live install, the server tree or the DB.",
+   "why": "NC10 is built but not installed on any lane, and the new 5090-i5 operator (brief written and registered, not yet spawned) is the one that installs it and runs the NC10-dependent rows; the lane operator, not the coordinator, runs the install under its own lane checks."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record NC10 DONE (e3ab90a, DLL SHA256 E1302B77...180651, Hunt homeBuilding fix and No Faction mine fix), op7 spawned on 5090-i5 with the NC10 addendum; keep the wpW-deploy, pi13-pi17 and four lane-operator lines as still running. Also update the program-ledger entry for imm26-nc10 (program-ledger.ps1).",
+   "why": "The ledger and HANDOFF must reflect each agent result as it arrives, so a context cut loses nothing."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "duplicate task-notification for aa97328751e9d9fee",
+   "why": "Its NC10 report was already delivered as a message, so this second notification adds nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-wpW-deploy, imm26-pi13, imm26-pi14, imm26-pi15, imm26-pi16, imm26-pi17, the four lane operators (imm26-5090-i3-hard2b, imm26-5090-i4-hard2b, imm26-4080-i4op7b, imm26-4080-op2j) and the op7 RESULT lines; no other spawn now.",
+   "why": "Those results are still open, and none of them is ready to act on from this event."
+  }
+ ],
+ "checks": [
+  "git -C C:\\KenshiModding log -1 --format=%H%x20%s e3ab90a",
+  "Get-FileHash C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC10\\Stobe.dll -Algorithm SHA256",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 5090-i5",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\operator-warn.ps1 -Register imm26-5090-i5-op7 (confirm it lists op7 on lane 5090-i5)"
+ ]
+}

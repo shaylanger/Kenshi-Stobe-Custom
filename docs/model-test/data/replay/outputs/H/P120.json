@@ -1,0 +1,13 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for agent imm26-fix15bx05cx3 (task a96301375ebef4bae) to finish its own background work; its report is already in hand (SubagentHandback message from a96301375ebef4bae, auto-relayed at 14:58:20 with report=(none)). Do not respawn it and do not run the 05-cx row yet.",
+   "why": "The agent is only waiting on its own background job, its result is interim, the report was already received, and the fixes are offline-only with nothing run live, so there is nothing new to act on until it reports DONE."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-fix15bx05cx3.status (confirm RUNNING vs DONE; path follows the workspace status-file rule and is not shown in the batch)"
+ ]
+}

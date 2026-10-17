@@ -1,0 +1,71 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "Background task b256kvy12 completed on this event, so no waker is running and nothing else will wake the coordinator."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': record imm26-compose2 DONE (composed tree + compose.patch: 93 pass, only the 5 known fails, none new; report at the path confirmed by the first check), clear the waiting-on-compose state, and set next = install on the lane private sites, then lane-isolation-check, then fresh row operators. Also mark compose2 DONE in the imm26 program ledger: exact file name from ls C:/KenshiTestRuns/programs/ (the ledger is outside the repo and not committed).",
+   "why": "HANDOFF and the program ledger are updated after every agent report, and the compose wait is now resolved."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git -C C:/KenshiModding add testing/HANDOFF.md && git -C C:/KenshiModding commit -m 'HANDOFF: imm26-compose2 DONE, composed build to lane private sites' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git -C C:/KenshiModding push origin HEAD:main",
+   "why": "Repo state is committed and pushed right after each change, so the checkpoint survives a context limit."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Only after the checks confirm compose2 DONE with exactly the 5 known fails: apply pending-fixes/npc-immersion-26/compose/compose.patch to the isolated lane private sites only, using the install steps in pending-fixes/npc-immersion-26/compose/NOTES.md, on 5090 i3, i4, i5 and 4080 i3, i4. Per lane: back up changed files, apply the patch, php -l each changed file, restart that lane backend, then health-check it. Known env files: /tmp/stobe-imm26-5090/env.sh (5090 imm26 lane) and /tmp/stobe-standalone4080-i4/env.sh (4080 i4); other lane env paths come from NOTES.md. Never touch /var/www/html/StobeServer, /root/stobe-work/ss-merge, the live DB or Shay's live install.",
+   "why": "Rows must run on the composed build, the isolated lane private sites are the only allowed install targets, and no operator is alive, so the backend restarts are safe."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "tools/automation/lane-isolation-check.ps1 on the 5090 (lanes i3, i4, i5) and on the 4080 (lanes i3, i4), run after the install (args per the script header).",
+   "why": "The handoff lists lane-isolation-check PASS on both rigs as still outstanding, the install makes any earlier output stale, and it gates every row run."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for: install health checks healthy on every lane (5090 i3, i4, i5; 4080 i3, i4) and lane-isolation-check PASS on both rigs. A failing lane is fixed first (the handoff lists the 4080 i3 kenshi.cfg fix) and its operator is not spawned. If any of the 5 known fails is not on the NOTES.md baseline list, stop, send the problem to [case:investigate] first, and run no rows on the affected lane.",
+   "why": "No row runs on an unverified lane, and a new fail must not hide behind the known-fail count; this is the gate for the spawns below."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-4080-op3, description '[case:generate] imm26 4080 i3 rows on composed build', subagent_type kenshi-generator. Brief: on 4080 lane i3, rerun rows 06-e, 08-a, 08-c, 13-a, 13-d, 13-e, 12-a, 12-b, 12-c, 12-d-75b with testing/live-stobe-queue/4080-imm26-row.sh on the composed build. Read agents/imm26-4080-op2c.status first for the old-base results. Real game state only; no server edits outside the lane; no travel-gated rows. One RESULT <row> PASS|FAIL <evidence> line per row. Status via tools/automation/agent-status.ps1 imm26-4080-op3. Output dir C:/KenshiTestRuns/imm26-4080.",
+   "why": "The old-base FAILs on i3 are superseded by the composed build, and the open i3 rows (13-d, 13-e, 12-a..c, 12-d-75b) never ran."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-4080-i4op3, description '[case:generate] imm26 4080 i4 rows on composed build', subagent_type kenshi-generator. Brief: on 4080 lane i4, first add STOBE_NEG_STOBE_LOG to /tmp/stobe-standalone4080-i4/env.sh and restart its php before any deal row (see agents/imm26-4080-i4op.handoff.md). Then run rows 03-c, 10-a, 05-a, 11-a, 11-c with testing/live-stobe-queue/4080-imm26-i4-row.sh on the composed build. Real game state only. One RESULT <row> PASS|FAIL <evidence> line per row. Status via tools/automation/agent-status.ps1 imm26-4080-i4op3. Output dir C:/KenshiTestRuns/imm26-4080-i4.",
+   "why": "Lane i4 had a setup-fail, its deal rows would read the wrong log until the env fix, and its operator is dead, so it needs a fresh operator on the composed build."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i3op3, description '[case:generate] imm26 5090 i3 travel rows on composed build', subagent_type kenshi-generator. Brief: on 5090 lane i3, rerun 19-c and 20-a (old-base FAILs). Read agents/out/imm26-travel-blocker first; rows 21, 23-a, 23-c, 23-d run only if the travel accept fix is in the composed build, otherwise mark them GATED and do not run them. Real game state only; no server edits outside the lane. One RESULT <row> PASS|FAIL <evidence> line per row. Status via tools/automation/agent-status.ps1 imm26-5090-i3op3. Output dir: the i3 output dir named in agents/imm26-5090-i3op.handoff.md.",
+   "why": "The i3 travel rows failed on the old base and the dead operator left them open; travel-gated rows wait for the fix."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i4op3, description '[case:generate] imm26 5090 i4 rows on composed build', subagent_type kenshi-generator. Brief: on 5090 lane i4 (helper testing/live-stobe-queue/5090-i4-imm26-lib.sh, rows C:/KenshiTestRuns/imm26-5090-i4/rows), run 18-a, 18-c, 15-a, 15-b, 15-c, 19-a, 19-b on the composed build. Hold 19-c, 20-a, 20-c and 21-a until the travel accept fix is in the build (agents/out/imm26-travel-blocker). Real game state only. One RESULT <row> PASS|FAIL <evidence> line per row. Status via tools/automation/agent-status.ps1 imm26-5090-i4op3. Output dir C:/KenshiTestRuns/imm26-5090-i4.",
+   "why": "The i4 rows were marked on the old base and the not-yet-run rows (18-a, 18-c, 15-a, 15-b) are still open, so the lane needs an operator on the composed build."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i5op3, description '[case:generate] imm26 5090 i5 rows on composed build', subagent_type kenshi-generator. Brief: on 5090 lane i5, recheck IMM-01-c, IMM-02-c, IMM-05-a and the still-gated i5 rows from C:/KenshiTestRuns/imm26-5090-i5/mk-op2.sh against the composed build. Do not apply mk-op2.sh blindly; re-check each assertion first. Real game state only. One RESULT <row> PASS|FAIL <evidence> line per row. Status via tools/automation/agent-status.ps1 imm26-5090-i5op3. Output dir C:/KenshiTestRuns/imm26-5090-i5.",
+   "why": "The i5 FAILs were recorded on the old base and must be rechecked on the composed build before any mark is applied."
+  }
+ ],
+ "checks": [
+  "ls C:/KenshiTestRuns/agents/out/imm26-compose2/ (the inbox line's path is malformed; confirm latest.md exists before reading)",
+  "tail -3 C:/KenshiTestRuns/agents/imm26-compose2.status (expect DONE; if it still says RUNNING, the relay is ahead of the status file, so verify before trusting it)",
+  "ls C:/KenshiTestRuns/inflight/ (expect no imm26-compose2 marker)",
+  "grep -n -E 'FAIL|known|new' on the compose latest.md, compared with the 5-known-fail baseline in pending-fixes/npc-immersion-26/compose/NOTES.md (expect none new)",
+  "sed -n 1,80p C:/KenshiModding/pending-fixes/npc-immersion-26/compose/NOTES.md (install steps and per-lane env files)",
+  "git -C C:/KenshiModding log --oneline -3 && git -C C:/KenshiModding status --short pending-fixes/npc-immersion-26 (confirm compose.patch state)",
+  "Read the latest lane-isolation-check output for 4080 and 5090 (read-only; it is stale after the install, so the run after install is the gate)",
+  "Read C:/KenshiTestRuns/agents/out/imm26-travel-blocker (is the travel accept fix in the composed build?)",
+  "ls C:/KenshiTestRuns/programs/ (exact ledger file name for the edit-file step)"
+ ]
+}

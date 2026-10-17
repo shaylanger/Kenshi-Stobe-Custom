@@ -1,0 +1,14 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on task bve0k8qy8 (failed, exit 15).",
+   "why": "Exit 15 is SIGTERM from the coordinator's own earlier pkill -f 'event-wait.sh$' that replaced the bare-& waker; the proper replacement waker bp0tqjyzv was started right after, so this is the expected death of the old waker, not a real alert."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c \"pgrep -af 'event-wait.sh$'\"",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

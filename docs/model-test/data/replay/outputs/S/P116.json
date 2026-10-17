@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on the completed tail-relay.ps1 background command (bq15px3j6): it only confirms the i3op23 DONE relay was written. The new coordinator decides the NC25 5090 install and the 22-b rerun with a reachable gate; this tail spawns and decides nothing.",
+   "why": "Tail session rules: the relay is delivered, nothing further to do for imm26-4080-i3op23 except let the 5-minute ack grace run out."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding && powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/tail-wait.ps1 -Session 60ad9d7d-290e-4ca0-9909-9c33f627d722 >/dev/null 2>&1; echo (run_in_background)",
+   "why": "The previous tail-wait exited when it reported i3op23, and the Stop hook still blocks while hk2, op9p, fix20a19e and fix26f11b are running, so exactly one new background wait must be armed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-5090-i4-hk2, imm26-5090-i5-op9p, imm26-fix20a19e and imm26-fix26f11b to finish; relay each with tail-relay.ps1 and SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator. Silent 10 min: message it; silent 20 min: TaskStop it and tell the new coordinator.",
+   "why": "These four agents are still owned by the tail and their results have not been relayed yet."
+  }
+ ],
+ "checks": [
+  "ls -la /c/KenshiTestRuns/tail/ | grep 60ad9d7d; ls /c/KenshiTestRuns/inbox/coordinator | tail -5",
+  "for a in imm26-5090-i4-hk2 imm26-5090-i5-op9p imm26-fix20a19e imm26-fix26f11b; do head -5 /c/KenshiTestRuns/agents/$a.status; done"
+ ]
+}

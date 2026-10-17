@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add '#10 wpL2-deploy DONE: wpL2 (landmark resume fix, lib/commitment_native_bridge.php, commit 30a4ec9 pushed) on 5 lanes (5090 i3/i4/i5, 4080 i3/i4), sha 9ac36d57, backups in <lane>/bak-pre-wpL2; 19-a LANDMARK rerun on 4080-i4 per inbox/operators/wpL2-deployed.txt; 5090 rows stay on hold (Shay order)'",
+   "why": "Shay's rule is to update HANDOFF Right now after every agent report, and the deploy changes what the lanes run."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no SendMessage to the 4080-i4 operator (imm26-4080-i4op8); the note inbox/operators/wpL2-deployed.txt is already the channel",
+   "why": "Isolated test arms get no coordinator input, and the deploy agent already wrote the operator note."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "the 4080-i4 operator's RESULT line for the 19-a landmark variant: PASS needs one post-load OWNED_TRAVEL with accepted=1 near -51316 1577 3592 and no local_plan_expired_or_unknown",
+   "why": "The deploy is done but the fix is only proven once the landmark row runs on the deployed build."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "no spawn: imm26-fix10a and imm26-fix17bx are still RUNNING in scratch copies and do not touch compose",
+   "why": "The deploy agent confirmed those fixers do not touch compose, so nothing new is needed now."
+  }
+ ],
+ "checks": [
+  "grep -n 'DONE\\|sha\\|FAIL\\|bak-pre' C:/KenshiTestRuns/agents/out/imm26-wpL2-deploy/latest.md | head -20",
+  "ls C:/KenshiTestRuns/inflight/ C:/KenshiTestRuns/inbox/operators/ | grep -i 'wpL2\\|4080-i4\\|inflight'",
+  "git -C C:/KenshiModding log -1 --oneline"
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none (imm26-u4b-route DONE notice)",
+   "why": "The u4b-route DONE (ba94c6a) was already handled before this batch: op9i was messaged the rerun instruction and HANDOFF was updated."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background)",
+   "why": "Waker bne6vq6c7 completed, but imm26-5090-i5-op9i and imm26-4080-i4op11 are still RUNNING, so a waker must stay armed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for op9i's 26-a, 22-a, 26-b, 26-c rerun after u4b-route, and for op11's next status update",
+   "why": "op9i (status 02:28) was told to rerun those rows after its current row; op11 (status 02:31) is on 08-d; neither is past the 10-min stale limit yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-5090-i5-op9i.status | cut -c1-300"
+ ]
+}

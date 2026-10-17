@@ -1,0 +1,21 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the single tail-wait (tail-wait.ps1 -Session ded82aa7-d30d-451d-8954-28e72d95c908) armed over imm26-5090-i3op20, imm26-4080-i4op12b and imm26-4080-i3op20 and reply to the next relay only when one finishes",
+   "why": "The three lane operators are still RUNNING and the tail may only end after each has finished and its relay is delivered; the Stop-hook blocks are not a reason to reply again."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Reviewed the conversation since the handoff and updated the PI list (up to 3 new big ideas, none applied). You are right that each Stop-hook block adds a turn and the context gets re-read; I will stop answering per block and hold one background wait, and I will close the tail after the last agent relay is delivered. Nothing spawned, nothing committed.",
+   "why": "Shay asked for the review and the reason for the growing chat, and the reply goes to his relay session as required."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding status --short docs/PROCESS_IDEAS.md process-ideas",
+  "sed -n 1,60p C:/KenshiModding/docs/PROCESS_IDEAS.md",
+  "grep -n -i \"tail closing\" C:/KenshiModding/testing/AGENT_PROMPTS.md",
+  "tail -3 /c/KenshiTestRuns/tail/ded82aa7-d30d-451d-8954-28e72d95c908.autorelay.log"
+ ]
+}

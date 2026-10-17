@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-tripresume-a to report DONE (status file C:/KenshiTestRuns/agents/imm26-tripresume-a.status)",
+   "why": "imm26-tripresume-a is still running in /root/imm26/compose, so the 10-a quote fix must not be applied to that tree until it finishes."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-fix-pq DONE (commit e7e70c4; pending-fixes/imm26-fix-pq/apply.py + tests/imm26_pq_quote_regression.php); pending step = apply to compose after tripresume-a, deploy to the 10-a lane, rerun 10-a",
+   "why": "Every agent report updates the resumable checkpoint at once, so the pending 10-a step is not lost."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "after tripresume-a DONE: WSL python3 /mnt/c/KenshiModding/pending-fixes/imm26-fix-pq/apply.py /root/imm26/compose ; then php -l on the touched file and stobe-tests with pattern repair|pq_quote|social_dialogue",
+   "why": "Puts the stored-quote suffix fix into the compose tree with its anchors asserted, so the 10-a rerun can prove the fix on real model output."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "rerun row 10-a on the lane that owns it (lane-owners.json), after the compose patch is deployed to that lane (deploy.sh, no DLL change)",
+   "why": "The fix is only proven by a real 10-a rerun on the lane, not by the offline test alone."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding show --stat e7e70c4 | head -20",
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-tripresume-a.status",
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-fix-pq.status"
+ ]
+}

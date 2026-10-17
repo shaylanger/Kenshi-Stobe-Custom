@@ -1,0 +1,41 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Edit C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md row IMM-08-e (set the Status cell by column index, not by line sed, so shifted cells are not repeated): SETUP-FAIL (test/recipe defect, not a server defect). Evidence: sfG report C:\\KenshiTestRuns\\agents\\out\\imm26-sfG\\latest.md. The only Cind-speaker tick on 4080-i3 op20 was a react=drawn_weapon reaction turn (req_6ad24e8b959bd, gamets 283395). bored.php never lets a reaction turn claim a follow-up. Needs: rd_08e in rowtools/reloaddefs_a.sh must re-quiet, re-sheathe and hold Cind across chunks, and the tick counter must ignore react= turns. Then git add that file, commit it as shaylanger with the item number, and push.",
+   "why": "sfG proved no claim gate refused anything, so the row stays unproven until the recipe is fixed and rerun; the table should say so rather than blame the server."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-fix08e, description '[case:generate] 08-e recipe fix: quiet scene + reaction-aware tick counter'. Brief: Fix row 08-e per C:\\KenshiTestRuns\\agents\\out\\imm26-sfG\\latest.md; read it first. Offline only: no game or lane use, never Shay's live install, server tree or DB. Edit only rowtools files under C:\\KenshiModding\\testing\\live-stobe-queue\\imm26-assert\\rowtools (rd_08e in reloaddefs_a.sh, plus tripdefs.sh tr_quiet use or a new helper). Do not run or edit a script that a queued or running list uses; add new files or a candidate copy. Required changes: (1) at each of the 8 chunks, re-run quiet (clear strangers), sheathe Shay's weapon, and hold Cind (stay near Shay, not NULL_TASK wandering), so no drawn-weapon reaction can fire. (2) The tick counter and checker must not count a tick whose URI has react=; they count only mode=autochat bored/claim ticks. (3) Stop cutting cind_ticks_log.txt at 260 characters; keep the full URI. (4) Add a guard that prints SETUP-FAIL if a react=drawn_weapon turn for Cind appears, and never weaken the row's assertion. (5) Check the unverified side note in the sfG report: the logged bored chance is 85 per tick, not the 100 in bored_chance.txt. Report whether the bored_chance setting is applied; do not change server behaviour. Run the existing selftest and --dry for the row. Checkpoint every ~40k tokens, commit and push as shaylanger, keep status with agent-status.ps1 imm26-fix08e, and write an operator note C:\\KenshiTestRuns\\inbox\\operators\\08e-ready.txt giving the one-call command.",
+   "why": "A recipe, counter and fixture defect needs a small row-script package (<=120k tokens), and fixing it now lets a lane run 08-e instead of idling."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Write C:\\KenshiTestRuns\\inbox\\operators\\4080-i3-08e-hold.txt: 08-e on 4080-i3 is a recipe defect (sfG), not a server defect. Do not rerun the old rd_08e recipe. Mark the row SETUP-FAIL once if you have not already and take the next runnable row. imm26-fix08e is rewriting the recipe; a ready note will follow in inbox\\operators\\08e-ready.txt. Release C:\\KenshiTestRuns\\claims\\08-e only if you hold it and are not running it.",
+   "why": "The Shay-ordered rule is that no lane idles on a stuck row, so the 4080-i3 operator gets an inbox note, not a steering message, and moves on."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "Confirm that imm26-sfG status is DONE (read C:\\KenshiTestRuns\\agents\\imm26-sfG.status). If it is not DONE, run powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 imm26-sfG DONE 'ROOT CAUSE 08-e = reaction turn counted as tick; recipe defect' 'report delivered' 'C:\\KenshiTestRuns\\agents\\out\\imm26-sfG\\latest.md' 'imm26-fix08e spawned'",
+   "why": "The report came in as a hand-back, so the agent is finished and its inflight marker must not trigger the Stop hook or a pointless respawn."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Edit C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' and the program ledger C:\\KenshiTestRuns\\programs\\<imm26 ledger>.json (the ledger file name is not in the replay input, so look it up with program-ledger.ps1): record sfG DONE, root cause of 08-e (recipe defect, nothing for Shay to decide), imm26-fix08e RUNNING, and the 4080-i3 note sent.",
+   "why": "State lives in files and must be updated after every agent report."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Keep the waker running: bash tools/automation/event-wait.sh (WSL, background). Restart it if this event woke it.",
+   "why": "Four lanes and several agents are in flight, so the waker guard requires a running waker."
+  }
+ ],
+ "checks": [
+  "cat C:\\KenshiTestRuns\\agents\\imm26-sfG.status",
+  "ls C:\\KenshiTestRuns\\claims",
+  "grep -n \"IMM-08-e\" C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md | cut -c1-120",
+  "git -C C:\\KenshiModding status --short testing/live-stobe-queue/imm26-assert/rowtools"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-idle-5090-i3 \"lane intentionally not running: 5090-i3 held by Shay's order (one lane per rig, only 5090-i5 active); operator imm26-5090-i3-hard2c never ran; same condition acked a few minutes ago\"",
+   "why": "The LANE IDLE 5090-i3 alert is the same condition already acked (lane held by Shay's order, not a stuck operator), so no operator message or respawn is needed, only closure so it does not block the Stop hook."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker just completed and work is still in flight (5090-i5 op9b and 4080-i4 op9 running), so it must be re-armed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-scan.ps1 (confirm no other open alerts besides lane-idle-5090-i3)",
+  "head -3 C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2c.status (confirm it is not RUNNING with real work)"
+ ]
+}

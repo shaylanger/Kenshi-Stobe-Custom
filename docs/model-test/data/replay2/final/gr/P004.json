@@ -1,0 +1,37 @@
+{
+ "event_class": "other",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/savever.py a5f5a157aa21dff07 A3 ''",
+   "why": "Save the SUITE-A3 verify verdict and usage the same way round A2 was saved."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/collect.py A3 SUITE-A3; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiTestRuns/invest/suite/tools/state-check.sh /mnt/c/KenshiTestRuns/invest/suite/A3/state-after.txt",
+   "why": "Collect the round rows and confirm suite state after the verify, as was done for A2."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- sed -i 's/^Done rounds:.*/Done rounds: B1 (ticket SUITE-B1b), B2, B3, A1 (PASS), A2 (PASS), A3 (PASS)/' /mnt/c/KenshiTestRuns/invest/suite/PROGRESS.md",
+   "why": "Record A3 as done with its verify verdict in the suite progress file."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name: a3-phase1-patch. Description: [case:patch] [ticket:SUITE-A3] phase 1 producer restore. Brief: Read C:\\KenshiTestRuns\\invest\\suite\\A3\\report.md, the Phase 1 section and its confirmation checks only, and implement Phase 1 as an anchored patch: restore the LocalTravel producer in the build source so the Stobe.dll built from it writes travel_destinations into Context.cpp, plus the build-script guard the report specifies. Put the patch and a status file under pending-fixes/, not in the live trees. Run the compile check only, with build output to C:\\StobeBuild\\out. Do NOT install any DLL, launch Kenshi, or touch the server tree or the database. Report the patch path, the compile result, and each confirmation check with PASS or FAIL and its evidence.",
+   "why": "Shay's standing rule is to implement fixes now; Phase 1 is the root-cause fix, kept isolated until it is reviewed and installed."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SendMessage to Shay's relay session: SUITE-A3 verified PASS. Mouse's 'Observed local choices: []' loop is in the DLL, not the server: the Stobe.dll in use (D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\mods\\Stobe\\Stobe.dll, 3,182,080 bytes) has no travel_destinations producer, because the build source (/root/STOBE-src/src) never got LocalTravel.cpp; the workspace components/STOBE/src/Context.cpp has it. Phase 1 (restore the producer) is being patched in isolation and is not installed. Two decisions, asked together: (1) OK to install the reviewed DLL to the Main Steam install once it passes its checks? (2) SUITE-A2 (the bare 'Tengu' seed row gives the Emperor persona; server-side, live tree and DB) is verified but unfixed: fix it now under the server rules, or wait?",
+   "why": "Shay needs the verified root cause and the two real decisions in one message, and the install and the server fix both need his call."
+  }
+ ],
+ "checks": [
+  "grep -c -a travel_destinations \"D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\mods\\Stobe\\Stobe.dll\" (expect 0)",
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'ls /root/STOBE-src/src | grep -ci local' (expect 0)",
+  "grep -n 'set SOURCES=' C:\\StobeBuild\\build_portable.bat",
+  "git -C C:\\KenshiModding status --short components/STOBE",
+  "tasklist | grep -i kenshi (must be empty before any install)"
+ ]
+}

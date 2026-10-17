@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP  (background Bash task)",
+   "why": "event-wait exited on this relay, so the waker must be restarted at once or later events go unseen."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add a line: imm26-compose-fix-batch2d DONE (fixes 20-a, 15-a, far-NPC, 14-a, 19-a, 24-a, 24-b in compose patch a299993, deployed to all 5 lane sites); reruns of 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a/b and travel rows >80u in progress via imm26-rows-b2d; 13-d RETURN_ITEM still open (batch2e); imm26-rowtools2 and batch2e queued for free slots",
+   "why": "HANDOFF must record every agent report at once, and batch2d's result is now the canonical state."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/programs/imm26.json: mark imm26-compose-fix-batch2d DONE with outputs = compose patch a299993 and its report; set the rerun rows as the next work package",
+   "why": "the program ledger is the state file and must match HANDOFF after every agent report."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:generate] imm26-rows-b2d'. Brief: Rerun the batch2 rows on the lanes that now carry compose patch a299993 (5090 i3-i5, 4080 i3-i4). Rows: 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a 24-b, plus every travel row above 80u. Start from the batch2d report (the relay message was truncated; find it under C:/KenshiTestRuns/agents/out/imm26-compose-fix-batch2d*). For each row print one line RESULT <row> PASS|FAIL <evidence>, judged on real game state, never on words; never weaken an assertion; no unchanged retries. Keep your own status current with tools/automation/agent-status.ps1 imm26-rows-b2d RUNNING|DONE|FAILED|STOPPED-CONTEXT. Run testruns-sweep.ps1 when finished. Save your report with save-report.ps1 (agents/out/imm26-rows-b2d).",
+   "why": "the batch2d fixes are unverified until these rows pass on the deployed patch, and this is the one free agent slot while the rig lanes would otherwise sit idle."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-compose-fix-batch2d.status",
+  "ls C:/KenshiTestRuns/agents/out/ | grep compose-fix-batch2d",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-rollcall.ps1 | cut -c1-220 | head -30"
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "id": "P077",
+ "session": "bea16970",
+ "ts": "2026-10-16T07:49:04.247Z",
+ "class": "lane-alert",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 5090-i5 \"op9h alive: RUNNING, evidence towns200.txt 6 min ago (14-c after NC15 install)\" | tail -1; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "Both operators are alive, and I acked the LANE IDLE alert on 5090-i5.\n\n- **`op11` (4080-i4):** it updated at 01:49 and is on its fourth attempt at 13-b. The first three failed on script bugs, which it fixed in `tripdefs.sh`:\n  - the leaver Cind wasn't in the player faction;\n  - the N2 hold was read before the wake;\n  - Hub outlaws were knocking out the leaver.\n- **`op9h` (5090-i5):** it is working on 14-c after the NC15 install. Its newest evidence is `towns200.txt`, written about 6 minutes ago....[truncated 21 chars]"
+ ],
+ "event_text_chars": 921
+}

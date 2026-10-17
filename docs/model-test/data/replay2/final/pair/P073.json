@@ -1,0 +1,43 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/AGENT_PROMPTS.md, standard block: add the rule 'a row-tool operator agent takes at most 4 test rows per launch; a larger batch is split into successor agents with the same work dir' (PI-30). Docs only; change no timeout, stall, idle or dead-agent line.",
+   "why": "PI-30 is a sizing rule for agent briefs and weakens no catch; Shay's message does not name the confirmed numbers, so only PI-30, the item both coordinators proposed, is applied."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "first: git -C C:/KenshiModding config user.email must print shaylanger2@gmail.com (if not, stop and tell Shay); git -C C:/KenshiModding status --short must list only testing/AGENT_PROMPTS.md. Then: git -C C:/KenshiModding add testing/AGENT_PROMPTS.md && git -C C:/KenshiModding commit -m 'PI-30: cap row-tool operator agents at 4 rows per launch' && git -C C:/KenshiModding push origin HEAD",
+   "why": "One fix per commit with its item number, pushed right after the commit; handoff files and logs stay uncommitted."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/process-ideas.ps1 review <decisions file path that testing/AGENT_PROMPTS.md step 2b names>; decisions: PI-30 applied with the commit id from the push, PI-26 declined, PI-29, PI-31 and PI-32 left open for Shay, all other entries unchanged.",
+   "why": "process-ideas.ps1 is the recorded place for PI decisions, so session-start stops listing PI-30 as open without hand-editing docs/PROCESS_IDEAS.md; the decisions file path is not in this file, so read it from step 2b before running."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': PI-30 applied and pushed (commit id), PI-26 declined, PI-29/31/32 waiting for Shay's yes, 5090-i5 imm26-5090-i5-op9g and 4080 imm26-4080-i4op10 still RUNNING under this tail, waker re-armed.",
+   "why": "HANDOFF must reflect the state after every event, not only at the context limit."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SendMessage to Shay's relay session: 'PI-30 is applied and pushed (row-tool operator agents take at most 4 test rows per launch; commit <id>). Your message did not name the confirmed numbers, so I applied only PI-30, the item that weakens no catch. Still open, need your exact yes: PI-29 (meter should call tail-close.ps1 at the tail limit; it edits your global ~/.claude hook, outside the Kenshi paths); PI-31 (no AGENT ORPHANED line for in-session agents; weakens the dead-agent catch); PI-32 (auto idle reason when an operator spawns; weakens the idle catch). PI-26 hook version stays declined. Tell me which of 29, 31, 32 to apply, or which numbers you meant by confirmed. Lanes unchanged: 5090-i5 op9g and 4080 i4op10 still running.'",
+   "why": "Reports exactly what was and was not applied, and asks once, together, for the items that touch a catch or a global hook."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-5090-i5-op9g and imm26-4080-i4op10 result relays; re-arm the event-wait waker (bash tools/automation/event-wait.sh as a background task, never a bare &) on each wake.",
+   "why": "Both lanes are RUNNING under this tail and nothing else is ready; the docs-only edits do not touch their scripts."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding config user.email",
+  "git -C C:/KenshiModding status --short",
+  "grep -n -i 'row' C:/KenshiModding/testing/AGENT_PROMPTS.md | head -20",
+  "grep -n -A3 '2b' C:/KenshiModding/testing/AGENT_PROMPTS.md",
+  "grep -n -E 'PI-(2[6-9]|3[0-2])' C:/KenshiModding/docs/PROCESS_IDEAS.md",
+  "head -4 C:/KenshiTestRuns/agents/imm26-5090-i5-op9g.status | cut -c1-250"
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "Append 5090-i5 to C:\\KenshiTestRuns\\lanes.held (match the existing format of the file, which lists 5090-i3, 5090-i4, 4080-i3). Game stays up on NC12 with the lock held.",
+   "why": "Every remaining i5 row (26-a 26-b 26-c 22-a) needs a native fix, so a NO-OPERATOR alert would only repeat until NC13 exists; the held list suppresses it."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 5090-i5 'LANE NO-OPERATOR expected: op9d finished (STOPPED-CONTEXT handoff written); all remaining i5 rows need a native fix; imm26-nc13-investigate running; idle reason recorded 60 min; 5090-i5 added to lanes.held; will release and staff one operator once NC13 is installed'",
+   "why": "Closes the new LANE NO-OPERATOR alert with the action taken; the earlier lane-idle-5090-i5 alert was already acked at 23:52, and the exact id of the new alert is not in the input, so ack by subject."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-nc13-investigate completion notification (a72d7afc149d84b9e). Then spawn the NC13 fixer with [case:patch], install NC13 at a clean boundary, remove 5090-i5 from lanes.held, and spawn one 5090-i5 operator for 26-a 26-b 26-c 22-a.",
+   "why": "The rows cannot run on NC12, and the lane must not be re-staffed before the root cause is known. The waker stays armed for the 4080 i4op10 agent and the investigator."
+  }
+ ],
+ "checks": [
+  "cat /c/KenshiTestRuns/lanes.held",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "tail -n 3 /c/KenshiTestRuns/agents/imm26-nc13-investigate.status"
+ ]
+}

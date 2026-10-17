@@ -1,0 +1,26 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Not confirmed yet. I am checking all five lanes now (5090 i3, i4, i5; 4080 i3, i4), starting with the 5090 lane that looks stalled. I will send you each lane's state and the row it is on. A lane with no row running gets a fresh operator on its whole row list at once.",
+   "why": "Shay asked a direct question, and the honest answer is that all lanes are not confirmed running; the stalled 5090 lane must be verified rather than assumed."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-stall-inv, description starts with [case:investigate]. Brief: find which 5090 lane (i3, i4 or i5) has no row running and why (last RESULT line, go-batch log, operator status file under C:\\KenshiTestRuns\\agents). Then restart that lane's operator on its whole row list through go-batch.sh, one RESULT line per row, one failed attempt per row then record and move on. Report to agents\\out\\imm26-5090-stall-inv via save-report.ps1, hand back at most 8 lines.",
+   "why": "A lane that looks stalled is odd behaviour, so routing says investigate first, and no rig may sit idle more than 2 min while work exists, so the lane gets an operator in the same step."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Leave the running event-wait.sh waker as it is; restart it only if the check shows it is dead.",
+   "why": "The waker is already running in the background and a restart is not needed for this question."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ssh 4080 \"C:\\KAH\\ctl.ps1 status -Instance 3\" and the same for -Instance 4 (read-only lane state on the 4080)",
+  "tail -n 3 on the newest go-batch log of each 5090 lane (i3, i4, i5) to see the last RESULT line and its time"
+ ]
+}

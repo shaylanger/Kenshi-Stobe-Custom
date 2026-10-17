@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "The waker task bjikfnh8e just completed with exit 0, so no event waker is running while imm26-fix15bx05cx2 and the other tail-owned work are still in flight; restart it at once."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-fix15bx05cx2 completion or status notification, and for any new relay, alert or stall event from the restarted waker",
+   "why": "The fresh fixer was already spawned to replace the stopped imm26-fix15bx05cx, and its result or a new event is the next thing that changes the state."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "tail -c 2000 C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\3a21a7b9-2954-4145-be31-079880e2e887\\tasks\\bjikfnh8e.output"
+ ]
+}

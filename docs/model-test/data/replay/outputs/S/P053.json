@@ -1,0 +1,24 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; .\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3-hard2b -Report C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md -Summary \"imm26-5090-i3-hard2b STOPPED-CONTEXT (~150k): 10-a FAIL marked; handoff file has the state; next rows 19-ax 02-cx 05-cx 01-bx 01-cx 11-b. Needs a fresh successor (imm26-5090-i3-hard2c or next free name).\" 2>&1 | Select-Object -Last 1",
+   "why": "This session is a TAIL that owns the agent, so the stopped result must be relayed to the new coordinator via tail-relay.ps1 (the handoff.md is the saved report file); the tail itself spawns nothing."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to kenshimodding-76 (new coordinator): \"TAIL-RELAY from tail 6d1f3011: imm26-5090-i3-hard2b STOPPED-CONTEXT at 2026-10-15 20:49 (context ~150k). Latest: 10-a FAIL marked. Handoff: C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.handoff.md. Next rows for the successor: 19-ax 02-cx 05-cx 01-bx 01-cx 11-b. No successor exists yet, so the Stop hook and respawn todo will flag it. Please respawn a FRESH agent (e.g. imm26-5090-i3-hard2c) from the handoff file, register it in lane-owners.json for the i3 lane, and tail-ack.ps1 -Agent imm26-5090-i3-hard2b. I am not respawning it (tail spawns nothing). Still owned by me and running: imm26-5090-i4-hard2b2, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-fix19.\"",
+   "why": "The new coordinator must respawn the 5090-i3 operator so the lane does not sit idle (also avoids a LANE IDLE / no-successor alert), and a tail must not spawn."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Start a new single background wait (Bash run_in_background) polling status files of the four remaining owned agents: cd /c/KenshiTestRuns/agents; for i in $(seq 1 900); do for a in imm26-5090-i4-hard2b2 imm26-4080-op2jb imm26-4080-i4op7c imm26-fix19; do if head -1 $a.status 2>/dev/null | grep -qE '\\| (DONE|FAILED|STOPPED-CONTEXT) \\|'; then echo \"FINISHED $a: $(head -1 $a.status)\"; exit 0; fi; done; sleep 2; done; echo TIMEOUT",
+   "why": "The previous wait just fired and the tail must keep one waker armed for the remaining agents; i3-hard2b is removed from the list because it is finished and relayed."
+  }
+ ],
+ "checks": [
+  "head -c 2500 /c/KenshiTestRuns/agents/imm26-5090-i3-hard2b.handoff.md",
+  "ls /c/KenshiTestRuns/respawn/ | grep i3-hard2"
+ ]
+}

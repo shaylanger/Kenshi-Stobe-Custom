@@ -1,0 +1,31 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-pilotC: Coordinator #16. Shay's order (relayed by tail #15) extends your brief; you already own tools/automation/cost-audit.py, so do it in the same file, do not spawn a second agent. (1) Add --since and --until (local date or ISO time) if missing. (2) Redo the window 2026-10-14 00:00 to now (16 Oct) ONLY; ignore every earlier run. (3) Rebuild ledger.md, ledger.csv and the docs copy. (4) Lane operators (all imm26-*op* agents) as their own category: Sonnet-high actual cost per operator, per operator-hour, and per row where countable; coordinators, and investigators/fixers/recipe agents, separately. (5) Haiku-high what-if for operators using the HANDOFF table ratio AND a sensitivity case where Haiku needs 1.5x and 2x the turns. (6) Operator cost split by cache read, cache write and output. (7) Price the claude-fable-5-1 messages only if a price is in docs/MODEL_ROUTING.md; otherwise list them separately for the window. (8) Recheck 3 totals by hand from the transcripts. Report: does a Haiku-high lane operator change cost, and what does that imply for the pilot.",
+   "why": "Shay's order asks for a cost audit redo on the 14-16 Oct window; pilotC already owns cost-audit.py, so extending it avoids a file conflict."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-pilotA: Coordinator #16. Shay's order (relayed by tail #15) adds an audit to the shadow ledger. Add these columns to the Haiku pilot shadow ledger (the path HANDOFF Right now gives as C:\\KenshiTestRuns\\pilot\\haiku-i4erdicts.csv; check the exact name with ls first): row, lane, model, start, end, wall_s, tokens, cost, operator_verdict, checker_result, agree, false_claims_n, notes. Count the same way for the Haiku lane imm26-5090-i4-hk1 and the paired Sonnet lane 5090-i3. COST: tokens and API-price equivalent per row and per hour, via cost-audit.py on the pilot agent transcript. TIME: wall seconds per row, rows per hour, idle gaps, time to first row after start. QUALITY: verdict agreement with the checker RESULT line per row, rows completed, escalations, SETUP-FAIL diagnosis quality against the Sonnet lane diagnosis of the same row, handoff and report quality. FALSE/INCORRECT INFO: every claim in status lines, TESTS-style notes, relays and the final report checked against evidence files (wrong verdicts, invented evidence paths or numbers, wrong done claims, wrong cause statements); count per row and per report, same counting for the Sonnet lane. Do not launch Kenshi or run rows. Tell the coordinator when the tooling is ready.",
+   "why": "Shay's order requires the pilot to audit cost, time, quality and false claims per row on both lanes, and pilotA is the agent building the shadow-mode tooling now."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to uds:\\\\.\\pipe\\LOCAL\\cc-msg-bdae596d58e6afcdfa0a54295c30a827: Coordinator #16 received Shay's order via the tail. Cost audit redo (14 Oct 00:00 to now, with --since/--until) is assigned to imm26-pilotC, which owns cost-audit.py. The pilot audit columns and counting rules are assigned to imm26-pilotA. The Haiku pilot operator will be spawned once pilotA reports the tooling ready. The side-by-side summary goes to Shay when about 3-4 h of pilot rows exist, and the cost answer goes to Shay when pilotC reports.",
+   "why": "The tail sent the order and needs to know it is being carried out and who owns each part."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the handbacks of imm26-pilotC (cost redo) and imm26-pilotA (pilot audit tooling).",
+   "why": "Both agents are still running and their results decide the cost answer and the pilot audit setup; the Haiku operator spawn waits on pilotA."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'grep -n \"add_argument\\|since\\|until\" /mnt/c/KenshiModding/tools/automation/cost-audit.py | head -40'",
+  "tail -3 /c/KenshiTestRuns/agents/imm26-pilotC.status",
+  "tail -3 /c/KenshiTestRuns/agents/imm26-pilotA.status",
+  "ls /c/KenshiTestRuns/pilot"
+ ]
+}

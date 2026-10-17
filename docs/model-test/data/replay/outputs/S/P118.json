@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "PILOT-ESCALATE 05-cx (lane 5090-i4, agent imm26-5090-i4-hk2, SETUP-FAIL: E scene not empty at E1, 'Malzin (female)' listed under Nearby People Awareness): no new action",
+   "why": "setupfail.ps1 list already shows 05-cx (needs=recipe, owner=imm26-inv15bx, state=planned) and the live fixer imm26-fix15bx05cx2 is already building the 05-cx keep-regex/15-bx v3 scene candidates, so the ticket is owned and nothing is unowned, same pattern as the 24-c and 23-e escalations."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "The waker background task just completed and agents plus the hk2 pilot are still in flight, so the waker must be running again before the turn ends."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list | Select-String '05-cx'",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-fix15bx05cx2.status"
+ ]
+}

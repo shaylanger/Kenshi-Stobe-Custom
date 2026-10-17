@@ -1,0 +1,36 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: '[case:investigate] imm26-sfQ 20-d no pending_change (round 2)'. Prompt: 'You are imm26-sfQ, a fresh offline investigator (no lane use, no installs, no builds). Standard block C:/KenshiModding/testing/AGENT_PROMPTS.md (agent-status.ps1 imm26-sfQ RUNNING|DONE...). Use codemaps (tools/automation/codemap.sh) for big files. FACT: row 20-d on lane 5090-i3 went SETUP-FAIL at 11:47:24: the NPC never recorded a pending plan change for the change request (no pending_change in travel_alternatives; needs the 20-a first leg). Evidence C:/KenshiTestRuns/imm26-5090-i3/rows/20-d; ticket C:/KenshiTestRuns/setupfail/20-d.json. The 20-d part of the sfJ recipe (commit 23ee82e9) is the likely earlier attempt: confirm from the row evidence whether 20-d ran with it before assuming. TASK: (1) read the 20-d evidence (RESULT and SETUP-FAIL lines only) and the sfJ commit (git show --stat 23ee82e9, then the files it names); (2) find where pending_change is written for the change request (recipe step ordering, 20-a first-leg state, or a server defect) with grep -n on codemaps, never reading a big file whole; (3) root cause first. If the recipe misses a step, write the corrected recipe as a row script with a selftest; if the product code drops the pending change, state the exact fix with file and line, without building or installing it. Do not edit any script a running operator or queued list uses. When done attach the plan path with setupfail.ps1 assign 20-d imm26-sfQ <plan_path>. Report as one RESULT line plus the plan path.'",
+   "why": "SETUP-FAIL 20-d has an unblock ticket and the odd-behaviour rule says investigate root cause before another recipe, since the sfJ recipe may already have failed on this row."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 20-d imm26-sfQ",
+   "why": "Puts the owner on ticket 20-d as soon as sfQ is spawned so the list shows who is working on it; the plan path is attached when sfQ finishes."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add 'imm26-sfQ RUNNING: 20-d no pending_change (round 2)'; note that the 5090-i3 lane moved to its next runnable row after 20-d SETUP-FAIL.",
+   "why": "CLAUDE.md requires HANDOFF 'Right now' to be updated the moment an agent starts, and the lane change must be recorded too."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To the 5090-i3 lane operator (op21): 'SETUP-FAIL 20-d is on ticket setupfail/20-d and is handed to imm26-sfQ. Do not retry 20-d and do not wait for sfQ. Take the next runnable row from inbox/operators/lane-plan-20261016.txt, claim it with mkdir C:/KenshiTestRuns/aims/<row>, run it on the installed build, and send one RESULT line per row.'",
+   "why": "The lane rule is SETUP-FAIL after one attempt, then the next runnable row, so the 5090-i3 lane keeps running while the recipe is fixed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-sfQ completion notification and the next RESULT line from the 5090-i3 operator; the event-wait.sh waker stays running.",
+   "why": "Nothing else in this batch needs coordinator action until the investigator reports or the lane reports a new row."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "Get-Content C:/KenshiTestRuns/setupfail/20-d.json",
+  "Select-String -Path C:/KenshiTestRuns/imm26-5090-i3/rows/20-d/* -Pattern 'RESULT|SETUP-FAIL' | Select-Object -First 20",
+  "git -C C:/KenshiModding show --stat 23ee82e9"
+ ]
+}

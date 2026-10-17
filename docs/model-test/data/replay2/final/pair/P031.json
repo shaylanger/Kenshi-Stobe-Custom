@@ -1,0 +1,26 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not spawn imm26-5090-i3op3b (no Agent call for that name).",
+   "why": "imm26-5090-i3op4 is already the fresh successor of the STOPPED-CONTEXT operator imm26-5090-i3op3 on lane 5090 i3 (spawned from the same handoff file and mapped in lane-owners.json); a second operator on that lane would collide on the same game and rows."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i3op3 \"STOPPED-CONTEXT; successor imm26-5090-i3op4 (fresh, same handoff) runs lane 5090 i3; handoff file kept\"  -- run ONLY after the i3op4 RUNNING check in checks[1] passes",
+   "why": "The Stop guard recognises successors by name suffix and does not count the next-number successor op4, so the documented deliberate drop is the way to clear the false block without a duplicate operator; the i3op3 handoff file, the lane marker 5090-imm26 and the lane lock stay in place."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the event waker running (MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP, background) and wait for the next event.",
+   "why": "Nothing else is required for this event: operator imm26-5090-i3op4 runs the lane and the waker is up. No guard or hook edit is made here, since PI-11 (ledger-based successor recognition) is an unapproved process idea and must not be applied without Shay's yes."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (check the ORPHANED, NO SUCCESSOR and WAKER STATUS lines and the i3op lines)",
+  "tail -n 1 /c/KenshiTestRuns/agents/imm26-5090-i3op4.status (must be RUNNING before the agent-abandon ack)",
+  "cat /c/KenshiTestRuns/respawn/imm26-5090-i3op3.todo (confirm the stop is the i3op3 respawn item)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1 (no args: read-only usage; the successor record is not written here because its syntax is not in this file)"
+ ]
+}

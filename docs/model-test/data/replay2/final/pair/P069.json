@@ -1,0 +1,22 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02  (run as a background task; if Bash still returns 127, launch the same command from the PowerShell tool with run_in_background)",
+   "why": "The tail-wait waker (bw7rbn83m) exited 127 at launch, so the tail has no watcher for its two owned agents (imm26-5090-i5-op9c, imm26-4080-i4op10) and the Stop hook will block the tail from ending its turn until a live tail-wait exists; forward slashes avoid the doubled-backslash path that broke the first launch."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the re-armed tail-wait task to report, or for an owned agent's status line (RUNNING, DONE, FAILED or STOPPED-CONTEXT) to change",
+   "why": "The agents are still running and report through their status files; this tail spawns nothing, edits nothing and decides nothing, and the lane-stall watchdog covers silence."
+  }
+ ],
+ "checks": [
+  "tail -n 20 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2a0cfe9b-63fb-4663-b97a-4a00df3b4e02/tasks/bw7rbn83m.output\"",
+  "command -v powershell",
+  "ls C:/KenshiTestRuns/tail/",
+  "cat C:/KenshiTestRuns/agents/imm26-5090-i5-op9c.status",
+  "cat C:/KenshiTestRuns/agents/imm26-4080-i4op10.status"
+ ]
+}

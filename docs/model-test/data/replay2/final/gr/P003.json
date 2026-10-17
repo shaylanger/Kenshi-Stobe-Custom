@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/extract.py adb8565711c29f920 /mnt/c/KenshiTestRuns/invest/suite/A3/report.md (MSYS_NO_PATHCONV=1 exported first)",
+   "why": "Save the SUITE-A3 investigator hand-back to a file (same pattern as A2) so the result is kept before anything else runs."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s with: S=/mnt/c/KenshiTestRuns/invest/suite; python3 $S/tools/collect.py A3 SUITE-A3; bash $S/tools/state-check.sh $S/A3/state-after.txt; sed -i 's/^Done rounds:.*/Done rounds: B1 (ticket SUITE-B1b), B2, B3, A1 (PASS), A2 (PASS), A3 (investigation only, root cause found)/' $S/PROGRESS.md",
+   "why": "Mechanical close-out of the last suite round: collect metrics, confirm the game/DB state is unchanged, and record A3 as done, with no verifier step, per the no-cascade rule."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SUITE-A3 done (read-only investigation of the Mouse loop). Root cause: the Stobe.dll in use has no NPC travel-candidate producer (LocalTravel::CandidatesJson), so every NPC prompt says Observed local choices: []. The server then drops Mouse's whole reply and speaks the canned line I need to find a practical place before promising to lead us there, which starts the bystander loop. The producer code is in the workspace snapshot but never reached the build tree. Phase 1 (restore the producer) is a small change, but its install would touch your Main Steam install (D:\\Steam\\steamapps\\common\\Kenshi), which you use for manual play. Nothing has been built or installed. Tell me whether to build the Phase 1 candidate now and hold the install until you say so, or hold it entirely.",
+   "why": "This is a real live bug you hit, and the fix needs a decision about installing to your manual-play install, so it is a decision for you."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- grep -rln CandidatesJson /root/STOBE-src (confirms the producer exists in the snapshot)",
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'grep -rn travel_destinations /var/www/html/StobeServer/lib | head -5' (confirms the server side expects the candidate list)"
+ ]
+}

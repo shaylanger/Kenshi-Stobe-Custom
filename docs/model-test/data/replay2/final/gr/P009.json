@@ -1,0 +1,21 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (run_in_background)",
+   "why": "The waker that just completed has exited, while imm26-4080-op2, imm26-wpA3, imm26-wpB3, claude-md-reviewer and program-ledger are still RUNNING, so a waker must keep running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "No llama-server switch from this session: the 5090 backend change (kill PID 74148, move port 18086 to DeepInfra) is the first action for the new coordinator, and imm26-5090-op2 (STOPPED-CONTEXT) is not respawned here.",
+   "why": "The handoff makes the switch the successor's first action, and doing a multi-step backend change while the handoff is in progress risks a half-switched lane; the event batch itself does not touch the 5090."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-5090-op2.status; sed -n 1p C:/KenshiTestRuns/agents/imm26-compose-ci.status (both dropped out of the waker digest)",
+  "powershell -NoProfile -Command \"Get-Process -Id 74148 -ErrorAction SilentlyContinue\" (llama-server still up before the successor switches it)",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh (confirm the restarted waker is alive)"
+ ]
+}

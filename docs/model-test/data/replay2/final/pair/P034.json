@@ -1,0 +1,24 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP (run as a background Bash job)",
+   "why": "The waker task b7rkz2xpf exited with code 0, so no waker is running while lanes, fixers and tooling agents are in flight, and the kenshi-waker-guard Stop hook would block the turn and peer messages or stalls would be missed."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[case:patch] imm26-4080-i4op5b. Brief: Resume the task '4080 lane i4 operator' as a FRESH agent named imm26-4080-i4op5b. Read C:/KenshiTestRuns/agents/imm26-4080-i4op5.handoff.md first (status file C:/KenshiTestRuns/agents/imm26-4080-i4op5.status), continue from where imm26-4080-i4op5 stopped, keep your own status current with tools/automation/agent-status.ps1 imm26-4080-i4op5b RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:/KenshiTestRuns/agents/imm26-4080-i4op5b.handoff.md. Never SendMessage the old agent. Its next rows: 09-c, 04-c, 10-a, 10-b, 08-b, 08-d, then 06-c 08-a 15-a 16-c.",
+   "why": "The Stop-hook feedback says imm26-4080-i4op5 is STOPPED-CONTEXT with no successor, which blocks the turn and would lose its 4080 i4 work; spawn only if session-start shows that state still holds (the handoff calls the 4080 i4 operator a hidden agent-host that survives), so the old agent is not duplicated."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the restarted waker's next event line, the NC6 swap and 13-b rerun report from the 5090 i4 operator, the PI-11 result from imm26-pi11, and the remaining tooling and server fixer reports.",
+   "why": "The waker output names the wake reason, and the other open items arrive as their own events, so none needs a new action from this batch."
+  }
+ ],
+ "checks": [
+  "tail -n 40 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2b1a8eca-c7aa-44ff-bda2-326523d5864e/tasks/b7rkz2xpf.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief | grep -i -E 'waker|alert|orphan|stopped|no successor|4080-i4op5'"
+ ]
+}

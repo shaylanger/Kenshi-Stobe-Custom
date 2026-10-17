@@ -1,0 +1,14 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next EVENT line from the live waker bwp1pu36n (no command to run; the task-notification itself needs no action)",
+   "why": "The batch only reports that the 'Restart event waker' launcher exited 0 after starting background waker bwp1pu36n, and the Stop-hook block it cleared is already resolved, so nothing new is missing for this batch."
+  }
+ ],
+ "checks": [
+  "tail -c 800 \"/c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2b1a8eca-c7aa-44ff-bda2-326523d5864e/tasks/bwp1pu36n.output\"",
+  "head -5 /c/KenshiTestRuns/agents/imm26-4080-op2h.status | cut -c1-300"
+ ]
+}

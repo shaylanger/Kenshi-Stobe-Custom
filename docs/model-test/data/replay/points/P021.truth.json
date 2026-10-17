@@ -1,0 +1,34 @@
+{
+ "id": "P021",
+ "session": "5720e5b8",
+ "ts": "2026-10-15T23:16:46.166Z",
+ "class": "shay-message",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; for r in 11-c 12-c 12-d 08-d 09-b 25-a 26-a 22-a; do grep -E \"^\\| IMM-$r \" testing/NPC_IMMERSION_26_TESTS.md | awk -F'|' '{print $2\": \"substr($0, index($0,$8))}' | cut -c1-700; echo; done",
+   "why": ""
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:investigate][inproc-ok:coordinator investigation, short] native-gated rows scope\nprompt: Investigate (diagnose only, no code edits, no live game/rig use). Program imm26 (NPC immersion 26), repo C:\\KenshiModding. Question: which TESTS rows in testing/NPC_IMMERSION_26_TESTS.md are blocked by MISSING NATIVE (DLL) functionality, and is that functionality already in the composed NC DLL (pending-fixes/npc-immersion-26/NC/, SHA 4D18E32C / NC2 E17FC00C installed on 5090 lanes) or not built yet? Rows to check: 11-c (native attention snapshot: hunger/bleeding/injured/sleeping/fleeing; server reads snapshot['attention'] observed=true in lib/social_attention.php), 10-d, 13-b, 13-c, 14-c, 18-a/b, 19-c, 22-a, 22-b, 26-a/b/c, 25-a/b, 06-d, 23-a/c/d. For each: what native producer/emitter is needed, whether the source already exists in components/STOBE/src or NC (grep the contracts file pending-fixes/npc-immersion-26/CONTRACTS.md and NC/ notes; use grep and line ranges, never read big files whole), and for the missing ones a work-package breakdown with token estimates (docs/WP_SIZING.md section 2 rules: <=120k tokens each, split by file). Deliver: a table row -> status (present in DLL / missing / server-only) -> proposed WP, written with agents/save-report.ps1 style to C:\\KenshiTestRuns\\agents\\out\\imm26-native-scope\\REPORT.md via tools/automation/save-report.ps1 (Write of REPORT*.md is blocked for subagents), and a 15-line summary as your final answer.",
+   "why": ""
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:investigate][inproc-ok:coordinator investigation, short] SETUP-FAIL rows causes\nprompt: Investigate (diagnose only, no code edits, no live game/rig use). Program imm26, repo C:\\KenshiModding. Rows in testing/NPC_IMMERSION_26_TESTS.md that are SETUP-FAIL or UNRUN without a fix plan: 08-b, 08-d (resolved_followup_ids path; trip topic can't be created because travel consent suppresses followup creation), 09-a, 09-b (harness lacks a draw-weapon verb; 'failed' not in allow-list, P-KEY), 09-c, 09-d, 10-a, 10-b, 23-b, 25-a, 25-b, and the 12-c/12-d reruns (need a pair without a broken promise). For each row decide: (a) real server/product bug needing a code fix (name file + function + one-line fix), (b) missing harness verb/helper (name what to add in tools/automation or the lane scripts; check docs/REFERENCE.md and tools/automation for an existing verb first), (c) only a test-setup problem with a concrete scene recipe (what to spawn/set so the row can run on a 4080 or 5090 lane), or (d) not testable. Use the evidence dirs named in the rows (C:\\KenshiTestRuns\\imm26-4080*, imm26-5090*) via grep/line ranges only. Deliver: a table written via tools/automation/save-report.ps1 to C:\\KenshiTestRuns\\agents\\out\\imm26-setupfail-scope\\REPORT.md (Write of REPORT*.md is blocked for subagents), plus a 15-line summary as your final answer.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding; grep -E \"^\\| IMM-\" testing/NPC_IMMERSION_26_TESTS.md | awk -F'|' '{print $2\"|\"$7\"|\"substr($8,1,60)}' | grep -v -E \"\\| *PASS *\\|\" | cut -c1-200",
+  "cd /c/KenshiTestRuns/agents; grep -n -i -E \"11-c|12-c|12-d|08-b|08-d|23-b|25-|26|22-\" imm26-compose-fix-batch2c.handoff.md | cut -c1-400 | head -20; ls /root 2>/dev/null | head -0; ls out/imm26-inv-c1...[truncated 41 chars]"
+ ],
+ "narration": [],
+ "event_text_chars": 139
+}

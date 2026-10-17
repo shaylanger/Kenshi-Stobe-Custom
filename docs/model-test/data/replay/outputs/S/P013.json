@@ -1,0 +1,44 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] imm26-speed-waker quieter event-wait | Your name is imm26-speed-waker. Shay's order (2026-10-15, TOKENS item 4 from HANDOFF 'SHAY'S NEXT-STEP SUGGESTIONS'): make tools/automation/event-wait.sh return only on ACTION events (LANE IDLE, AGENT STALL/ORPHANED/DEAD, batch DONE/SUMMARY, agent DONE/FAILED/STOPPED-CONTEXT, LLM-HEALTH FAIL, HEALTH STALL, LANE STUCK, inbox messages) and NOT on every STATUS / HEALTH-OK event; keep a >=120 s max-silence heartbeat return only if the waker-guard needs it. NEVER edit the running event-wait.sh in place (a mid-run edit kills the live waker): write tools/automation/event-wait.new.sh, add a selftest that replays a sample event stream and asserts which events wake, run it, and report; the coordinator swaps it in at the next waker restart. Checkpoint every ~40k tokens, update agent-status.ps1 imm26-speed-waker, commit+push (identity shaylanger) when selftest passes.",
+   "why": "Shay asks for the logged token-use improvement (4); a restart per STATUS/HEALTH-OK event costs a coordinator turn each."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] imm26-speed-brief session-start -Brief | Your name is imm26-speed-brief. Shay's order (TOKENS item 5): add a -Brief switch to tools/automation/session-start.ps1 (current output ~75 KB) that prints only: WAKER STATUS, handoff marker, HANDOFF 'Right now' first ~2 KB, one line per agent (name state age task), ORPHANED/NO SUCCESSOR/OPEN ALERTS/DEAD lines with respawn text, inflight markers + batch DONE/SUMMARY, and the newest review verdicts as one line each; target <= 8 KB; full output stays the default. Add a selftest asserting size and required sections, commit+push. Do not edit scripts a running batch or waker uses; session-start.ps1 is not one of them.",
+   "why": "Shay asks for logged improvement (5): a ~10x smaller session-start read per session."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] imm26-lane-setup one-command lane setup | Your name is imm26-lane-setup. Shay's order (SPEED item 3): build tools/automation/lane-setup.ps1 -Rig 5090|4080 -Instance <n> -Save <kah-* copy> that does in one command: load the save, speed 0 hold, wake the squad, protect, teleport to the test spot, set speed 0.5 and print one RESULT line (about 5 min is lost per Hub reload today). Reuse kenshi-ctl.ps1 / stobe-auto commands and the existing lane helpers (do not touch lane-isolation-check or running lane agents' files); test on a kah-* copy on an isolated lane that is idle; selftest, commit+push.",
+   "why": "Shay asks for logged speed improvement (3); work is independent of the other agents so it runs in parallel."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-travel-investigate (fresh successor if its status is not RUNNING): Shay's priority order puts the travel accept bug (gates 19-c, 20, 21, 23-a, 23-c, 23-d) at SPEED item 2. Finish the root-cause report at agents/out/imm26-travel-blocker now and update your status; the coordinator will spawn a fixer from it immediately.",
+   "why": "Item 2 depends on the already-running investigation; a fixer spawns as soon as its report lands."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-lanes-5090 / imm26-lanes-4080 (respawn fresh as +2 per their handoff files if STOPPED-CONTEXT): Shay's SPEED item 1: as soon as lane-isolation-check passes on a lane, report it ready so imm26-4080-op2b / a new 5090 row operator starts rows on lanes 5090 i4/i5 and 4080 i4 with no delay.",
+   "why": "Item 1 (row operators on new lanes) gates on the isolation checks that those agents own."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add a line 'Shay 2026-10-15 ordered the logged speed/token suggestions done: agents imm26-speed-waker (4), imm26-speed-brief (5), imm26-lane-setup (3) spawned; (1) and (2) via lanes agents and imm26-travel-investigate' and update the program ledger.",
+   "why": "The state file must record the new agents the moment they start."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Started on your suggestions: quieter waker, session-start -Brief and a one-command lane setup are being built by three agents in parallel; the travel accept fix and row operators on the new lanes follow the investigation and the lane isolation checks. Will report when each lands.",
+   "why": "Short acknowledgement via the relay without blocking any work."
+  }
+ ],
+ "checks": [
+  "grep -n -A8 \"NEXT-STEP SUGGESTIONS\" C:/KenshiModding/testing/HANDOFF.md",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

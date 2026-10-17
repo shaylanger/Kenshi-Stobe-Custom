@@ -1,0 +1,13 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "No action. Stay in tail mode and keep the existing event-stream waker running. Wait for imm26-wpC-b5 to answer the stall message already sent to agent a495355d6dfe7b24a at about 19:45, and for imm26-5090-i5-op6 to finish its natural-herd flag read. When either one reports DONE, save its report to a file, send it with tail-relay.ps1 plus SendMessage to the new coordinator (inbox C:\\KenshiTestRuns\\inbox\\coordinator), then wait for tail-ack.ps1 or program-ledger.ps1 ack. Stall ladder for imm26-wpC-b5, whose status has said 'reading recipe' since 19:39: if it is still silent at about 19:59 (20 minutes), TaskStop it and tell the new coordinator. Same ladder for imm26-5090-i5-op6 (last write 19:45).",
+   "why": "This is the same repeated tail Stop-hook block with nothing new. Both owned agents are still RUNNING and the hook just restates that tail rule. A tail spawns and decides nothing new, the stall message has already been sent, and the 20-minute TaskStop point has not been reached. Running tail-mode.ps1 leave -Force would be wrong because the flag is correct."
+  }
+ ],
+ "checks": [
+  "Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \"C:\\KenshiTestRuns\\agents\\$n.status\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1); Get-Content $i.FullName -TotalCount 3 | Select -Skip 2 | % {$_.Substring(0,[Math]::Min(200,$_.Length))} }"
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "id": "P120",
+ "session": "3a21a7b9",
+ "ts": "2026-10-16T20:58:28.992Z",
+ "class": "other",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: Why does the SUMMARY-final.md for the hiaku pilot not have any data for the sonnet run it was mathci"
+ },
+ "actions": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "",
+   "why": "`fix15bx05cx3` has finished, and its result was relayed to the new coordinator at 14:58 (inbox file `20261016-145820-tail-imm26-fix15bx05cx3.msg`). I'm not acting on it myself.\n\nThe agent says all six defects are fixed offline and nothing was run in the live game. Its selftests pass: HXCX4 43/43 and UNBLOCK-C-V4 56/56. Replaying the real 05-cx bundle from i3 leaves only the three H roster_has_sleeper failures, which the sleeper-KO fix is meant to address. It pushed commit a9e06e08. The remaining...[truncated 154 chars]"
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "`fix15bx05cx3` has finished, and its result was relayed to the new coordinator at 14:58 (inbox file `20261016-145820-tail-imm26-fix15bx05cx3.msg`). I'm not acting on it myself.\n\nThe agent says all six defects are fixed offline and nothing was run in the live game. Its selftests pass: HXCX4 43/43 and UNBLOCK-C-V4 56/56. Replaying the real 05-cx bundle from i3 leaves only the three H roster_has_sleeper failures, which the sleeper-KO fix is meant to address. It pushed commit a9e06e08. The remaining...[truncated 154 chars]"
+ ],
+ "event_text_chars": 925
+}

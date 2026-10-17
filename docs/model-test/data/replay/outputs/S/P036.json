@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Edit C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md row IMM-08-b: status FAIL (rerun on 4080 i3 with NC5, commit c0f7bdd); cause: stobeSocialFollowupsClaim denied because stobeSocialAttentionOptionalSpeechAllowed needs in_combat===false (lib/social_attention.php:33-38), natural DLL bored URIs carry no attn= and non-squad Cind has no native_ai snapshot, so in_combat is null; NC5 proximity turn only scans squad members",
+   "why": "The operator's evidence is a real rerun failure with a precise root cause, which belongs in the row for the next fixer and operator."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-fix-08b-attn, description '[case:patch] 08-b follow-up claim when attention unknown'. Brief: Server fix for IMM-08-b. Root cause (operator af494f7d420e43327, commit c0f7bdd): in lib/social_attention.php:33-38 stobeSocialAttentionOptionalSpeechAllowed requires in_combat===false, so stobeSocialFollowupsClaim is denied in director bored turns when attention is entirely unknown (no attn= on natural bored URIs, non-squad speaker has no fresh native_ai snapshot, in_combat null). Implement the server-only option: allow the follow-up claim in director bored turns when attention is entirely unknown (null) while still denying when in_combat is true or attention shows combat/knockout. Do not touch the DLL. Use bash tools/automation/codemap.sh maps, grep function names then sed ranges, never read big files whole. Back up, stage, php -l, add or extend an offline stobe-tests case for the null-attention bored claim and the in_combat=true denial, deploy to all 5 lane sites with the compose patch method used for ee28e15 (never Shay's live tree, server or DB), commit and push on the proper repo, regenerate codemap. Keep C:\\KenshiTestRuns\\agents\\imm26-fix-08b-attn.status current via agent-status.ps1 and checkpoint every ~40k tokens. Before editing, read imm26-fix-batch3's status and patch (08-b director-mode bored claim) and build on it or supersede it; do not duplicate or overwrite its work. Report: patch path, test result, lane sites deployed, one-line rerun recipe for 08-b.",
+   "why": "The cause is a new server-side gap in the batch3 08-b area; I will run the checked status first and only spawn if imm26-fix-batch3 is DONE or does not already cover this null-attention path, otherwise I fold the finding into it by a fresh agent instead of messaging an old session."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add one line under COORDINATOR #7: 08-b rerun FAIL on 4080 i3 NC5 (c0f7bdd), cause in_combat null blocks stobeSocialFollowupsClaim, fix agent imm26-fix-08b-attn spawned; operator af494f7d420e43327 continues 15-a 16-c 03-b 03-cx 04-ax",
+   "why": "HANDOFF must be updated after every agent report so a successor coordinator sees the new fixer."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the running event-wait.sh waker (restart it as it just woke) and wait for the fixer's DONE status; the operator needs no reply since it is already continuing other rows and 08-b is rerun after the fix deploys",
+   "why": "Nothing else is actionable; no lane is idle and the operator should not be steered mid-run."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "cat C:\\KenshiTestRuns\\agents\\imm26-fix-batch3.status",
+  "grep -n 'stobeSocialAttentionOptionalSpeechAllowed' /var/www/html/StobeServer/lib/social_attention.php"
+ ]
+}

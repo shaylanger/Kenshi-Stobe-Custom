@@ -1,0 +1,29 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Read-only verification of FIX-server's claims in WSL DwemerAI4Skyrim3: for f in lib/travel_companionship.php lib/chat_helper_functions.php lib/negotiation_phase1.php debug/db_updates.php tests/bio_unique_regression.php tests/travel_order_refusal_regression.php: php -l in both /var/www/html/StobeServer and /root/stobe-work/ss-merge; sha256sum compare of the edited files across both trees; run the two regression tests; git -C /var/www/html/StobeServer status/diff --stat to confirm only the reported files changed and nothing was committed.",
+   "why": "The coordinator checks the mechanical claims of the fixer itself (no verifier agent per the no-cascade rule) before showing results to Shay."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "No alert or agent-status marker is open for the three bench fixers (FIX-server, FIX-native, FIX-voice); all three have now handed back DONE, so nothing to ack or respawn.",
+   "why": "All three fixers delivered their final reports; no successor agent is needed."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "All three Sonnet-high fixers have reported; nothing is installed, restarted or committed. (1) FIX-voice: warm-up (two noise clips) added to /home/dwemer/parakeet-api-server/server.py, compiles; service not restarted, so the 11 s cold start is unverified until the next restart. (2) FIX-native: candidate DLL C:\\StobeBuild\\out\\Stobe.fixes-candidate.dll (sha256 10be853f...cb82f) built with speech-while-paused and the LocalTravel/travel_destinations producer; the validated Stobe.dll is untouched and the candidate has not been run in game. (3) FIX-server: Tengu bare-name persona rows removed and Emperor Tengu kept; a refused order now keeps the NPC's own line for non-movement actions; known towns are listed in the travel prompt; new regression tests added; both server trees edited identically. NOT done: the live DB deletes for the Tengu bio_unique rows (blocked by the permission checker); the new db_updates.php patch id 202610150001 would do it on next update. Backups are under C:\\KenshiTestRuns\\invest\\fixes\\backup\\. I am re-checking php -l and the new tests now. Decisions for you after review: (a) install the candidate DLL on the 5090 (only with Kenshi closed), (b) apply the Tengu DB cleanup against the live DB, (c) restart the parakeet service, (d) commit and push the server and native changes.",
+   "why": "Shay asked to review the results himself, so the single summary goes to him with the open decisions instead of the coordinator acting on his live DB, DLL or service."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for Shay's review and his answer on the DLL install, live DB cleanup, parakeet restart and commit.",
+   "why": "Installing the DLL, writing to the live DB and restarting the service were not ordered; he asked to review first."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c 'cd /var/www/html/StobeServer && git status --short && for f in lib/travel_companionship.php lib/chat_helper_functions.php lib/negotiation_phase1.php debug/db_updates.php; do php -l $f; sha256sum $f /root/stobe-work/ss-merge/$f; done'",
+  "powershell Get-FileHash C:\\StobeBuild\\out\\Stobe.dll,C:\\StobeBuild\\out\\Stobe.fixes-candidate.dll -Algorithm SHA256"
+ ]
+}

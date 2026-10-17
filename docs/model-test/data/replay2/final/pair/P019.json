@@ -1,0 +1,47 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash tool with run_in_background true; not PowerShell)",
+   "why": "The waker returned on the imm26-hidden-test2 DONE event, and the Stop-hook guard says no waker runs while many inflight markers are live, so peer messages and stalls would go unseen."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "imm26-hidden-test2: no respawn, no ack, no message to it",
+   "why": "It only tested the hidden agent-host mechanism (off by default) and reported DONE after 6 heartbeats, so nothing is owed to it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: add the line 'imm26-hidden-test2 DONE: 6 heartbeats, report C:/KenshiTestRuns/agents/out/imm26-hidden-test2/latest.md', written only after that report is read and shows no failure",
+   "why": "Right now is updated the moment an agent finishes, and the report must be read before the line is written."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "for f in /c/KenshiTestRuns/inflight/*; do n=$(basename $f); s=$(cat /c/KenshiTestRuns/agents/$n.status 2>/dev/null); case $s in DONE*) rm -f $f;; esac; done",
+   "why": "A marker of a DONE agent keeps the Stop hook and waker guard counting finished work; lane markers have no status file, so the loop leaves them alone."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "for n in imm26-4080-i4op imm26-4080-i4op2 imm26-4080-i4op3 imm26-4080-op2b imm26-4080-op2c imm26-4080-op2d imm26-4080-op2e imm26-5090-ctxop imm26-5090-ctxop2 imm26-5090-i3op imm26-5090-i4op imm26-compose-fix-batch2 imm26-compose-fix-batch2b imm26-install-nc-rest imm26-inv-travel imm26-inv-travel2 imm26-lanes-4080 imm26-lanes-5090 imm26-rowtools imm26-travel-investigate imm26-wpA4 imm26-wpB4; do s=$(cat /c/KenshiTestRuns/agents/$n.status 2>/dev/null); case $s in RUNNING*) touch /c/KenshiTestRuns/inflight/$n;; esac; done",
+   "why": "The earlier rm loop deleted these markers, so any agent still RUNNING would no longer count as in flight; only RUNNING ones are restored and stopped ones are covered by their respawn file."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "For each name in the earlier rm-loop list (imm26-4080-i4op ... imm26-wpB4) that session-start -Brief lists as ORPHANED or NO SUCCESSOR, or whose status is STOPPED-CONTEXT or FAILED with no successor: an Agent named the next free number (check agents/status for existing names first; expected imm26-wpA5, imm26-wpB5, imm26-lanes-4080-2, imm26-lanes-5090-2, imm26-travel-investigate2), description starting with the [case:...] tag from its status file; brief = its agents/<name>.status plus its handoff file, same work dir, fresh start from the last checkpoint, reports to its status file; no SendMessage to the old agent",
+   "why": "The 15:50 handoff says these agents are dead, and a stopped agent with no successor must get a fresh respawn rather than a message."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-compose-fix-batch2c, imm26-4080-op2f, imm26-5090-ctxop3, imm26-4080-i4op4, and the lane markers 4080-imm26 and 5090-imm26: wait for their reports or stops; no second compose agent starts while batch2c runs",
+   "why": "Their inflight markers are still live, and only one fixer runs per batch."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -40 /c/KenshiTestRuns/agents/out/imm26-hidden-test2/latest.md",
+  "for n in imm26-4080-i4op imm26-4080-i4op2 imm26-4080-i4op3 imm26-4080-op2b imm26-4080-op2c imm26-4080-op2d imm26-4080-op2e imm26-5090-ctxop imm26-5090-ctxop2 imm26-5090-i3op imm26-5090-i4op imm26-compose-fix-batch2 imm26-compose-fix-batch2b imm26-install-nc-rest imm26-inv-travel imm26-inv-travel2 imm26-lanes-4080 imm26-lanes-5090 imm26-rowtools imm26-travel-investigate imm26-wpA4 imm26-wpB4; do echo $n; head -c 160 /c/KenshiTestRuns/agents/$n.status 2>/dev/null; echo; done",
+  "ls /c/KenshiTestRuns/inflight /c/KenshiTestRuns/respawn",
+  "ListAgents (refresh the relay-session address; the last SendMessage to the relay failed with ENOINBOX)"
+ ]
+}

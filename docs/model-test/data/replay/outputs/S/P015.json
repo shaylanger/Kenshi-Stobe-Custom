@@ -1,0 +1,30 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background, restarted immediately after this wake)",
+   "why": "The waker exited by delivering the compose2 DONE event and must be restarted so the in-flight work stays covered."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' line for COORDINATOR #4: append 'imm26-compose2 DONE 15:47: compose.patch passes stobe-tests (93 pass, only 5 known fails, no new); report agents\\out\\imm26-compose2\\latest.md. Next: install composed server on lane private sites only, rerun failing rows with fresh operators.' and update the imm26 program ledger (C:\\KenshiTestRuns\\programs\\<name>.json; exact name unknown, use program-ledger.ps1) with compose state=done after the report is read",
+   "why": "The ledger and HANDOFF must be updated after every agent report, not only at the context limit."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-install-rerun, description '[case:generate] imm26 install composed server on lane private sites', brief: 'Read the report agents\\out\\imm26-compose2\\latest.md, pending-fixes\\npc-immersion-26\\compose\\NOTES.md and testing\\NPC_IMMERSION_26_HANDOFF.md (top section). Apply pending-fixes\\npc-immersion-26\\compose\\compose.patch to the private lane backend sites only (5090 lanes i3/i4/i5, 4080 lanes i3/i4); never the live server tree, live DB or Shay install. Back up, php -l, run lane-isolation-check, restart lane php, then report which lanes are ready. Do not run rows. Keep your status file imm26-install-rerun.status current via agent-status.ps1; checkpoint every milestone.'",
+   "why": "The composed server is the unblock for the failing baseline rows, and installing it on private lanes is the next step of the plan the coordinator stated before this event."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-install-rerun DONE (waker event), then spawn fresh row operators (new names, e.g. imm26-5090-i3op2, imm26-4080-i4op2) to rerun the previously failing rows on the composed build",
+   "why": "Dead old operators are not respawned on the old base; rows rerun only after the compose is installed on the lanes."
+  }
+ ],
+ "checks": [
+  "tail -c 3000 C:/KenshiTestRuns/agents/out/imm26-compose2/latest.md",
+  "tail -5 C:/KenshiTestRuns/agents/imm26-compose2.status",
+  "git -C C:/KenshiModding status --short pending-fixes/npc-immersion-26/compose"
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action: imm26-pi15 DONE was already handled (its hand-back was read, PI-15 recorded done via commit 34c156c, and the 20:50 HANDOFF entry already lists PI-15 as done). Keep the waker armed; wait for imm26-pi1920, imm26-pi13, imm26-pi18 and imm26-inv19 to report.",
+   "why": "The status event duplicates the PI-15 report the coordinator already processed and logged in HANDOFF, so the draft's edit-file would be a duplicate, and nothing else is ready to act on."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

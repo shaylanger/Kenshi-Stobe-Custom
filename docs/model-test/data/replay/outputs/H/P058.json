@@ -1,0 +1,19 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-setupfail-19a, description \"[case:investigate] SETUP-FAIL 19-a unblock plan\". Brief: lane 4080-i4, SETUP-FAIL 19-a says no trip proposed after two asks (s1/s1b), nothing to accept. Find why the trip was not proposed and write an unblock plan file in the lane work dir. Read-only on Shay's live install, live server tree and live DB; do not edit rowdefs.sh or tripdefs.sh (owned by other fixers). Keep C:\\KenshiTestRuns\\agents\\imm26-setupfail-19a.status current. Save the report with save-report.ps1 under agents/out/imm26-setupfail-19a and name the plan path in it.",
+   "why": "The 19-a row is blocked on lane 4080-i4 with no trip proposed, so it needs a diagnosis and an unblock plan before it can be assigned to a fixer."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 19-a imm26-setupfail-19a <plan_path from the imm26-setupfail-19a report>",
+   "why": "Once the investigator has written the plan, assign 19-a to that agent so the setup-fail has an owner."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "tail -n 40 C:\\KenshiTestRuns\\agents\\imm26-4080-i4op8.status"
+ ]
+}

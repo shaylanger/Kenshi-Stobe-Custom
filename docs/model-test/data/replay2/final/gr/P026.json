@@ -1,0 +1,51 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=aa31cd5b99a665d77 (imm26-5090-i3op3): Shay asks whether all lanes are running tests. Reply in one line now: row id running, or idle plus reason. While c_23b is being fixed, do not leave the 5090 i3 lane idle: run the next queued travel row on the current build (NC5 Stobe.dll, SHA 25252267D3C07BE39E176685EE4CEEBF5A3933DCC12BF8B9204FB7F6B9A380B4 when relaunched) and post RESULT lines.",
+   "why": "The 5090 i3 operator was last seen at 17:41 mid-rows and was told to fix the rowcheck c_23b checker first, which can leave its lane idle; a queued row keeps it busy."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=imm26-4080-op2g (4080 i3): Shay asks whether all lanes are running tests. Reply in one line now. If no row is running: check the NC5 SHA, relaunch with the fixed ini and NC5 Stobe.dll, then run the next queued rerun row (12-c/12-d, then 13-a..e after batch2e) and say why if you cannot.",
+   "why": "The 4080 i3 lane was in a relaunch plus install at 17:36 and is the lane most likely to be idle now; Shay wants it running or a reason."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=imm26-4080-i4op5 (4080 i4, hidden agent-host): Shay asks whether all lanes are running tests. Reply in one line now. If idle: install NC5, then run the next queued row (10-a/b unique-row recipe, 09-*, 08-b after the EnableBoredEvents=true ini fix); if SendMessage cannot reach this hidden operator, read C:/KenshiTestRuns/agents/imm26-4080-i4op5.status instead and record the reason.",
+   "why": "This lane runs under the hidden agent-host, so the status file is the fallback proof of whether it is running; Shay needs a per-lane answer."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=imm26-5090-i4op3 (5090 i4): Shay asks whether all lanes are running tests. Reply in one line now: row id running, or idle plus reason. If idle, start the next queued native or activity row on the lane's current build.",
+   "why": "Keeps the 5090 i4 lane's queue deep and gets its state into the per-lane answer for Shay."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=imm26-5090-ctxop322 (5090 i5): Shay asks whether all lanes are running tests. Reply in one line now: row id running, or idle plus reason. If idle, start the next queued ctx row on the current build.",
+   "why": "The 5090 i5 operator only posted at 17:47 after a no-operator alert race, so its lane state is unconfirmed; it needs the same one-line answer."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/alert-ack.ps1 <id of each open LANE IDLE alert from session-start.ps1 OPEN ALERTS> 'lane running row <row id> at <time>'",
+   "why": "Once a lane shows a row running, its open LANE IDLE alert is closed with the action taken; alerts are not acked on guesses."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "the five one-line operator replies (imm26-5090-i3op3, imm26-4080-op2g, imm26-4080-i4op5, imm26-5090-i4op3, imm26-5090-ctxop322) and the lane-idle.ps1 result",
+   "why": "The per-lane answer to Shay needs the real lane state, and an idle lane that is not restarted is the only item that changes the answer."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Lane check: every lane was asked for its state now. For each lane: lane, operator, row id running or the idle reason, and what was done to restart it. Lanes asked: 5090 i3 imm26-5090-i3op3, 5090 i4 imm26-5090-i4op3, 5090 i5 imm26-5090-ctxop322, 4080 i3 imm26-4080-op2g, 4080 i4 imm26-4080-i4op5 (hidden). Any lane still not running after its restart is listed with its reason.",
+   "why": "Shay asked a direct yes/no question and wants the reason for every lane that is not running, so he gets the per-lane answer once the replies are in."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/lane-idle.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/session-start.ps1 -Brief",
+  "Read C:/KenshiTestRuns/lane-owners.json",
+  "tail -n 3 C:/KenshiTestRuns/agents/imm26-5090-i3op3.status"
+ ]
+}

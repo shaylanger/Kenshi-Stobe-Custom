@@ -1,0 +1,23 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Understood: read-only from here, nothing will be written or changed. I'm only listing backup locations and comparing hashes. A full copy of the game as it was when the test ran: I don't know of one. What I do know exists: (1) server code snapshot ref refs/snapshots/fresh-20261014 in /var/www/html/StobeServer; (2) workspace ref refs/snapshots/suite-baseline in C:\\KenshiModding; (3) the validated Stobe.dll (E64C6593...1A9A) at C:\\StobeBuild\\out\\Stobe.dll and in the fixes\\backup\\FIX-native\\out folder, although the candidate DLL installed in Kenshi's mod folder has since replaced the live one; (4) the baseline.env and baseline-state.txt fingerprints, which are hashes and not copies; (5) the fixers' own backups of the files they changed and the Tengu bio_unique row dumps. Your saves and the whole Kenshi install were not backed up by the test. I'll send the read-only listing and hash comparison as soon as it's done, so you can see which of these still match.",
+   "why": "Shay asked a question and said not to modify anything, so the right response is a read-only status answer to him."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the read-only checks to return, then send Shay one follow-up message with the exact backup paths and whether the installed Stobe.dll hash matches the validated E64C6593 build.",
+   "why": "The answer must not claim more than the checks show, and no writes or edits are allowed."
+  }
+ ],
+ "checks": [
+  "git -C /var/www/html/StobeServer for-each-ref refs/snapshots",
+  "git -C C:\\KenshiModding for-each-ref refs/snapshots",
+  "Get-ChildItem C:\\KenshiTestRuns\\invest\\fixes\\backup -Recurse | Select-Object FullName,Length,LastWriteTime",
+  "Get-ChildItem C:\\KenshiTestFixtures | Select-Object Name,LastWriteTime",
+  "Get-FileHash C:\\StobeBuild\\out\\Stobe.dll -Algorithm SHA256",
+  "Get-FileHash D:\\Steam\\steamapps\\common\\Kenshi\\mods\\Stobe\\Stobe.dll -Algorithm SHA256"
+ ]
+}

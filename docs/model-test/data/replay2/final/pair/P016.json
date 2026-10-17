@@ -1,0 +1,39 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' and the imm26 program ledger (file name from ls C:/KenshiTestRuns/programs/; not given in this batch). Record: ace5a8d0d55b08800 (imm26-compose-fix-usermsg) DONE; user_message read first in lib/imm26_ties.php and lib/imm26_knowledge.php with player_message fallback, as in npc_referrals.php; commit 070c795 pushed; targeted imm26_wpB/referral/ties/knowledge suites pass (4 passed, 0 FAILED); full stobe-tests reported 93 passed, 5 FAILED, 7 known pre-existing (5 names pending check); 20-a and 24-a still open; single fixer held until imm26-inv-trust is DONE.",
+   "why": "The coordinator records every agent report in HANDOFF and the ledger, and this report changes what the single fixer still has to apply."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: keep open entries 20-a (replacing a trip mid-way: (a) keep the code, which ends the old trip and proposes the new one in the same turn, and change the row; (b) change the code to wait for confirmation) and 24-a (where would you take me: (a) relax the row to accept a proposal of a known place; (b) stop the prompt proposing a trip when no destination was named), each with in-game effect, code consequence and default: none chosen, code and rows unchanged until Shay answers.",
+   "why": "Both questions were put to Shay in this session, and every open Shay question must live in SHAY_DECISIONS.md before a handoff."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Hold the single fixer. Do not spawn it until C:/KenshiTestRuns/agents/imm26-inv-trust.status reads DONE (last seen at 'now 16-c'). Then spawn ONE [case:patch] fixer over the composed tree (/root/imm26/compose) with: inv-c1 patches 06-c and 08-a, travel patches P-NONE, P-REAFFIRM, P-REGION, and the trust fixes. Do NOT re-apply user_message (already in 070c795). Leave 20-a and 24-a code and rows unchanged until Shay answers.",
+   "why": "imm26-inv-trust still edits the same composed tree and compose.patch, so a second editor would collide."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "First run: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh . Only if no event-wait.sh process is running, start it as a background Bash task: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh . If one is running, leave it alone (never a second copy).",
+   "why": "Agents are in flight, so the Stop-hook waker guard needs a live waker, but a running waker must not be replaced."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Not yet, partly. Done: the user_message fix (lanes read user_message first, fall back to player_message) is committed and pushed as 070c795, and the targeted suites pass. Still open: inv-c1 06-c and 08-a, travel fixes P-NONE / P-REAFFIRM / P-REGION, and the trust fixes; one fixer starts after imm26-inv-trust finishes. Nothing is re-queued for testing yet. Still need your decisions: 20-a (replacing a trip mid-way: keep the code and change the row, or make the code wait for your confirmation?) and 24-a (where would you take me: relax the row to accept a proposal of a known place, or stop the prompt proposing a trip when you name no destination?). Both are in testing/SHAY_DECISIONS.md; code and rows stay unchanged until you answer.",
+   "why": "Shay asked directly whether all fixes are in place and re-queued; the honest answer is no, and his two pending decisions must be repeated."
+  }
+ ],
+ "checks": [
+  "grep -n -i -E 'latest|DONE|FAIL' C:/KenshiTestRuns/agents/imm26-compose-fix-usermsg.status | tail -5",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- git -C /root/imm26/compose log -1 --format='%h %ae %s'",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'git -C /root/imm26/compose remote -v; git -C /root/imm26/compose branch --show-current; git -C /root/imm26/compose config user.email'",
+  "ls C:/KenshiTestRuns/agents/out/ | grep imm26-compose-fix-usermsg; grep -n -i FAIL C:/KenshiTestRuns/agents/out/imm26-compose-fix-usermsg* | tail -12 (compare the 5 FAILED names against the 7 known pre-existing list; do not trust the agent's label)",
+  "grep '^latest' C:/KenshiTestRuns/agents/imm26-inv-trust.status",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh",
+  "ls C:/KenshiTestRuns/programs/"
+ ]
+}

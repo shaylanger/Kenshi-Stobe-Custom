@@ -1,0 +1,29 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 -NoMemory; cat C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.status | cut -c1-600; date",
+   "why": "Op9d was spawned about 6 min before this alert (it reports newest activity: status), so confirm a fresh RUNNING status before acknowledging."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 5090-i5 \"op9d alive: spawned ~6 min ago from op9c handoff, fresh status, working the 26-a tight loop\"",
+   "why": "If the check shows op9d RUNNING with a fresh status, ack closes the alert with evidence; a still-true condition reopens after 30 min."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The previous waker exited with this event and agents (op9d, i4op10) are in flight, so it must be re-armed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the waker, op9d's result relay, and imm26-4080-i4op10's relay (tail still waiting on it). No respawn unless the status check shows op9d silent or dead, in which case follow the status file's respawn text (a successor handoff does not exist yet).",
+   "why": "Respawning a fresh 6-minute-old agent would be premature and would duplicate its work."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 -NoMemory",
+  "cat C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.status"
+ ]
+}

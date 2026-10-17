@@ -1,0 +1,23 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Implement each PI item in docs/PROCESS_IDEAS.md that Shay has confirmed (marked confirmed/accepted or approved in his earlier messages, e.g. open entries PI-29, PI-30, PI-31, PI-32); one fix per commit, record the result in the PI entry, push after each commit. Skip PI-26 (hook version, declined by Shay).",
+   "why": "Shay's order is to implement the confirmed items now; a logged-only item does not count as done, and the exact confirmed set must come from the file read in checks."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not apply any PI item that would weaken a timeout, stall, idle or dead-agent catch; send those to Shay only",
+   "why": "Standing rule: process ideas that weaken those catches go to Shay and are never applied by the coordinator."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Doing the confirmed PI items now from docs/PROCESS_IDEAS.md (one commit each, pushed). If you meant a different set than the ones already marked confirmed there, name the PI numbers and I will adjust; I am not waiting on you.",
+   "why": "Shay's message names no numbers, so the set is stated once without blocking the work."
+  }
+ ],
+ "checks": [
+  "grep -n -i -E 'confirm|accepted|declined|status|PI-[0-9]+' C:/KenshiModding/docs/PROCESS_IDEAS.md"
+ ]
+}

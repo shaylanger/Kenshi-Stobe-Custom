@@ -1,0 +1,21 @@
+{
+ "id": "P101",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:25:03.788Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...o copy at `docs/cost-audit/ledger.md`.  I made a mistake along the way: I started a waker with a"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; for t in bnqc67kqm bi04pq1tb b2xak5lca; do echo == $t; cut -c1-500 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/245d8ad7-6bab-4115-8188-ea4724f6a5b6/tasks/$t.output\" | tail -4; done; ls /c/KenshiTestRuns/inbox/coordinator",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 1479
+}

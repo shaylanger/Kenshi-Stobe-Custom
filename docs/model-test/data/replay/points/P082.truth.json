@@ -1,0 +1,23 @@
+{
+ "id": "P082",
+ "session": "ded82aa7",
+ "ts": "2026-10-16T16:09:55.134Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ... 2. Clean-install the NVIDIA driver, or roll back to the one from before Sept 16. 3. Unin"
+ },
+ "actions": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "",
+   "why": "coordinator took no mutating action before the next event"
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "tail -3 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/ded82aa7-d30d-451d-8954-28e72d95c908/tasks/b7965hfaz.output\" | cut -c1-500"
+ ],
+ "narration": [],
+ "event_text_chars": 914
+}

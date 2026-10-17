@@ -1,0 +1,28 @@
+{
+ "id": "P083",
+ "session": "ded82aa7",
+ "ts": "2026-10-16T16:18:04.311Z",
+ "class": "relay",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...t` is my own addendum, so nothing needs undoing.  The 5090-i3 operator marked 26-d SETU"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cat >> /c/KenshiTestRuns/inbox/operators/5090-i5-ready-nc17.txt <<'EOF'\n\nADDENDUM 10:2x: 5090-i3 marked 26-d SETUP-FAIL (no Hunt proposal after the offer). The reload rows 26-d, 26-dx, 26-e, 26-f need the working Hunt/ClearGroup accept (NC17) AND the offer fixture (hunt26a-noface.sh scene / 25-a goats; 14-d fixture for ClearGroup). So: after NC17 is installed and 26-a has PASSed on 5090-i5, run 26-d, 26-dx, 26-e (reload-run.sh rd_26d/rd_26dx/rd_26e) on 5090-i5 right after 26-c, with that scene. Release the claims for them (rmdir C:\\KenshiTestRuns\\claims\\26-dx etc.) if 5090-i3 holds a claim it did not run.\nEOF\ncat > /c/KenshiTestRuns/inbox/operators/5090-i3-after-26d.txt <<'EOF'\n5090-i3 (imm26-5090-i3op20): 26-d is SETUP-FAIL as expected (needs NC17 + Hunt offer fixture on 5090-i5). Do NOT spend more attempts on 26-dx/26-e/26-f/24-c on this older DLL: if you have not run them yet, mark ea...[truncated 490 chars]",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The change to `5090-i5-ready-nc17.txt` is my own addendum, so nothing needs undoing.\n\nThe 5090-i3 operator marked 26-d SETUP-FAIL after one attempt, as the plan says. The lane then moved on, which is what you asked for. The cause is already known: the Hunt offer needs the NC17 fix, which isn't installed anywhere yet.\n\nI wrote two notes. The 5090-i3 operator should stop spending attempts on 26-dx, 26-e, 26-f and 24-c on its older DLL, mark them SETUP-FAIL with the known cause, release its claims,...[truncated 745 chars]"
+ ],
+ "event_text_chars": 904
+}

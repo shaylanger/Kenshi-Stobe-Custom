@@ -1,0 +1,37 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP (run in background)",
+   "why": "The waker bnq45z62u exited on this event, and nothing may go unwatched while lanes and agents are running."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiTestRuns\\lane-owners.json: add the key \"5090-i3\":{\"ops\":[\"imm26-5090-i3op32\",\"imm26-5090-i3op3\"],\"dirs\":[\"imm26-5090-i3\",\"imm26-5090-i3op3\",\"imm26-5090-i3op32\"]} next to the existing 5090-i4 and 4080-i3 entries",
+   "why": "lane-idle.ps1 would report lane 5090-i3 as NO-OPERATOR once i3op3 is stopped, so the lane is mapped to its successor before the spawn."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:generate] imm26-5090-i3op32 lane operator. Brief: You are imm26-5090-i3op32, the successor of imm26-5090-i3op3 (STOPPED-CONTEXT) for lane 5090 i3, travel/region rows (NC5). Read C:\\KenshiTestRuns\\agents\\imm26-5090-i3op3.handoff.md first and continue its TODO from the checkpoint. Row 23-b is yours: fix rowcheck c_23b first, then report to agents\\out\\imm26-inv-23b. Follow the operator brief in testing/AGENT_PROMPTS.md and the COMMON.md / OPERATOR_COMMON.md rules: one debug attempt per row, handback of 8 lines or fewer. Keep C:\\KenshiTestRuns\\agents\\imm26-5090-i3op32.status current with agent-status.ps1 and checkpoint your handoff about every 40k tokens. Never touch Shay's live install, server tree or DB.",
+   "why": "The lane is idle without an operator and the handoff names this successor, so it is spawned as soon as the checks show no running successor and no live-tail ownership."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-5090-i3op3",
+   "why": "Ack only if the i3op3 TAIL-RELAY is present in C:\\KenshiTestRuns\\inbox\\coordinator; the relay is a result to act on, not a respawn order by itself."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': change the 5090 i3 lane line to operator imm26-5090-i3op32 (successor of STOPPED-CONTEXT imm26-5090-i3op3, handoff file C:\\KenshiTestRuns\\agents\\imm26-5090-i3op3.handoff.md) and record the spawn time; update the program ledger the same way.",
+   "why": "HANDOFF and the ledger must name the live operator for each lane after every agent change."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (look at WAKER STATUS, ORPHANED, NO SUCCESSOR and OWNED-BY-LIVE-TAIL lines for imm26-5090-i3op3)",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i3op3.status (confirm STOPPED-CONTEXT and the next step)",
+  "dir C:\\KenshiTestRuns\\agents\\imm26-5090-i3op3* and dir C:\\KenshiTestRuns\\agents\\imm26-5090-i3op32* (confirm no successor already runs)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 list (confirm whether a live tail still owns i3op3)",
+  "dir C:\\KenshiTestRuns\\inbox\\coordinator (find the i3op3 relay before the ack)"
+ ]
+}

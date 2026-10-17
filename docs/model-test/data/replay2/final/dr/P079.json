@@ -1,0 +1,24 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "EVENT STATUS imm26-u4b-route DONE",
+   "why": "Its hand-back report (ba94c6a) and the HANDOFF entry were already handled, and op9i was already told to rerun the 26-a family."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background task)",
+   "why": "The waker that reported this batch (bne6vq6c7) has finished, and op9i and op11 are still running, so it must be re-armed at once."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for op9i results on 26-a, 22-a, 26-b and 26-c on the u4b-route build (ba94c6a), and for op11 08-d rerun 2 results",
+   "why": "Nothing new needs sending until a row result arrives or a status goes stale; both lanes reported at 02:28 and 02:31."
+  }
+ ],
+ "checks": [
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-5090-i5-op9i.status",
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-4080-i4op11.status"
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "id": "L04",
+ "batch_id": 4,
+ "class": "setup-fail ticket",
+ "window": [
+  "2026-10-16T21:53:06.358Z",
+  "2026-10-16T21:55:47.052Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 7,
+ "action_types": [
+  "restart-waker",
+  "restart-waker",
+  "read",
+  "run",
+  "run",
+  "spawn"
+ ]
+}

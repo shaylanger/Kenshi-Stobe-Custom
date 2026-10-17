@@ -1,0 +1,32 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker just woke the coordinator and must be restarted so the batch keeps being watched."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 20261016-140902-tail-imm26-5090-i4-hk2",
+   "why": "This relay is a DONE result from the 5090-i4 hk2 agent; after its report is read (see checks) it is acknowledged as a result, not an order."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:check] imm26-5090-i4op33 operator for lane 5090-i4. Brief: You are the fresh row operator for lane 5090-i4 in the imm26 program. Your predecessor imm26-5090-i4-hk2 finished DONE; its report is C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md. Row 12-d is SETUP-FAIL (PREFLIGHT-FAIL dist_to_target=112.3 >= 80 for Cind): do not re-run 12-d until its setup recipe is repaired. Read testing/HANDOFF.md and the 5090-i4 operator handoffs, take the next queued row for 5090-i4 under the standard batch and row rules, record status with tools/automation/agent-status.ps1 imm26-5090-i4op33, and register it with tools/automation/agent-ids.ps1. Do not install DLLs, edit product code, or touch other lanes; send one RESULT line per row.",
+   "why": "Lane 5090-i4 has no RUNNING operator and is not in lanes.held, so it must not sit idle; a fresh operator is respawned from the handoff with the next number after op32."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 <open-alert id for lane-no-operator-5090-i4 as printed by the open-alerts hook> \"respawned imm26-5090-i4op33 fresh from handoff; 12-d held for setup recipe\"",
+   "why": "The alert is closed only after the operator is spawned, since the ack records the action taken; the exact alert id is not in this file, so it is taken from the hook output."
+  }
+ ],
+ "checks": [
+  "tail -c 3000 C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md",
+  "cat C:/KenshiTestRuns/agents/imm26-5090-i4-hk2.status",
+  "grep -n 5090-i4 C:/KenshiTestRuns/lane-owners.json",
+  "cat C:/KenshiTestRuns/lanes.held",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

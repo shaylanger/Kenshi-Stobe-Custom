@@ -1,0 +1,33 @@
+{
+ "id": "P095",
+ "session": "48b778a7",
+ "ts": "2026-10-16T17:47:26.372Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "tail -3 /c/KenshiTestRuns/agents/imm26-5090-i3op21.status | cut -c1-300; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh >/dev/null 2>&1 & disown 2>/dev/null; true",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\rearm-waker.ps1 -KillOnly",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "I briefly started the waker with a trailing `&` again, which is the PI-34 mistake. I killed it and restarted it correctly, so one waker is running.\n\nNews from the 5090-i3 operator (op21):\n- **10-e:** PASS (commit `22ab7cb7`). That is the first row to pass on the new restart-proof epoch fix.\n- **20-d and 23-e:** it is running them now with sfJ's recipes. The 20-d SETUP-FAIL notice that woke me is from its earlier attempt on the old recipe, so I'm ignoring it unless the sfJ run fails too.\n- **Next...[truncated 36 chars]"
+ ],
+ "event_text_chars": 854
+}

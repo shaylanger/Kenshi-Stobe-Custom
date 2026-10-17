@@ -1,0 +1,29 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background, never a bare &)",
+   "why": "Waker beic3856w ended on EVENT BACKSTOP after 600 s with no events, while imm26-5090-i5-op9i and imm26-4080-i4op11 are still RUNNING, so a waker must stay armed."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-u5-route, tag [case:patch] accept route re-bind (work package U5). Brief: Operator op9i reports 26-a, 22-a, 26-b and 26-c SETUP-FAIL because the persisted route candidate (travel_destinations rows, valid 300 s) is not grounded at ACCEPT. Read C:/KenshiTestRuns/agents/imm26-5090-i5-op9i.handoff.md (26-a section) and the run under C:/KenshiTestRuns/imm26-5090-i5/26a/run19-27. Read commit b320c66 (imm26-u4-ground, same-kind grounding at ACCEPT only) and apply the same idea to the route candidate at ACCEPT: re-resolve it against current native facts without rebinding the stored record or digest. Keep the requester, willingness, expiry and one-active-record checks. Work in the compose tree and the five lane trees only, never the live tree or ss-merge. Add offline tests including a negative case (expired offer or hostile requester). Run php -l and the offline suite, deploy to compose and lane trees (PHP opcache about 1 min), commit and push, then write a one-line operator note to C:/KenshiTestRuns/inbox/operators/u5-route.txt: run 26-a first, accept within about 5 min of the offer. Do not edit hunt26a-scene.sh or any row script that op9i or op11 is running. One work package, target under 120k tokens; checkpoint status latest every about 40k tokens.",
+   "why": "The op9i report says the 26-a family is blocked at ACCEPT by the route candidate, and the coordinator already named a route re-bind fix as next if u4-ground was not enough."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md: add a '#12 02:30' line under Right now: op9i reports 26-a family SETUP-FAIL, route candidate not grounded at ACCEPT; u4-ground b320c66 deployed; imm26-u5-route spawned; waker re-armed.",
+   "why": "HANDOFF Right now must reflect every agent report and waker change."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No message to imm26-5090-i5-op9i or imm26-4080-i4op11.",
+   "why": "op9i has already moved on to 12-d, 19-e and 19-f, and op11 is running 08-e, 08-d and 11-b; isolated test arms get no coordinator input, and u5 gets verified by the next operator run."
+  }
+ ],
+ "checks": [
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-5090-i5-op9i.status | cut -c1-300",
+  "grep -n -i 'grounded' /c/KenshiTestRuns/imm26-5090-i5/26a/run19-27/* | head -20"
+ ]
+}

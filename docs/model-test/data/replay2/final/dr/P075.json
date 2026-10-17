@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a97e05a80e87aab69 (imm26-4080-i4op10), relayed from coordinator #12 (Shay's order): Shay ordered every SETUP-FAIL/GATED row unblocked, and the one-call row scripts are ready (testing\\live-stobe-queue\\imm26-assert\\rowtools\\unblock*; notes in inbox\\operators\\u-rowsA/B/C.txt). Finish the current 13-ax run, COMMIT your uncommitted rowtools edits (hxdefs.sh etc.), write C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.handoff.md, set status STOPPED-CONTEXT (or DONE) with agent-status.ps1, then stop. Do not start new hardening rows. The coordinator spawns a fresh 4080-i4 operator (op11) for the unblock rows.",
+   "why": "The peer coordinator cannot reach this tail-owned agent and asked the tail to forward the stop-and-handoff order; peer messages carry Shay's authority."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 (op9c relay; argument form taken from its usage line, run first)",
+   "why": "The op9c relay was delivered (inbox file shows delivered) and coordinator #12 says it is acked on its side and asks the tail to ack the ones it holds."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the already-running tail-wait background task bz0lf5892 (tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02); do not start a second one. When imm26-4080-i4op10 reports STOPPED-CONTEXT or DONE, tail-relay it to coordinator bea16970-1102-47a3-b183-46101095930c, then re-arm the wait.",
+   "why": "The tail still owns i4op10 until its result is relayed, and the waker armed earlier is still alive because this message did not complete it."
+  }
+ ],
+ "checks": [
+  "Read the first 3 lines of C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.status to confirm it is still RUNNING and not already DONE",
+  "Run tail-ack.ps1 with no arguments to print its usage line before acking"
+ ]
+}

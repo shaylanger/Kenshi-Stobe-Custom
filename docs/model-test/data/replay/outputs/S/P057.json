@@ -1,0 +1,24 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add line '#10 SHAY ORDER (03:02 UTC): \"size 3 and do it if it isnt too large\" = size the 3 optional native items (WP-N1 resume probe ~70k, WP-N2 displayed-proposal ~40k, durable_item_id plan from the wpR2 report) per docs/WP_SIZING.md section 2 and build each one that fits the <=120k-token package target. Offline/4080 only; 5090 stays held (no-new-5090-sessions).'",
+   "why": "Shay's order must be recorded in the live state file the moment it arrives, before any agent starts."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-native-sizing, description '[case:read] size native WP-N1/N2/durable_item_id', brief: 'Read-only sizing task. Shay said: \"size 3 and do it if it isnt too large\". The 3 items are the optional native packages listed in testing/HANDOFF.md Right now (#10 21:05): WP-N1 resume probe (~70k est), WP-N2 displayed-proposal (~40k est), and the durable_item_id plan from the wpR2 report. Use bash tools/automation/codemap.sh maps (grep -n funcname on the map, then sed -n a,bp), never read a file over 60 KB whole. For each item list the files and functions to touch, the file sizes, a token estimate per phase (code | tests | native build | live validation, docs/WP_SIZING.md section 2), and a verdict FITS (<=120k, <=2 big files) or TOO LARGE (propose a split). Write the result with tools/automation/save-report.ps1 under agents/out/imm26-native-sizing and update its status file with tools/automation/agent-status.ps1. Do not edit code and do not touch the 5090.'",
+   "why": "Sizing before building is mandatory for work packages, and it gives a fits/too-large verdict per item for the 'do it if it isn't too large' condition."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-native-sizing report. For each item it marks FITS, spawn a code-phase package with a brief following docs/WP_SIZING.md section 7 (WP-N1, WP-N2, durable_item_id as separate agents). For any marked TOO LARGE, ask Shay with the split proposal in the next summary and do not build it. Keep the event-wait.sh waker running and touch inflight\\imm26-native-sizing.",
+   "why": "The build decision depends on the sizing result, and nothing more can be done about it until the report arrives."
+  }
+ ],
+ "checks": [
+  "grep -n -i 'WP-N1\\|WP-N2\\|durable_item_id' C:\\KenshiModding\\testing\\HANDOFF.md",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

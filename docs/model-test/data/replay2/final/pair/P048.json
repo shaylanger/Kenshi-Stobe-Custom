@@ -1,0 +1,20 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no command; the EVENT STATUS imm26-pi15 DONE line repeats the PI-15 report already delivered by relay, recorded as done, and committed as 34c156c",
+   "why": "Acting again would double-record PI-15, and this waker line adds no new work."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "keep Monitor bdlp28p66 (imm26 event stream waker) running and re-arm it if it has expired; hold the PI-21 build until imm26-pi18 is DONE; act at once on any LANE IDLE or lane alert event",
+   "why": "Shay ordered PI-21 to build after PI-18 (same kenshi-waker-guard.ps1), and PI-13, PI-19/20 and imm26-inv19 are still in flight."
+  }
+ ],
+ "checks": [
+  "type C:\\KenshiTestRuns\\agents\\imm26-pi18.status",
+  "git -C C:\\KenshiModding log --oneline -3",
+  "dir C:\\KenshiTestRuns\\alerts\\open"
+ ]
+}

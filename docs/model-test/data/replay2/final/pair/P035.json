@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP",
+   "why": "The last waker (bee9yyh59) completed on this wake; a tail session that owns agents must keep a waker running, so restart it before waiting."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for (a) the new coordinator's tail-ack of imm26-5090-i3op3 (relay msg_id e64856b8-b6a0-4fae-8b98-f8a9096677b0, addendum msg_id b1f560a5-d262-4f9c-9ec8-6fae31c539ea) and (b) imm26-5090-ctxop322 reaching DONE or FAILED; when ctxop322 finishes, save its report to a file and relay it with tail-relay.ps1 to C:\\KenshiTestRuns\\inbox\\coordinator; spawn nothing new",
+   "why": "The tail may not end until each owned agent is finished and acknowledged; i3op3 was already relayed with its addendum and only awaits the ACK, and ctxop322 is still RUNNING with its last status at 18:18, under the 10-minute silence mark, so no stall action yet."
+  }
+ ],
+ "checks": [
+  "head -4 C:/KenshiTestRuns/agents/imm26-5090-ctxop322.status | cut -c1-320",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 status",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1 records imm26"
+ ]
+}

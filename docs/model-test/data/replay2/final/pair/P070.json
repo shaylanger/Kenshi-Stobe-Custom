@@ -1,0 +1,24 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background; never a bare &)",
+   "why": "The waker task bktl5tmwz completed on this batch and nothing else is armed, so re-arm it first while op9d and imm26-4080-i4op10 are still in flight."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to afe0bd6845757aac3 (operator imm26-5090-i5-op9d): Coordinator status check. LANE IDLE on 5090-i5 at 6.1 min, newest activity 'status' only. Reply now with: the row and step you are on, whether the game is up on NC12 with the lane lock held, whether the Cind teleport and offer loop for 26-a has started, and what you are waiting for. If blocked, give the evidence path. Update C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.status first, then keep going on 26-a per your brief, status every 10 min.",
+   "why": "The lane alert asks the coordinator to find out what the operator is doing; op9d was spawned about 6 minutes ago, so a short status request separates a slow start from a stuck run."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "No ack yet. Wait for the op9d reply or a fresh status line, and for the imm26-4080-i4op10 relay. Ack the open LANE IDLE 5090-i5 alert with alert-ack.ps1 only once the reply or status shows real game activity; the LANE STALLED watchdog (12 min) is the backstop if op9d stays silent.",
+   "why": "Acking a fresh operator with no evidence could close a lane that is genuinely idle, and the stall watchdog catches a silent operator."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 -NoMemory",
+  "cut -c1-600 /c/KenshiTestRuns/agents/imm26-5090-i5-op9d.status"
+ ]
+}

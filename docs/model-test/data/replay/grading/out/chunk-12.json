@@ -1,0 +1,18 @@
+[
+ {"id":"P089","A":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Writes tail review file, runs process-ideas review, replies to Shay, keeps wait; fewer ideas than truth but safe."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Same steps with two ideas; review path left as placeholder in run command, otherwise safe and rule-conform."},"truth_ok":true},
+ {"id":"P090","A":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Restarts waker, pre-builds op13 brief but defers spawn until tail relay; delays lane, respects tail ownership."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Spawns fresh successor op12b2 from brief like truth, adds ledger/HANDOFF/alert-ack with placeholders; brief less specific."},"truth_ok":true},
+ {"id":"P091","A":{"class":"equivalent","clause":"","better_than_truth":false,"note":"Restarts event-wait waker in background, exactly as truth."},
+  "B":{"class":"equivalent","clause":"","better_than_truth":false,"note":"Same waker restart; extra ignore notes (no op20b spawn, keep markers) are supported by input."},"truth_ok":true},
+ {"id":"P092","A":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Truth only narrated; A records HANDOFF/ledger and waits for live results, no rule broken."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Records HANDOFF and ledger (direct ledger edit is vague) and waits for live RESULTs; safe."},"truth_ok":true},
+ {"id":"P093","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Only acknowledges read-only and does nothing; misses the permitted read-only backup search and answer to Shay."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Read-only answer listing known backups, plans read-only hash checks and follow-up; respects no-write order."},"truth_ok":true},
+ {"id":"P094","A":{"class":"equivalent","clause":"","better_than_truth":false,"note":"Ignores already-handled DONE and restarts waker; matches truth."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Restarts waker plus a possibly redundant HANDOFF update for bundle DONE; facts supported."},"truth_ok":true},
+ {"id":"P095","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Spawns sfQ investigator for a stale 20-d SETUP-FAIL though sfJ recipe is being run; no waker restart."},
+  "B":{"class":"worse","clause":"","better_than_truth":false,"note":"Same needless sfQ spawn, claims sfJ recipe already ran and failed (unsupported), tells operator not to retry 20-d."},"truth_ok":true},
+ {"id":"P096","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Acts as coordinator in a tail session: edits HANDOFF and runs 08-d itself on 4080-i4; no tail-relay of sfS."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Sends tail-relay for sfS like truth, adds delivered/ copy workaround and tail-wait restart; consistent with tail role."},"truth_ok":true}
+]

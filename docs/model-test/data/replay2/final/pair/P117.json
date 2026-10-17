@@ -1,0 +1,20 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background: true)",
+   "why": "Background waker bjikfnh8e completed with exit 0, so nothing wakes the coordinator for the in-flight agents (tail 17's hk2, op9p, 4080-i3op23, fix20a19e, fix26f11b, rr02), the op16 run on 4080-i4, and imm26-fix15bx05cx2 until it is restarted."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "C:/KenshiTestRuns/agents/imm26-fix15bx05cx2.status (RUNNING) and its handoff file when written; the stopped imm26-fix15bx05cx is not messaged",
+   "why": "The STOPPED-CONTEXT predecessor already has a RUNNING successor registered, so the respawn guard is met; the successor's result arrives by notification, and tail-ack cannot close the STALL relay because that agent is in no program ledger."
+  }
+ ],
+ "checks": [
+  "tail -c 2000 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/3a21a7b9-2954-4145-be31-079880e2e887/tasks/bjikfnh8e.output (to see which event line the waker printed; the batch itself does not show it)",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-fix15bx05cx2.status"
+ ]
+}

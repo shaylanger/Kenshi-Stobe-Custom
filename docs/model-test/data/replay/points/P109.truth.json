@@ -1,0 +1,26 @@
+{
+ "id": "P109",
+ "session": "60ad9d7d",
+ "ts": "2026-10-16T19:13:28.007Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: ! powershell -NoProfile -Command \"Stop-Process -Id 18532 -Force"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding/tools/automation; powershell -NoProfile -File rearm-waker.ps1 -KillOnly | tail -1; cp event-wait.sh /c/KenshiTestRuns/backups/event-wait.sh.pre-digest; cp event-wait.sh.candidate event-wait.sh && echo swapped; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -n /mnt/c/KenshiModding/tools/automation/event-wait.sh && echo syntax-ok",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 1752
+}

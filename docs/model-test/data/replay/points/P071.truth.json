@@ -1,0 +1,23 @@
+{
+ "id": "P071",
+ "session": "bea16970",
+ "ts": "2026-10-16T06:01:50.888Z",
+ "class": "lane-alert",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "cd /c/KenshiTestRuns; cat lanes.held; echo \"5090-i5\" >> lanes.held; powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 5090-i5 \"no runnable rows until NC13 (native sight fix); lane held in lanes.held until a fixed DLL exists, remove the line then\" | tail -2\nMSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The full selftest finished with 34 pass, 0 fail and 1 skip. The skip is the slow `rowtools` suite, which only runs with `-Include slow`.\n\nThe LANE NO-OPERATOR alert on 5090-i5 was expected, because no row on that lane can run until the native sight fix exists. I added `5090-i5` to `lanes.held` and acked the alert. Remove that line once NC13 is built.\n\nStill running:\n- **`imm26-nc13-investigate`:** looking into the `canISeeThisGuy` sight check.\n- **`i4op10`:** running on the 4080.\n\nThe waker is r...[truncated 8 chars]"
+ ],
+ "event_text_chars": 1132
+}

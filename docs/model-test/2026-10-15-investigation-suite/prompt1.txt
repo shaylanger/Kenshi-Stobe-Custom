@@ -1,0 +1,1 @@
+I loaded up the save fresh start, and talked up and talked to the npc Tengu, but the first response from stobe too a long time, can you investigate an figure out why and propose a solution or fix to this (please read only, do not actually change the codebase) Just explain to me the fix in detail so i can apply it myself later.

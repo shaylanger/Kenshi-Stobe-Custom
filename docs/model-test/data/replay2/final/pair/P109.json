@@ -1,0 +1,32 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 <wk1 relay id as listed by ls C:\\KenshiTestRuns\\inbox\\coordinator; skip if no wk1 relay file exists>",
+   "why": "The tail 16 wk1 hand-back is a relay result; acking it lets tail 16 end once its relays are delivered, and the handled relay moves to inbox\\coordinator\\delivered\\."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' and the imm26-wk1 program ledger (ledger file name is not in this batch; look under C:\\KenshiTestRuns\\programs\\): record imm26-wk1 DONE; waker digest candidate tools/automation/event-wait.sh.candidate (commits d87eee78, 92c2d38e, pushed); event-wait.sh NOT swapped; tail-reported selftests digest 42/42, batch 26/26, filter 13/13; lane-idle and health wakes not yet exercised live.",
+   "why": "The coordinator updates HANDOFF and the ledger after every agent report, and this result must survive a context handoff."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Hold the waker swap. Do not cp event-wait.sh.candidate over event-wait.sh while a waker runs. At the next deliberate waker restart, with no waker process running, rerun the three candidate selftests in WSL (digest, batch, filter), then cp the candidate over event-wait.sh and restart the waker; about an hour after the swap run bash tools/automation/waker-stats.sh and check the live lane-idle and health wakes before trusting the digest.",
+   "why": "The candidate has not been exercised live, and a mid-run edit of a running waker script kills it, so the swap waits for a safe restart and a live check."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No respawn of imm26-wk1 and no SendMessage to tail 16 (245d8ad7) or tail 48b778a7.",
+   "why": "wk1 is DONE and the tail already knows the swap is held, so nothing else in this relay needs action."
+  }
+ ],
+ "checks": [
+  "ls C:\\KenshiTestRuns\\inbox\\coordinator",
+  "type C:\\KenshiTestRuns\\agents\\imm26-wk1.status",
+  "ls C:\\KenshiTestRuns\\inflight",
+  "git -C C:\\KenshiModding log --oneline -3 -- tools/automation/event-wait.sh.candidate",
+  "git -C C:\\KenshiModding status --short tools/automation/event-wait.sh tools/automation/event-wait.sh.candidate"
+ ]
+}

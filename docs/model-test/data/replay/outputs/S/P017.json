@@ -1,0 +1,25 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\docs\\COORDINATOR_IMPROVEMENTS.md: delete only the item 'a cheaper model for operators' (the item text, then renumber the remaining items so the list is 9 items). Also delete any copy of that item in C:\\KenshiModding\\testing\\KNOWN_BLOCKERS.md or in briefs/templates if grep finds one. Do not touch the other items, model-policy.json or the already running agents.",
+   "why": "Shay's direct order is to remove that one improvement item (the file is the one the coordinator listed as holding it)."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "cd /c/KenshiModding && git config user.email && git add docs/COORDINATOR_IMPROVEMENTS.md && git commit -m 'COORDINATOR_IMPROVEMENTS: remove item \"cheaper model for operators\" (Shay order)' && git push",
+   "why": "Repo rule: one change per commit, pushed right away, with identity shaylanger; stage only this file because the tree has unrelated uncommitted changes."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Removed the 'cheaper model for operators' item from docs/COORDINATOR_IMPROVEMENTS.md; 9 items remain. Operator model choice still comes from tools/automation/model-policy.json, unchanged.",
+   "why": "Short confirmation to Shay's relay session without asking anything."
+  }
+ ],
+ "checks": [
+  "grep -n -i 'cheaper model' /c/KenshiModding/docs/COORDINATOR_IMPROVEMENTS.md /c/KenshiModding/testing/KNOWN_BLOCKERS.md /c/KenshiModding/testing/HANDOFF.md",
+  "git -C /c/KenshiModding status --short docs/COORDINATOR_IMPROVEMENTS.md",
+  "git -C /c/KenshiModding config user.email"
+ ]
+}

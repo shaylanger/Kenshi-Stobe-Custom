@@ -1,0 +1,30 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no command; do not SendMessage imm26-sfB or the old task id ad156516b336b83a9; do not respawn",
+   "why": "The task-notification is the stop of the old imm26-sfB at its context limit, and its successor imm26-sfB2 (a2f174c4a489c4f06) was already spawned, so nothing is lost and the old agent must not be resumed."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-sfB2 (agentId a2f174c4a489c4f06): your predecessor imm26-sfB stopped at context; its final report (ad156516b336b83a9) gives the root cause. Check both points against your handoff before you edit. (1) The server learns of arrival only inside stobeCommitmentReconcileNative (lib/commitment_native_bridge.php), which runs while the conversation prompt is built and needs a native snapshot at most 120 s old. The 13-c and 13-c-neg row scripts (unblockdefs_b.sh, rd_13c) only poll the eventlog and never trigger a turn, so the agreement stays ACCEPTED whatever native does; 23-a passed because it ran ctxpush plus a 'We're here' line. (2) The native arrival tick needs a 3D distance of at most 8 u to the order point, which the server side never matches (see that report's 'Native arrival check can never pass' section). Fix the native side in NC18 only. Do not edit row scripts; list the row-script defect in your report and the coordinator routes it. Do not install or launch the game. Keep your status current.",
+   "why": "sfB2 was spawned at line 107 and the root-cause report arrived after that, so its handoff-only brief may lack these findings; they must land in one pass."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing\\HANDOFF.md 'Right now': add one line saying imm26-sfB stopped at context (report ad156516b336b83a9, root cause passed to sfB2); successor imm26-sfB2 (a2f174c4a489c4f06) RUNNING on NC18 native arrival/completion for rows 13-c, 13-c-neg, 23-a, 19-d; not built, not installed",
+   "why": "The coordinator must update HANDOFF 'Right now' after every agent report, and this one changes who owns the NC18 work."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-sfB2 DONE or STOPPED-CONTEXT status (C:\\KenshiTestRuns\\agents\\imm26-sfB2.status) via the event waker; if STOPPED-CONTEXT, spawn imm26-sfB3 from its handoff file",
+   "why": "NC18 native arrival/completion is still unbuilt and imm26-sfB2 is now the only live owner of it."
+  }
+ ],
+ "checks": [
+  "type C:\\KenshiTestRuns\\agents\\imm26-sfB2.status (expect RUNNING, successor of imm26-sfB)",
+  "type C:\\KenshiTestRuns\\agents\\imm26-sfB.status (expect STOPPED-CONTEXT, successor imm26-sfB2)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

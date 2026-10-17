@@ -1,0 +1,22 @@
+{
+ "event_class": "other",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Read-only status first: ssh 4080 for C:\\KAH\\ctl.ps1 status -Instance 3 and -Instance 4, plus the 5090 kenshi-ctl status. If the 4080 games are gone and the operator is not mid-row, release the stale 4080 busy markers (4080-imm26, 4080-imm26-i4) with the C:\\KAH rig-lock tool and relaunch a lane only if a claimed row needs it.",
+   "why": "The waker reports RIG STALL on the 4080 (kenshi=no, lock free, BUSY markers still claimed), so the claim is stale and needs fixing at the root without disturbing live rows; which rig reported kenshi=no is not stated in the batch."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the status results and the next waker event, then act on the lane state.",
+   "why": "Nothing is decided until the game state on each rig is confirmed."
+  }
+ ],
+ "checks": [
+  "ssh 4080 \"C:\\KAH\\ctl.ps1 status -Instance 3\"",
+  "ssh 4080 \"C:\\KAH\\ctl.ps1 status -Instance 4\"",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1 status",
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-4080-op2c.status",
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-4080-i4op.status"
+ ]
+}

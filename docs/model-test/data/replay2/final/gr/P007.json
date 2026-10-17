@@ -1,0 +1,21 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "The event-wait waker (task bzbwr5kui) exited, so nothing wakes the coordinator while work is in flight; restart it at once and again each time it wakes the coordinator."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/CLAUDE.md: replace the wrong inserted block (the agent brief template that starts with '[case:generate] <wpName>' and runs to the DELIVERABLES line) with the three section 8 bullets from docs/WP_SIZING.md, taken from the second triple-backtick block (split index 3, not index 1). If the original 'Size work packages before spawning' bullet is missing, restore it first from git show HEAD:CLAUDE.md.",
+   "why": "The earlier python edit split WP_SIZING.md on the first code fence (the section 7 brief template), so CLAUDE.md now carries the brief template where a core rule was; the grep for 'Big files are read' returned 0 and the coordinator did not notice."
+  }
+ ],
+ "checks": [
+  "tail -5 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/277ebe12-067a-4b4a-b63d-8c4b6c5f3aa2/tasks/bzbwr5kui.output\" | cut -c1-500",
+  "cd /c/KenshiModding; git diff CLAUDE.md | head -60",
+  "cd /c/KenshiModding; grep -n \"Size work packages\\|Big files are read\\|\\[case:generate\\] <wpName>\" CLAUDE.md | cut -c1-80; git show HEAD:CLAUDE.md | grep -n \"Size work packages\" | cut -c1-80",
+  "cd /c/KenshiModding; grep -n '^```' docs/WP_SIZING.md"
+ ]
+}

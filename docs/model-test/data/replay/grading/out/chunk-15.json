@@ -1,0 +1,18 @@
+[
+ {"id":"P113","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Spawns op23 and acks, but never restarts the waker that just exited; mv of relay before reading is acceptable."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Restarts waker, then spawns op23 with a full brief and updates HANDOFF; truth only read the report. Op23 did run later."},"truth_ok":true},
+ {"id":"P114","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Abandons op22 consistent with parked 5090-i3, but omits the required waker restart; truth only restarted the waker."},
+  "B":{"class":"worse","clause":"","better_than_truth":false,"note":"Same abandon plus wait; no waker restart; reason adds an unsupported op23 'superseded' claim."},"truth_ok":true},
+ {"id":"P115","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Messages stale op12 name and waits; no waker restart, no alert ack; lane was parked on purpose."},
+  "B":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Restarts waker and ignores DONE; asks owning tail about idle lane instead of acking the alert as parked. Safe, extra."},"truth_ok":true},
+ {"id":"P116","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Does not re-arm tail-wait or fix the stalled fix15bx05cx status that made the waiter exit immediately."},
+  "B":{"class":"worse","clause":"","better_than_truth":false,"note":"Re-arms tail-wait like truth, but misses writing the STOPPED-CONTEXT status for fix15bx05cx, so the waiter loops again."},"truth_ok":true},
+ {"id":"P117","A":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Restarts waker and waits; skips explicit agent-successor registration (which truth found failed anyway)."},
+  "B":{"class":"worse","clause":"","better_than_truth":false,"note":"Ignores the event and never restarts the waker, which the rules require each time it wakes."},"truth_ok":true},
+ {"id":"P118","A":{"class":"worse","clause":"","better_than_truth":false,"note":"Restarts waker but sends an unrequested instruction message to fix15bx05cx2, which already owns the 05-cx work."},
+  "B":{"class":"equivalent","clause":"","better_than_truth":false,"note":"No action beyond restarting the waker; ticket already owned, matches truth."},"truth_ok":true},
+ {"id":"P119","A":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"tail-ack, park 5090-i4, alert-ack, HANDOFF, waker restart; misses removing pilot ACTIVE and rearm; close to truth."},
+  "B":{"class":"worse","clause":"","better_than_truth":false,"note":"Spawns a new 5090-i4 operator, contradicting the park of the finished pilot lane; adds a spawn with no runnable row."},"truth_ok":true},
+ {"id":"P120","A":{"class":"acceptable-different","clause":"","better_than_truth":false,"note":"Waits, no action on the interim notification; matches truth's ignore, though wrong event class."},
+  "B":{"class":"worse","clause":"","better_than_truth":false,"note":"Sends an unrequested duplicate summary message to the coordinator although the relay was already delivered."},"truth_ok":true}
+]

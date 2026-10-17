@@ -1,0 +1,35 @@
+{
+ "id": "P111",
+ "session": "60ad9d7d",
+ "ts": "2026-10-16T19:15:44.283Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: ! powershell -NoProfile -Command \"Stop-Process -Id 18532 -Force"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:investigate] 20-a/20-d/19-a trip propose-accept defect\nprompt: [case:investigate] imm26-inv20a - read-only root cause + minimal recipe/fix proposal for 3 SETUP-FAIL rows: 20-a (4080-i3), 20-d (fixture), and 19-a/14-a only as same-defect evidence.\nSYMPTOM (20-a ticket, 13:15): \"no ACCEPTED travel_agreement while setting up the trip (propose/accept legs failed; see s1/s1b/s2/s2b, same defect as 19-a/14-a)\"; calm, dist_to_target s3=24, s4=14. Evidence dir: C:\\KenshiTestRuns\\imm26-4080\\rows\\20-a (and 20-d evidence per `powershell -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list`; ticket json in C:\\KenshiTestRuns\\setupfail\\). Rows spec: C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md (grep IMM-20-a, IMM-20-d). Prior recipes: sfJ (20-d, 23-e, reload-run-sfj.sh), sfQ (server fix for 20-a/20-d confirm turn), sfR2 sfrrun.sh (23-b 22-b 20-a), sfY v2 checkers, and the 23-a v2 walk that DOES get a trip ACCEPTED+COMPLETED; find under C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\ and tools/automation/rowtools.\nTASK: find why propose/accept does not produce an ACCEPTED travel_agreement in the 20-a setup (utterance wording, wrong NPC/distance/mode, server bundle not deployed on the 4080-i3 lane, or a real product defect) and say which of recipe|server-fix|native|fixture it is, with the exact change. Do NOT touch any game, lane, Shay's install/DB. Read only; use grep/tail/line ranges, files > 60 KB via codemap (bash C:\\KenshiModding\\tools\\automation\\codemap.sh maps in /root/imm26/codemap).\nBUDGET: at most 3 rows, <= 120k tokens; write each row's finding into the report file as soon as it is done (save-report.ps1 imm26-inv20a <file> at the end of each row, overwrite). Status: agent-status.ps1 imm26-inv20a RUNNING|DONE|FAILED|STOPPED-CONTEXT \"<task>\" \"<latest>\" \"<outputs>\" \"<next>\"; handoff C:\\KenshiTestRuns\\agents\\imm26-inv20a.handoff.md.\nHand back at most 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay.",
+   "why": "Several tickets are unowned: 20-a, 20-d, 01-cx and 08-d. I'm spawning two read-only investigators, each capped at 3 rows, for the two failures that look like shared defects."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:investigate] 01-cx row script stops early\nprompt: [case:investigate] imm26-inv01cx - read-only root cause + minimal fix proposal for SETUP-FAIL 01-cx (4080-i3), then 08-d only if budget remains.\nSYMPTOM (ticket 12:54): \"bundle dirs missing under /c/KenshiTestRuns/imm26-4080/rows/01-cx: savA/H1,H2,H3,A1,A2,A3 and savB/H1..A3 (the row script stopped early; see run.log)\". Evidence: C:\\KenshiTestRuns\\imm26-4080\\rows\\01-cx (run.log). The row was rerun by operator imm26-4080-i3op22 after sfY's v2 checker (01-bx/10-b re-judge PASS; 01-cx savA real FAIL rerun). Row spec: grep IMM-01-c in C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md. Scripts: C:\\KenshiModding\\tools\\automation\\rowtools and pending-fixes\\npc-immersion-26 (hxrun / hx 01-cx scripts, sfY).\nTASK: find why the script stopped before the savA/savB bundles were produced (script bug, lane state, timeout, game dead, Stobe server down on the lane) and give the exact fix and whether it is recipe|server-fix|native|fixture. 08-d (needs: native; v2 via sfS/sfT: \"trip order ended before goal\"; 23-a v2 walk completes trips) only if budget remains: one paragraph with the cause. Do NOT touch any game, lane, Shay's install/DB. Read only; grep/tail/line ranges; files > 60 KB via codemap.\nBUDGET: at most 3 rows, <= 120k tokens; append each finding to the report file as it is done (save-report.ps1 imm26-inv01cx <file>, overwrite). Status: agent-status.ps1 imm26-inv01cx RUNNING|DONE|FAILED|STOPPED-CONTEXT \"<task>\" \"<latest>\" \"<outputs>\" \"<next>\"; handoff C:\\KenshiTestRuns\\agents\\imm26-inv01cx.handoff.md.\nHand back at most 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay.",
+   "why": "Several tickets are unowned: 20-a, 20-d, 01-cx and 08-d. I'm spawning two read-only investigators, each capped at 3 rows, for the two failures that look like shared defects."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/setupfail.ps1 list 2>&1 | grep -E \"^20-a|^20-d\"; cat /c/KenshiTestRuns/inbox/coordinator/*20-a* 2>/dev/null | cut -c1-400 | tail -4"
+ ],
+ "narration": [
+  "Several tickets are unowned: 20-a, 20-d, 01-cx and 08-d. I'm spawning two read-only investigators, each capped at 3 rows, for the two failures that look like shared defects."
+ ],
+ "event_text_chars": 770
+}

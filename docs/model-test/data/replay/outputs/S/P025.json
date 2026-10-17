@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md, section 'Right now': add one line. 'N5a (row 13-b server half, imm26-n5a) DONE: lib/social_interpreter.php abandonedInDanger now treats agreement_id as optional and uses evidence_id as the incident key. Commit ee28e15 on main, pushed. compose.patch regenerated (APPLY-IDENTICAL). Deployed file by file to 5090 i3/i4/i5 and 4080 i3/i4. stobe-tests: 97 suites passed, 6 failed (the same set as the batch2e run). Next: rerun row 13-b on the lanes (needs the native half, see imm26-nc4a), then update the ledger.' Also update the imm26 program ledger work package N5a to done, if one exists.",
+   "why": "The ledger and HANDOFF must be updated after every agent report. The report is a real DONE with a commit and deployed lanes, and the 'waiting on background work' note is only a harness flag that the result may be interim."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not respawn or message imm26-n5a, and do not wait for a second notification from it.",
+   "why": "Its own EVENT STATUS already says DONE and the status file should show DONE, so the 'waiting on its own background work' flag does not need action. If the status file turns out not to say DONE, run the check below first."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the background event-wait.sh waker running. Wait for the imm26-nc4a result and for the next lane operator row report. The 13-b rows are rerun at the next row boundary on the current compose.",
+   "why": "Operators already pick up new work at row boundaries, and the server fix is deployed identically on all five lanes. Nothing else needs doing now, and the earlier rule is no rig idle for more than 2 minutes."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "cat C:\\KenshiTestRuns\\agents\\imm26-n5a.status",
+  "git -C C:\\KenshiModding log --oneline -3",
+  "ls C:\\KenshiTestRuns\\inflight"
+ ]
+}

@@ -1,0 +1,46 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Understood. From now on each PI item leaves docs/PROCESS_IDEAS.md as soon as its build is committed and its selftest passes. PI-06, PI-07, PI-08, PI-09, PI-10 and PI-12 are building now and come out as their agents report DONE and their commits land. PI-11 was not approved, so it stays listed until you answer.",
+   "why": "Confirms Shay's standing removal order to him before acting on it, and says which items leave the list."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "tools/automation/process-ideas.ps1: add a 'done <id>' subcommand that deletes that PI id's block from docs/PROCESS_IDEAS.md (heading line through the line before the next PI heading) and exits with an error if the id is not in the file. Extend tools/automation/process-ideas-selftest.ps1 with cases for done-removes-block and done-missing-id-refuses.",
+   "why": "One command per finished item keeps the list current and is safer than hand-editing, and the tool has no removal path yet."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "docs/PROCESS_IDEAS.md: add one line near the top: 'Done items are removed from this file once they are built, selftested and committed (Shay 2026-10-15).'",
+   "why": "The removal rule sits where every later session reads it, so the list does not go stale again."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/process-ideas-selftest.ps1",
+   "why": "The new done subcommand must pass its selftest before anything is committed."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git -C C:/KenshiModding add tools/automation/process-ideas.ps1 tools/automation/process-ideas-selftest.ps1 docs/PROCESS_IDEAS.md ; git -C C:/KenshiModding commit -m 'process-ideas: done <id> subcommand; remove done items (Shay 2026-10-15)' ; git -C C:/KenshiModding push origin main",
+   "why": "Commit and push right after the selftest passes, so the removal command exists before the first PI item finishes."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for DONE from imm26-pi06-09, imm26-pi07-08, imm26-pi10 and imm26-pi12 (status files C:/KenshiTestRuns/agents/<name>.status) and for their commits in git.",
+   "why": "No PI item can leave the list until its build agent has finished and committed, and all four are still running."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/process-ideas.ps1 done <PI-id>, then git -C C:/KenshiModding commit docs/PROCESS_IDEAS.md and push origin main; once per id, only after that id's agent is DONE, its commit is in git and its selftest passes.",
+   "why": "Removes each finished item as it completes so the list never holds stale entries."
+  }
+ ],
+ "checks": [
+  "grep -n done C:/KenshiModding/tools/automation/process-ideas.ps1",
+  "grep -n 'PI-[0-9][0-9]' C:/KenshiModding/docs/PROCESS_IDEAS.md",
+  "git -C C:/KenshiModding config user.email (must be the repo-local shaylanger identity from CLAUDE.md before any commit)",
+  "git -C C:/KenshiModding status --short tools/automation/process-ideas.ps1 docs/PROCESS_IDEAS.md"
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not release any lane, do not clear inflight markers and do not ack/abandon anything for this RIG STALL line.",
+   "why": "The stall check looks only for the default (non-lane) Kenshi process and game.lock, but the 5090 lanes i3/i4/i5 and 4080 lanes i3/i4 are isolated games that were just verified up by the isolation checks and have running operators (imm26-4080-op2c, imm26-4080-i4op, imm26-5090-i4op, imm26-5090-i5op), so 'kenshi=no lock=free' is most likely a false positive; the inflight list also contains stale markers of finished agents which is expected."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:patch] imm26-waker-lane-aware: Your name is imm26-waker-lane-aware. Only if the coordinator's read-only checks confirmed the lane games are running while event-wait.sh printed RIG STALL, fix tools/automation/event-wait.sh so the RIG STALL test counts a running isolated-lane game (pids from the lane markers such as 5090-imm26-i4 / 4080-imm26-i4, taken the same way lane-isolation-check.ps1 and lane-isolation-check-5090.ps1 do) as Kenshi running, and ignores inflight markers of agents whose status is DONE. Add a selftest, commit and push, and record the change in testing/HANDOFF.md. Do not edit event-wait.sh while a waker is running from it: write the patch, and the coordinator swaps it at the next waker restart. Keep status current via agent-status.ps1.",
+   "why": "A waker that raises a false RIG STALL every cycle costs a coordinator turn each time and could hide a real stall, so the snag gets fixed at its root; the spawn is conditional on the checks confirming the false positive."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | head -30  (run as a background Bash task)",
+   "why": "Work is in flight on four lanes, so a waker must be running again, and the one that fired has completed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-isolation-check-5090.ps1",
+  "ssh 4080 powershell -NoProfile -File C:\\KAH\\ctl.ps1 status -Instance 3; ssh 4080 powershell -NoProfile -File C:\\KAH\\ctl.ps1 status -Instance 4",
+  "powershell -NoProfile -Command \"Get-Process kenshi_x64 | Select-Object Id,StartTime\"",
+  "ls C:\\KenshiTestRuns\\inflight; ls C:\\KenshiTestRuns\\alerts\\open"
+ ]
+}

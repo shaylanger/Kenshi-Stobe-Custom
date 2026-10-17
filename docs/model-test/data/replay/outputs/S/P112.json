@@ -1,0 +1,24 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 19-e imm26-inv20a",
+   "why": "19-e (4080-i4, 'no trip proposed after two asks') is the propose/accept trip-setup defect family already owned by read-only investigator imm26-inv20a (which covers 19-a/14-a as same-defect evidence), so assign the ticket there instead of spawning a third investigator; no plan_path exists yet."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to abf924ff257b8d3d9 (imm26-inv20a): 'New SETUP-FAIL 19-e (lane 4080-i4, ticket 13:16): no trip proposed after two asks (s1/s1b), nothing to accept. Probable same propose/accept defect as 20-a/19-a/14-a, but here the PROPOSE leg itself never happens. I assigned 19-e to you via setupfail.ps1. Add 19-e as a 4th evidence row (evidence dir under C:\\KenshiTestRuns\\imm26-4080 rows\\19-e per the ticket; I do not know the exact path, take it from setupfail.ps1 list), keep it read-only and in your existing budget, and say in your hand-back whether one fix covers 19-e or it needs its own recipe.'",
+   "why": "The investigator is running and can fold the extra row in cheaply; messaging by agent id is the only way to reach a live subagent."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The previous waker task blxyv3bfh completed after delivering this batch, and agents are in flight (inv20a, inv01cx, tails' operators), so a waker must be running again."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live"
+ ]
+}

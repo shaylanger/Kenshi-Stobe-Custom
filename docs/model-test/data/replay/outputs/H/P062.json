@@ -1,0 +1,18 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:investigate] imm26-setupfail-13-g\"; brief: diagnose why the GIVE_CATS price read for deal-99fa2f6efec25f5083602a42 on lane 4080-i4 returns an empty price.txt (row 13-g SETUP-FAIL, reason unknown). Read the setupfail list entry and the lane deal output, write an unblock plan under C:\\KenshiTestRuns\\agents\\out\\imm26-setupfail-13-g\\, and if the cause is a missing handler or command, build it instead of reporting blocked. No edits to the live tree or ss-merge.",
+   "why": "A SETUP-FAIL with an unknown reason needs a diagnosis and plan before reassignment, and missing handlers get built rather than reported as blocked."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 13-g imm26-setupfail-13-g <plan_path from the agent report>",
+   "why": "Once the plan exists, row 13-g is assigned to the agent that unblocks it so the row can rerun on lane 4080-i4."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list"
+ ]
+}

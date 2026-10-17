@@ -1,0 +1,24 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sf23a, description '[case:investigate] 23-a SETUP-FAIL on 5090-i3: resolved_speaker is not Shay in s3', brief: Read /c/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt and the row's s3 files; find why the speaker resolves to a non-Shay identity in s3 (the row's speaker-resolution step, not the game); write the smallest unblock plan as a row-script candidate under the 23-a row tools (no edits to any running or queued script); report the file path and the exact 'needs:' line; keep C:\\KenshiTestRuns\\agents\\imm26-sf23a.status current via tools/automation/agent-status.ps1 imm26-sf23a RUNNING|DONE|FAILED|STOPPED-CONTEXT. Note: 23-a is also on the 4080-i4 op12b list, so check the row tools do not collide with that lane.",
+   "why": "Per Shay's order a SETUP-FAIL gets one unblock attempt by an agent, and the speaker-resolution cause is unknown, so it needs diagnosis first."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File tools/automation/setupfail.ps1 assign 23-a imm26-sf23a",
+   "why": "Record the owner of the 23-a unblock so the ticket is not orphaned."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background=true, no trailing &)",
+   "why": "The waker exited with this event batch and work is in flight, so it must be restarted at once."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File tools/automation/setupfail.ps1 list",
+  "cat C:/KenshiTestRuns/imm26-5090-i3/rows/23-a/s3/reply.txt"
+ ]
+}

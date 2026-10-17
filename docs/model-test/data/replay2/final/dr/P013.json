@@ -1,0 +1,35 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Doing the speed and token items logged in HANDOFF now: (4) quieter waker so event-wait returns only on action events, (5) session-start -Brief kept tight, (3) one-command lane setup helper start now as agents. (1) row operators on the new lanes start as soon as the lane isolation checks pass, and (2) the travel accept bug goes to a fixer as soon as imm26-travel-investigate reports.",
+   "why": "Shay asked directly, so the coordinator acknowledges through the relay session and says what starts now and what waits on named agents."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-tokens, tag [case:generate]. Brief: implement HANDOFF SHAY'S NEXT-STEP items (4) and (5). (4) tools/automation/event-wait.sh returns only on action events (not on STATUS or HEALTH-OK events). (5) session-start.ps1 -Brief output stays small. event-wait.sh is the live waker: stage the edit in a copy, selftest the copy, and swap it in only at a waker restart boundary, never mid-run. Commit and push each fix in its own commit, then record the result with agent-status.ps1.",
+   "why": "Token-use items are small and separable, so one generator agent on the right tier can do them while the lanes run."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-lanehelper, tag [case:generate]. Brief: implement HANDOFF item (3), a one-command lane setup helper (load, speed 0 hold, wake, protect, teleport, speed 0.5) for the imm26 lanes on both rigs. Do not touch lane-isolation-check or the travel accept fix, which other agents own. Selftest, commit and push, then record with agent-status.ps1.",
+   "why": "The helper saves about 5 min per Hub reload and is independent of the travel bug work."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add a line that Shay asked (this turn) to do his speed/token suggestions; imm26-tokens (items 4,5) and imm26-lanehelper (item 3) started; items 1 and 2 wait on lane-isolation-check PASS and the imm26-travel-investigate report (agents/out/imm26-travel-blocker).",
+   "why": "HANDOFF Right now must be updated the moment an agent starts so a successor coordinator sees the new agents."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the lane-isolation-check PASS from imm26-lanes-5090 / imm26-lanes-4080 (then start row operators on 5090 i4/i5 and 4080 i4) and for the imm26-travel-investigate report (then spawn a travel-accept fixer); the event waker will wake the coordinator.",
+   "why": "Items 1 and 2 depend on work already owned by running agents; spawning on them now would duplicate or run on unverified lanes."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "grep -n -i \"NEXT-STEP\\|quieter waker\\|lane setup helper\" C:\\KenshiModding\\testing\\HANDOFF.md",
+  "git -C C:\\KenshiModding diff --stat -- tools/automation/event-wait.sh"
+ ]
+}

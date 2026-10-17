@@ -1,0 +1,25 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "docs/COORDINATOR_IMPROVEMENTS.md (C:/KenshiModding/docs/COORDINATOR_IMPROVEMENTS.md): delete only the list item 'a cheaper model for operators'; keep the other items and renumber the list",
+   "why": "Shay's inbound message asks to remove this one item from the coordinator improvements list, and the item is recorded in that file."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "cd C:/KenshiModding && git add docs/COORDINATOR_IMPROVEMENTS.md && git commit -m 'imm26: drop the cheaper-model-for-operators item from COORDINATOR_IMPROVEMENTS (Shay 2026-10-16)' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git push origin main",
+   "why": "The repo rule is one change per commit and push right after; only this doc file is staged so no other uncommitted work is swept in."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Removed 'a cheaper model for operators' from docs/COORDINATOR_IMPROVEMENTS.md (commit hash from the commit step); the list now has 9 items. Running agents keep their current models; no mid-session switch.",
+   "why": "Shay should get a one-line confirmation through the relay session that the item is gone and that nothing running was changed."
+  }
+ ],
+ "checks": [
+  "grep -n -i \"cheaper model\" docs/COORDINATOR_IMPROVEMENTS.md testing/KNOWN_BLOCKERS.md",
+  "git status --short docs/COORDINATOR_IMPROVEMENTS.md",
+  "git config user.email"
+ ]
+}

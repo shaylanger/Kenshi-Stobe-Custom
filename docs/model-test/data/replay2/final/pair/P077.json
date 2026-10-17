@@ -1,0 +1,29 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker exited after delivering this batch, so no further lane or agent events would reach the coordinator until it is re-armed as a background task (never a bare &)."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op9h: \"Coordinator: LANE IDLE on 5090-i5 for 6.3 min (newest evidence C:\\KenshiTestRuns\\imm26-5090-i5\\towns200.txt; your last status was 01:37). Update your status now with agent-status.ps1 and reply in one line: current step (NC15 install / 14-c / 26-a), whether the game is up, and any blocker. Do not start a new lane-setup reload until you reply.\"",
+   "why": "The LANE IDLE alert says to ask the operator what it is doing before any fix or respawn, and op9h was started fresh at 01:37 with the NC15 install and 14-c still in progress."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 \"LANE IDLE 5090-i5\" \"asked operator op9h for status by SendMessage; waiting for reply\"",
+   "why": "The open alert is unacked and would block the coordinator's Stop hook after 5 min; the ack records the action taken, and a still-true idle re-opens by itself after 30 min. The alert id is not in this file, so the subject form is used."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op9h's one-line reply or a fresh op9h status line on the next waker wake; if it stays silent or reports it is stuck, respawn a fresh successor imm26-5090-i5-op9h2 from the op9h status and the lane brief (powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/lane-brief.ps1 5090-i5 -Out C:/KenshiTestRuns/agents/imm26-5090-i5-op9h2.brief.md -Name imm26-5090-i5-op9h2 -Predecessor imm26-5090-i5-op9h) and record the respawn in HANDOFF.",
+   "why": "A live operator may be in a long lane-setup reload, so the respawn waits for the check; a silent or stuck operator is then a stall to fix on that same wake."
+  }
+ ],
+ "checks": [
+  "sed -n 1,4p /c/KenshiTestRuns/agents/imm26-5090-i5-op9h.status | cut -c1-300",
+  "tail -c 1500 /c/KenshiTestRuns/imm26-5090-i5/towns200.txt; date"
+ ]
+}

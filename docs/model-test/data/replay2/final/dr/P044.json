@@ -1,0 +1,14 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-wpC-b5 and imm26-5090-i5-op6 to finish; keep the tail's event-wait watcher running and restart it on each wake. Escalation timers: wpC-b5 silent since 19:39 and already messaged at 19:45, so if it is still silent at 19:59 (20 min) TaskStop it and tell the new coordinator; relay each result with tail-relay.ps1 + SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator and wait for the tail-ack.",
+   "why": "The tail owns two RUNNING agents, the Stop hook repeats an already-handled block, nothing new has arrived, and the status check and stall message were already done this round, so no new action is warranted."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \\\"C:\\KenshiTestRuns\\agents\\$n.status\\\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1) }\"",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator -Filter *tail* | Sort LastWriteTime -Desc | Select -First 2 Name"
+ ]
+}

@@ -1,0 +1,18 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md: in the Right now block add a line: PI-15 DONE (commit 34c156c: llm-health.sh + preflight step 0, PREFLIGHT-FAIL recorded as SETUP-FAIL); still running: imm26-pi1920, imm26-pi13, imm26-pi18, imm26-inv19; PI-21 waits for pi18 DONE",
+   "why": "Every agent report must be recorded in HANDOFF Right now at once, and PI-15 is done but not yet logged there."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the completion notifications of imm26-pi1920, imm26-pi13, imm26-pi18 and imm26-inv19 with the waker still armed",
+   "why": "No other action is ready: PI-15 needs no follow-up, and the open PI builds and the row-19 investigation are still running."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

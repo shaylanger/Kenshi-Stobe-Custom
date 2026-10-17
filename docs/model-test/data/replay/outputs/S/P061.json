@@ -1,0 +1,29 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-rowtools42",
+   "why": "Items 5, 6 and 7 of rowtools4 are reported DONE and pushed (7b3c04d, 37285bd, 4924239) with selftests green (setupfail 36/36, lane-window PASS, rowtools 56/56); the agent's result is received, so the relay is acked."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md: append a '#11 ~03:40' line under 'Right now': rowtools42 DONE (items 5/6/7, commits 7b3c04d 37285bd 4924239; IMM-10-d now UNRUN not SETUP-FAIL, GATED mark no longer closes a setupfail ticket, ticket 03-b opened needs=server-fix lane 5090-i4, IMM-03-b row text replaced per inv-03b section 6, lane-window.ps1 computes slots from the live layout with plan/sync actions); rowtools44 (hx selftest+docs), fix10a, fix03b and the two 4080 operators still running. Also update the rowtools4 program ledger entry via program-ledger.ps1 if one exists (name not in this file).",
+   "why": "HANDOFF Right now and the ledger must be updated after every agent report, so a coordinator stop loses nothing."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "FYI for Shay (no action needed while the 5090 hold lasts): the live monitor layout has DISPLAY1 = the Samsung (forbidden) and DISPLAY2 = the ASUS primary, so lane i5 has no legal window slot; only i3 and i4 fit, side by side on DISPLAY2. Run at most two 5090 lanes at once on this layout, or change the monitor setup. Also, row IMM-10-d now shows UNRUN (not SETUP-FAIL) while it waits for a stolen-flagged theft leg. Say if you want SETUP-FAIL back.",
+   "why": "This is a decision-relevant finding about the monitor layout and a deviation from the handoff's instruction, but nothing blocks, so it goes once in the next summary rather than as an interrupt."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do nothing further now. Do not start any 5090 lane or session: the Shay hold on new 5090 testing still applies, and the lane-window change takes effect only when the hold ends. Wait for the rowtools44, fix10a, fix03b and 4080 operator results, and keep the event-stream waker armed.",
+   "why": "The remaining work is all in flight and the 5090 hold means the new lane-window slots cannot be exercised yet."
+  }
+ ],
+ "checks": [
+  "cd /c/KenshiModding && git log --oneline -5 && git status --short testing/live-stobe-queue/imm26-assert/rowtools | head -20",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

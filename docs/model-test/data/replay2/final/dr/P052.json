@@ -1,0 +1,37 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for a DONE, FAILED or STOPPED-CONTEXT status line from imm26-5090-i3-hard2b, imm26-5090-i4-hard2b2, imm26-4080-op2jb, imm26-4080-i4op7c or imm26-fix19. The background wait (bm22iu58s, agents loop) stays armed; do not reply per block; no new spawns.",
+   "why": "This tail session owns only these five running agents and must spawn and decide nothing new, so the Stop hook block means keep waiting and relay each result when it finishes."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "imm26-4080-op2jb: Tail check-in. Your status file has been silent since 20:32 (Win clock). Reply with one line via agent-status.ps1 (RUNNING with your current step and next step) and keep working.",
+   "why": "Tail contract: an agent silent 10 min gets a message; op2jb is 15 min silent."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "imm26-4080-i4op7c: Tail check-in. Your status file has been silent since 20:29 (Win clock). Reply with one line via agent-status.ps1 (RUNNING with your current step and next step) and keep working.",
+   "why": "Tail contract: i4op7c is 18 min silent, past the message threshold and close to the 20 min TaskStop limit."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "imm26-fix19: Tail check-in. Your status file has been silent since 20:35 (Win clock). Reply with one line via agent-status.ps1 (RUNNING with your current step and next step) and keep working.",
+   "why": "Tail contract: fix19 is 12 min silent, past the 10 min message threshold."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "imm26-5090-i3-hard2b: Tail check-in. Your status file has been silent since 20:36 (Win clock). Reply with one line via agent-status.ps1 (RUNNING with your current step and next step) and keep working.",
+   "why": "Tail contract: i3-hard2b is 11 min silent, past the 10 min message threshold."
+  }
+ ],
+ "checks": [
+  "head -1 C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.status",
+  "head -1 C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.status",
+  "head -1 C:/KenshiTestRuns/agents/imm26-4080-op2jb.status",
+  "head -1 C:/KenshiTestRuns/agents/imm26-4080-i4op7c.status",
+  "head -1 C:/KenshiTestRuns/agents/imm26-fix19.status"
+ ]
+}

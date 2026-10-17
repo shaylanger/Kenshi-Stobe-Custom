@@ -1,0 +1,31 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 imm26-4080-op2jc STOPPED-CONTEXT \"4080-i3 operator (03-cx PASS marked, next 19-a after NC10 install)\" \"TaskStop by tail after ~25 min silent, no row evidence since 22:04\" \"C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.status latest = last row state read from that file before writing; testing\\NPC_IMMERSION_26_TESTS.md marks\" \"successor imm26-4080-op2jd, spawned by coordinator #11 from lane-brief.ps1 with -Predecessor imm26-4080-op2jc\"",
+   "why": "The operator was killed by TaskStop, so its status must move to STOPPED-CONTEXT (keeping the inflight marker and writing the respawn todo) before the successor can be spawned; this status write was not in the already-done list."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to coordinator 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02: \"Tail 4cdf261b: imm26-4080-op2jc TaskStop done (killed), status STOPPED-CONTEXT written with latest = its last row state, respawn todo kept, inflight kept. Successor imm26-4080-op2jd is yours to spawn (tail spawns nothing). Its brief landed in a misnamed file in the repo root: do not use that file; regenerate with lane-brief.ps1 -Predecessor imm26-4080-op2jc using forward-slash -Out, and read the op2jb brief for rows. Before spawn check 4080-i3 game and lock state. AGENT ORPHANED alert: ack it yourself after op2jd is running.\"",
+   "why": "Coordinator #11 asked for a reply when the stop and status were done, and it needs the successor steps because the tail does not spawn agents."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "tail-relay.ps1 for agent imm26-4080-op2jc (killed result plus the STOPPED-CONTEXT line and respawn text) into inbox\\coordinator, per testing/AGENT_PROMPTS.md overlap handoff steps",
+   "why": "Each agent result must reach the new coordinator by relay so the tail can end once it is delivered or acked."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for coordinator #11 tail-ack of the op2jc relay, then let the tail end via tail-close.ps1 (the tail closing review is still needed)",
+   "why": "No tail agent remains running after op2jc, so the tail only waits for the relay ack before it can close."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.status (read the latest line for the last row state)",
+  "grep -n \"03-cx\\|19-a\" C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md (last marked row evidence for 4080-i3)",
+  "ssh 4080 with C:\\KAH\\ctl.ps1 status (read-only: is the 4080-i3 game still up and the lock still held)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (confirm respawn line and open alerts for op2jc)"
+ ]
+}

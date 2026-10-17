@@ -1,0 +1,23 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on the 'imm26-u4b-route DONE' status line: its hand-back (ba94c6a) was already received, HANDOFF updated at 03:55, and op9i was already told to rerun 26-a/22-a/26-b/26-c.",
+   "why": "The event only repeats a result already processed; op4080-i4op11 answered the ping (status 02:31, 08-d rerun 2, 08-e PASS) and op9i status 02:28 is within 12 min."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh   (Bash run_in_background)",
+   "why": "The waker just exited and must be re-armed immediately so work in flight (op9i, op11) stays covered."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op9i to rerun 26-a/22-a/26-b/26-c on the u4b-route build and for op11 to finish 08-d/11-b; if op9i status is still stale (>12 min) at the next wake, ping it, then TaskStop and respawn per lane-brief.",
+   "why": "The next real event is an operator result or a stall alert; nothing else is actionable now."
+  }
+ ],
+ "checks": [
+  "grep -v -E \"^(SWEEP|STATUS)\" the waker output file | tail -c 600; sed -n 1,3p C:/KenshiTestRuns/agents/imm26-5090-i5-op9i.status | cut -c1-300"
+ ]
+}

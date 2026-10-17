@@ -1,0 +1,30 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Shay: (1) Yes, the NPC still decides. A suggested new destination goes through a deferred confirm: the NPC can say no (your cannibal camp example) and the trip keeps the current destination. Building that now. (2) Row 24-a is about how NPCs pick their own travel destinations on their own. I will restate the question from the test plan in plain words with two or three options in my next message; nothing is built for 24-a until you answer. (3) Row 15-a: building the awareness filter on the trade events now. (4) Understood: DISPLAY1 is not the Samsung display, so I will not treat it as that; game launches stay on DISPLAY2 as ordered. Lower resolution is possible and cuts CPU and GPU load per game, so I will test a smaller window size on one 4080 lane (no new 5090 session while that hold stands) and report how many fit and the load numbers before changing any default.",
+   "why": "Shay asked four things in one batch; the coordinator answers each in one plain message, builds 1 and 3, and does not build 24-a until he answers."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-row20a-deferred-confirm, description [case:generate] Build the Row 20-a deferred confirm for natural plan changes. When a travel plan changes, the NPC still decides whether to go to the new location: a refusal (for example a cannibal camp) keeps the current destination. Read the travel plan code via code maps (bash tools/automation/codemap.sh, grep -n funcname <map>, sed -n a,bp), never a file > 60 KB whole; make the smallest change, compile-check, checkpoint and update agent-status.ps1 every milestone, then report through save-report.ps1. Code only: no tests or live validation in this package. Do not touch animation or unrelated features.",
+   "why": "Shay ordered the deferred confirm to be built now and confirmed the NPC keeps the right to refuse."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-row15a-awareness-filter, description [case:generate] Row 15-a personal imperfect knowledge: filter trade-line events by awareness so an NPC does not learn trade events they could not know about (the trade-line leak). Read via code maps (bash tools/automation/codemap.sh), never a file > 60 KB whole. Find the trade event source, add the awareness filter, compile-check, checkpoint and update agent-status.ps1 every milestone, then report through save-report.ps1. Code only: no tests or live validation in this package. Do not change unrelated events.",
+   "why": "Shay asked to filter trade events by awareness; this is a build item, not a question."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' plus the imm26 program ledger (C:\\KenshiTestRuns\\programs\\imm26.json if present, otherwise unknown): add work packages row20a-deferred-confirm and row15a-awareness-filter (owner = the two agents above), row 24-a = waiting for Shay's answer, and Shay's note that DISPLAY1 is not the Samsung display.",
+   "why": "The coordinator updates the ledger and HANDOFF after every new agent start so a handoff loses nothing."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "grep -n '24-a' C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md C:\\KenshiModding\\testing\\NPC_IMMERSION_26_HANDOFF.md",
+  "git -C C:\\KenshiModding status --short"
+ ]
+}

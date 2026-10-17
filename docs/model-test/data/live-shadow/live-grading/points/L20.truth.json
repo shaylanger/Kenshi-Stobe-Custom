@@ -1,0 +1,20 @@
+{
+ "id": "L20",
+ "batch_id": 20,
+ "class": "lane alert",
+ "window": [
+  "2026-10-16T22:18:05.562Z",
+  "2026-10-16T22:19:35.562Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 4,
+ "action_types": [
+  "run",
+  "spawn",
+  "ack"
+ ]
+}

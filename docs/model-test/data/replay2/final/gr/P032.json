@@ -1,0 +1,25 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Yes. From now on each approved PI entry (PI-06, PI-07, PI-08, PI-09, PI-10, PI-12) is removed from docs/PROCESS_IDEAS.md as soon as its build agent reports DONE and its selftest passes. Answered or declined entries go too, so the list only shows open ideas. PI-11 stays in the list until you answer it.",
+   "why": "Shay asked for stale PI items to be removed as they are done, and the coordinator should confirm the rule before acting on it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the completion notifications of imm26-pi06-09, imm26-pi07-08, imm26-pi10, imm26-pi12 and imm26-fix-batch4 (background Agent calls already launched). Do not edit docs/PROCESS_IDEAS.md while they run, because imm26-pi06-09 and the others read its entries.",
+   "why": "Removing an entry before its build is done would hide the work item the agent is still building from."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "docs/PROCESS_IDEAS.md: on each DONE, delete that PI entry (its heading and body) and commit the change in the native repo with the item number; PI-06 and PI-09 go together with imm26-pi06-09, PI-07 and PI-08 with imm26-pi07-08, PI-10 with imm26-pi10, PI-12 with imm26-pi12.",
+   "why": "Matches Shay's request to drop each item once it is done, and keeps the list free of stale entries."
+  }
+ ],
+ "checks": [
+  "grep -n -E '^#+ .*PI-[0-9]+' docs/PROCESS_IDEAS.md | cut -c1-160",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief | grep -A12 'PROCESS IDEAS'",
+  "grep -n -i -E 'param|switch|asked|answer' C:\\KenshiModding\\tools\\automation\\process-ideas.ps1 | head -20"
+ ]
+}

@@ -1,0 +1,46 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "After the checks pass: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s, then cd /root/stobe-work/ss-merge && php tests/bio_unique_regression.php && php tests/travel_order_refusal_regression.php, then the full offline stobe-tests suite using the invocation documented in docs/claude-md-archive/stobe-server-tests.md (the exact command is not in this file). No server start, no game; stobe-server.sh stays off.",
+   "why": "CLAUDE.md requires the offline stobe-tests to pass before any game batch, and the two new or changed regression files are the only proof of the Tengu and refused-order fixes; if anything fails, no commit and [case:investigate] first."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "Only if the checks and offline tests pass, git config user.email in /var/www/html/StobeServer reads shaylanger2@gmail.com, and git status shows no edits beyond the agent's anchored changes: cd /var/www/html/StobeServer && git add data/schema.sql debug/db_updates.php lib/negotiation_phase1.php tests/bio_unique_regression.php && git commit -m 'Tengu: no unique persona for bare name, Emperor Tengu kept (A1/A2/A4)' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git push origin HEAD:stobe",
+   "why": "One fix per commit with a push right after each; the Tengu identity fix (issue A) is separate from the refusal and known-places fix, and the live DB delete is not part of this commit."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "Only after commit 1 is pushed, same WSL session: cd /var/www/html/StobeServer && git add lib/travel_companionship.php lib/chat_helper_functions.php tests/travel_order_refusal_regression.php && git commit -m 'refused orders keep NPC line; known places in travel prompt (B1/B2, issue B)' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git push origin HEAD:stobe",
+   "why": "The refusal wording (B1/B2) and the known-places prompt (issue B) are a separate fix from the Tengu identity fix, so they get their own commit; backups and DB dumps are never added."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': record the FIX-server checkpoint: code for A1, A2 (code only), A4, B1, B2 and known places is in both server trees (live /var/www/html/StobeServer, merge /root/stobe-work/ss-merge; backups in C:/KenshiTestRuns/invest/fixes/backup/FIX-server); the live DB delete of the bare Tengu rows (A3) is NOT done, blocked by the permission checker and not retried; offline tests and the two commits are pending (record their hashes when done); agent a46d18291875abe29 is DONE and needs no successor. Also update the FIX-server entry under C:/KenshiTestRuns/programs/ if that ledger exists.",
+   "why": "CLAUDE.md requires HANDOFF and the program ledger to be updated after every agent report, and bare Tengu is still wrong in the live DB until the A3 step is done."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Only if C:/KenshiTestRuns/agents/FIX-server.status still reads RUNNING: powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 FIX-server DONE 'apply fixes (server)' 'code A1 A2 A4 B1 B2 and known places done in both trees; A3 live DB delete blocked by permission checker' 'backup C:/KenshiTestRuns/invest/fixes/backup/FIX-server' 'A3 DB step needs Shay decision'",
+   "why": "The hand-back is in, so the status must leave RUNNING; a DONE agent needs no successor, and the open DB step is recorded in HANDOFF and the ledger, not as a stalled agent."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Via SendMessage to Shay's relay session: FIX-server (Stobe server, issues A and B): the code is in both server trees (live and ss-merge; backups in C:/KenshiTestRuns/invest/fixes/backup/FIX-server/). Still open: the live DB delete of the bare 'Tengu' rows in bio_unique and bio_unique_custom (LOWER(name)='tengu'; dump: C:/KenshiTestRuns/invest/fixes/backup/FIX-server/bio_unique_tengu_rows.csv). The permission checker blocked that write; I have not retried it or routed it to another agent. Until it is done the live DB still gives bare Tengu the Emperor persona. Decision needed: do you run debug/db_updates.php yourself, or approve the delete by name? Offline tests and two commits (Tengu identity; refusal and known places) are next; no game batch has started.",
+   "why": "A blocked live DB write is a real decision for Shay, so it is asked once in one message and not retried around the block."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Shay's answer on the live DB step A3 (delete bio_unique and bio_unique_custom rows with LOWER(name)='tengu'). The offline tests, commits and handoff continue without waiting for it.",
+   "why": "The write was blocked by the permission checker and is not retried or handed to another agent without his decision; the code commits do not depend on it."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s: php -l on lib/travel_companionship.php, lib/chat_helper_functions.php, lib/negotiation_phase1.php, debug/db_updates.php, tests/bio_unique_regression.php and tests/travel_order_refusal_regression.php in both /var/www/html/StobeServer and /root/stobe-work/ss-merge",
+  "git -C /var/www/html/StobeServer status --short; git -C /var/www/html/StobeServer log -5 --oneline; git -C /var/www/html/StobeServer config user.email (Shay may have committed or edited the live tree; if the seven changed files carry uncommitted changes beyond the agent's anchored edits, stop and ask before committing)",
+  "sha256sum (first 12 characters) of the seven changed files data/schema.sql, debug/db_updates.php, lib/negotiation_phase1.php, lib/travel_companionship.php, lib/chat_helper_functions.php, tests/bio_unique_regression.php and tests/travel_order_refusal_regression.php in each tree, compared with the after hashes named in the FIX-server report (live chat_helper_functions.php 381b92364f09, merge 93c85874a170); diff of the seven files between live and ss-merge, where only the anchored regions may differ (the trees already differed before this fix)",
+  "Read C:/KenshiTestRuns/agents/FIX-server.status to confirm whether the state is RUNNING or already DONE before the DONE write"
+ ]
+}

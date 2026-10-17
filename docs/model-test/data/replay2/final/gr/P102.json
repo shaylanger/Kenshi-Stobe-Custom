@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no action: task-notification b4rgpc75d (Background command 'Restart single waker', exit 0) is the superseded waker; the single live waker is bvpgoc6vb started after rearm-waker.ps1 -KillOnly",
+   "why": "The coordinator already killed the stray waker and started bvpgoc6vb, so this completion needs no new waker, ack or respawn."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

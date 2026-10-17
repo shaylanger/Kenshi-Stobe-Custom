@@ -1,0 +1,34 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SETUP-FAIL 19-e (lane 4080-i4, unknown): no trip proposed after two asks (s1/s1b), nothing to accept. Ticket: C:/KenshiTestRuns/inbox/coordinator/20261016-131605-setupfail-19-e.msg. Plan the unblock on your own lane (propose the trip, then accept) and report the plan path back. Do not spawn anything for 19-e. Recipient: imm26-4080-i4op14, agent id from agent-ids.ps1 list -Live.",
+   "why": "Lane 4080-i4 is run by the live operator imm26-4080-i4op14 (tail 245d8ad7), so the owner resolves its own setup-fail without a second driver on the lane."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 19-e imm26-4080-i4op14",
+   "why": "Records the owner in the setup-fail ledger so the ticket is no longer unowned."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mv C:/KenshiTestRuns/inbox/coordinator/20261016-131605-setupfail-19-e.msg C:/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "Moves the handled relay to delivered/ once the message to the owner is sent, per the handoff rule."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Completion notifications for investigators imm26-inv20a (abf924ff257b8d3d9, rows 20-a and 20-d) and imm26-inv01cx (a494d91bb1e09354d, row 01-cx).",
+   "why": "Both are read-only root-cause runs already in flight; their results decide the next recipe, so there is nothing to start now."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "blxyv3bfh 'Restart waker' completed with exit 0.",
+   "why": "The digest waker is up after the restart, so no action is needed for this notification."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

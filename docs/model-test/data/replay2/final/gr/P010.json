@@ -1,0 +1,22 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "The waker that just woke this session (task b6xgu74cx) has exited, so restart it to keep the in-flight agents and rigs watched and to satisfy the Stop guard."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, Right now section: add the line 'imm26-4080-op2 STOPPED-CONTEXT 14:45, no successor yet; respawn FRESH as imm26-4080-op2-2 from C:/KenshiTestRuns/agents/imm26-4080-op2.handoff.md (4080 rows 1-13, game PID 16156, marker 4080-imm26). Keep inflight marker and respawn todo until the successor exists.'",
+   "why": "This coordinator is at the context limit and must start nothing new, so the successor spawn is left to the new coordinator; writing it into HANDOFF ensures the stopped 4080 operator is not forgotten and the rig is not left idle."
+  }
+ ],
+ "checks": [
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-4080-op2.status | tr -d '\\r' | cut -c1-200",
+  "sed -n 1,60p C:/KenshiTestRuns/agents/imm26-4080-op2.handoff.md",
+  "ls C:/KenshiTestRuns/alerts/open",
+  "ssh 4080 tasklist /FI \"PID eq 16156\"",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/program-ledger.ps1 brief"
+ ]
+}

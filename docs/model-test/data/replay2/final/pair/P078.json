@@ -1,0 +1,36 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker exited on the 600 s EVENT BACKSTOP with no events while op9i, op11 and the new u4b-route agent are in flight, so the Stop-hook waker guard needs a live waker re-armed now."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op11: 'Coordinator ping: your status file has not updated since 02:13 (17 min). Write a status line now with agent-status.ps1 (RUNNING, current row, next step), then continue. If there is still no status line by 02:33 the coordinator stops you and respawns you as imm26-4080-i4op12.'",
+   "why": "op11 is silent past the 10-min stall rule, so it gets a ping first; TaskStop and respawn only at 20 min of silence, which is 02:33."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-u4b-route, description '[case:patch] U4b route re-bind at ACCEPT', brief: 'Route re-bind at ACCEPT for imm26 rows 26-a, 22-a, 26-b, 26-c. You are the successor of U4a imm26-u4-ground (commit b320c66). Evidence: C:/KenshiTestRuns/agents/imm26-5090-i5-op9i.status (26-a section) and agents/imm26-5090-i5-op9i.handoff.md: ACCEPT now fails with No currently grounded route candidate, because the persisted route candidate (travel_destinations rows, valid 300 s) is re-resolved at accept and no longer matches native. Read inbox/operators/u4-ground.txt and commit b320c66 for the grounding rule; apply the same rule to the route candidate: at ACCEPT only, ground on the current native route of the same kind; the stored record is not rebound. Keep the requester, willingness, expiry and one-active-record checks unchanged. Tests: one positive case, plus negatives for an expired route, a wrong requester, and a stale route with no current candidate (must still reject). Work in the compose tree only; never the live tree or ss-merge; do not edit hxdefs.sh or hunt26a-scene.sh (op9i is live on them). Do not deploy to the lane trees yourself; the coordinator deploys between i5 rows. Read big PHP through the codemap (grep -n, then sed -n a,bp), never whole files. php -l, run the tests, commit and push (one fix per commit, shaylanger identity). Then write inbox/operators/u4b-route.txt telling operators to rerun 26-a, then 22-a, 26-b, 26-c within 5 minutes of the offer. Update status with agent-status.ps1 at each milestone; checkpoint about every 40k tokens.'",
+   "why": "op9i's 02:28 status says route re-bind at accept is needed, and without it the 26-a family (26-a, 22-a, 26-b, 26-c) stays blocked."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md: add a '#12 02:30' checkpoint under Right now: op9i 26-a family SETUP-FAIL (route re-bind at accept needed); imm26-u4b-route spawned; op11 pinged (silent since 02:13, respawn as op12 at 02:33 if still silent); op9i continues 12-d, 19-e, 19-f.",
+   "why": "CLAUDE.md requires Right now to record each agent start and state change when it happens; the time is from the bash clock (02:30 CST), and the earlier checkpoints read 03:25 and 03:40, so the new entry should name its clock source."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No message to imm26-5090-i5-op9i; it keeps running 12-d, 19-e, 19-f.",
+   "why": "op9i has a fresh 02:28 status line and its 26-a family is already SETUP-FAIL; the only blocker is the fix spawned now, and the operators get the rerun note from inbox/operators/u4b-route.txt when it lands."
+  }
+ ],
+ "checks": [
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-4080-i4op11.status | cut -c1-300; date",
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-5090-i5-op9i.status | cut -c1-300",
+  "grep -n -i 'route' /c/KenshiTestRuns/agents/imm26-5090-i5-op9i.handoff.md | tail -20 | cut -c1-300",
+  "ls /c/KenshiTestRuns/inflight/ | grep -E 'imm26-(4080-i4op11|5090-i5-op9i|u4b-route)'"
+ ]
+}

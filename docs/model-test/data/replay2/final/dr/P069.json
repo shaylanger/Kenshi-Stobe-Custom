@@ -1,0 +1,21 @@
+{
+ "event_class": "other",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02  (run as a BACKGROUND task; if the Bash tool again exits 127, launch the same command with the PowerShell tool run_in_background instead)",
+   "why": "exit 127 means the tail waker never started, so the tail has no wake-up while its two owned agents run; re-arming it is the tail's one allowed job, using forward slashes and a PowerShell-tool fallback since the cause of 127 is not yet known"
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the re-armed tail-wait wake-up; when an owned agent (imm26-5090-i5-op9c or imm26-4080-i4op10) finishes or stalls, relay its result to the new coordinator with tail-relay.ps1 and wait for tail-ack.ps1",
+   "why": "the tail spawns and decides nothing; the two owned agents are the only work it still has"
+  }
+ ],
+ "checks": [
+  "tail -5 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2a0cfe9b-63fb-4663-b97a-4a00df3b4e02/tasks/bw7rbn83m.output (read the exact error of the failed wait)",
+  "ls C:/KenshiTestRuns/tail/ (confirm the tail flag 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02.flag still exists and no .wait file is alive)",
+  "tail -3 C:/KenshiTestRuns/agents/imm26-5090-i5-op9c.status and C:/KenshiTestRuns/agents/imm26-4080-i4op10.status (confirm both are still RUNNING and updated within 10 min)",
+  "which powershell (confirm powershell is on the bash PATH before re-arming)"
+ ]
+}

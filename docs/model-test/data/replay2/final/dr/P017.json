@@ -1,0 +1,24 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\docs\\COORDINATOR_IMPROVEMENTS.md: delete the item 'a cheaper model for operators' from the numbered improvement list and renumber the remaining nine items (keep their wording unchanged)",
+   "why": "Shay ordered this item removed from the improvements list."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; git add docs/COORDINATOR_IMPROVEMENTS.md; git commit -m \"docs: remove 'cheaper model for operators' item from COORDINATOR_IMPROVEMENTS (Shay's order)\" -m \"Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\"; git push origin main",
+   "why": "Repo is the source of truth: one change per commit, pushed right away, touching only this file (other working-tree changes are not mine)."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Removed 'a cheaper model for operators' from docs/COORDINATOR_IMPROVEMENTS.md (committed and pushed). The other nine items stay.",
+   "why": "Shay gets a one-line confirmation that his order was carried out."
+  }
+ ],
+ "checks": [
+  "grep -n -i \"cheaper model\" C:/KenshiModding/docs/COORDINATOR_IMPROVEMENTS.md C:/KenshiModding/testing/KNOWN_BLOCKERS.md C:/Users/Shay/.claude/projects/C--KenshiModding/memory/coordinator-improvements.md",
+  "cd C:/KenshiModding; git config user.email"
+ ]
+}

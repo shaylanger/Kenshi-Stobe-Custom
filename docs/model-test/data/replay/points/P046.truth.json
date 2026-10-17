@@ -1,0 +1,23 @@
+{
+ "id": "P046",
+ "session": "6d1f3011",
+ "ts": "2026-10-16T01:56:21.072Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] 5090-i5 operator op7\nprompt: [case:generate] You are imm26-5090-i5-op7, lane 5090-i5. Read C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op7.brief.md, then the handoff it names (predecessor imm26-5090-i5-op6 is DONE, so you may act at once). FIRST install native NC10 (pending-fixes\\npc-immersion-26\\NC10\\Stobe.dll, SHA256 E1302B7777BB0DC524351B8466550758B4B29716C8CD858CA56EE08D17180651, notes NC10\\NOTES.md) on lane i5 the way op6 installed NC9 (see its handoff; verify both Stobe.dll copies by SHA), reload with lane-setup, then rerun with --allow-retry (reason: NC10 fix): 25-b (Mine, needs a live Mine proposal on the iron node: confirm no resource_owned_by_other_faction), 25-a, 22-a, 26-a/b/c (Hunt: no ACTIVITY_WILD_REFUSED on herds; remember goats flee fast and Cind is on-mesh only north of the node; teleport goats next to Cind then say at once; NEVER run speed 10 for minutes). DeepInfra balance is restored; run the LLM preflight before marking LLM rows. Remember the attempt guard and hand off at the meter warn level.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "NC10 is built and not installed anywhere. I started the new 5090-i5 lane operator, `imm26-5090-i5-op7`, to install it.\n\n- **NC10 build:** `pending-fixes\\npc-immersion-26\\NC10\\Stobe.dll` (SHA256 `E1302B77\u20260651`), commit `e3ab90a`.\n  - Wild animals in a not-real faction no longer get refused just because of `homeBuilding`. Real-faction animals, traders and mixed squads still refuse.\n  - Mining treats a \"No Faction\" node as unowned.\n- **Tests:** the Hunt change passes the offline unit tests. The Mi...[truncated 416 chars]"
+ ],
+ "event_text_chars": 874
+}

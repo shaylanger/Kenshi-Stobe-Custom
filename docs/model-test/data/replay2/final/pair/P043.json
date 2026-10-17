@@ -1,0 +1,25 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op6: Tail status check. Your status file has read RUNNING 19:35 installing NC9 for about 10 minutes. Update C:/KenshiTestRuns/agents/imm26-5090-i5-op6.status now (agent-status.ps1 imm26-5090-i5-op6 RUNNING ...) with your current step, and say if you are blocked. Still silent at 19:55 local means it is stopped.",
+   "why": "op6 has reached the 10-minute silent threshold of the stall rule, so it gets a message first; the 20-minute TaskStop point is 19:55 local."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep waker bu59ciiuz (event-wait.sh) running and wake on DONE/FAILED/STOPPED-CONTEXT of imm26-wpC-b5 or imm26-5090-i5-op6. At 19:49 local, if imm26-wpC-b5 is still 'reading recipe', SendMessage it the same stall check. At 19:55 local, if imm26-5090-i5-op6 is still silent, TaskStop imm26-5090-i5-op6 and message the new coordinator inbox C:/KenshiTestRuns/inbox/coordinator. On any finish: save its report to a file, tail-relay.ps1 it to that inbox, and wait for the ACK via tail-ack.ps1 or program-ledger.ps1 ack. No spawn, no edit, no new decisions.",
+   "why": "As the tail session with two owned agents, this session only waits, relays and closes out; wpC-b5 has been quiet about 5 minutes, inside its 10-minute limit."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Only if bu59ciiuz is no longer running: Bash run_in_background `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh`",
+   "why": "event-wait.sh is the waker with the 10-minute backstop, so it is restarted only if it died; the untimed bnp0vbz0u status loop is not the waker and needs no action."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"(Get-Date).ToString('HH:mm'); Get-Content C:/KenshiTestRuns/agents/imm26-5090-i5-op6.status -TotalCount 3; Get-Content C:/KenshiTestRuns/agents/imm26-wpC-b5.status -TotalCount 3\"",
+  "Get-Content C:/KenshiTestRuns/tail/6cd72ef5-6329-47f2-9c32-981e5e40dc16.flag",
+  "Check that background task bu59ciiuz (event-wait.sh) is still running (task status only, no sleep)"
+ ]
+}

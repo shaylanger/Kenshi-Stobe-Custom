@@ -1,0 +1,25 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op5: 'Coordinator: waker reports LANE IDLE 5090-i5 for 6.8 min (newest activity: status). What are you doing right now? If you are still reading your lane brief, say so and start your first row now. If you are blocked (e.g. the hunt rows 22-a 25-a/b 26-* are SETUP-FAIL because observedSource.candidates=[] and no ACTIVITY_PROPOSAL_DIAG exists on NC6), update your status file with agent-status.ps1 and reply with the exact blocker and which other rows from your brief you can run meanwhile. Do not send game commands if the predecessor handoff is not yet DONE/STOPPED. One short reply.'",
+   "why": "The waker's own instruction for LANE IDLE is to ask the operator; op5 was just spawned so it may simply be starting up, and a respawn would be premature."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i5 \"LANE IDLE 6.8m: operator imm26-5090-i5-op5 is newly spawned; asked it for status via SendMessage, will respawn from lane-brief.ps1 if still silent at the next idle event\"",
+   "why": "Records the action taken so the open-alert ledger and Stop hook do not block, while a still-true condition re-opens after 30 min (alert id is not in this file, so the lane subject is used)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op5's reply or its next agent-status update, plus the next event from the already-running Monitor event stream (no waker restart needed).",
+   "why": "If op5 stays silent about 10 min or says it is blocked on a DLL-only trace, the next step is a respawn or re-queue of runnable rows (not decidable from this file)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op5.status",
+  "Get-Content C:\\KenshiTestRuns\\lane-owners.json"
+ ]
+}

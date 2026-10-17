@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a10e0b733c56138df (imm26-pilotC): Shay's order relayed by tail #15, add to your cost-audit.py package now. (1) Add --since/--until date options (window for the redo: 2026-10-14 00:00 to now, 2026-10-16; everything earlier is out of scope, it did not use the current setup and often had Opus as coordinator). (2) Lane operators (all imm26-*op* agents plus '-hk' pilot operators) as their own category with Sonnet-high actual cost per operator, per operator-hour and per row where rows can be counted; coordinators, investigators/fixers/recipe agents as separate categories. (3) Haiku-high what-if for operators with the table ratio AND sensitivity cases where Haiku needs 1.5x and 2x the turns. (4) Operator cost split by cache read / cache write / output. (5) claude-fable-5-1 messages: price them if a price is known, else list them separately for the window. Do not edit the script beyond these and report when the option works; I will then spawn the audit run itself.",
+   "why": "pilotC (a10e0b733c56138df) already owns cost-audit.py edits; a second agent editing the same file would collide, so the script change goes to pilotC and the audit run follows."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to ac12b657f0aab5448 (imm26-pilotA): Shay's order (relayed by tail #15), add to the pilot tooling BEFORE imm26-5090-i4-hk1 is spawned. Shadow ledger columns per row: row, lane, model, start, end, wall_s, tokens, cost, operator_verdict, checker_result, agree, false_claims_n, notes. Audit areas: COST (tokens and API-price equivalent per row and per hour, from cost-audit.py on the pilot agent transcript); TIME (wall seconds per row, rows per hour, idle gaps, time to first row after start); QUALITY (verdict agreement with the checker RESULT line per row, rows completed, escalations, SETUP-FAIL diagnosis quality judged against the Sonnet lane's diagnosis of the same row, handoff/report quality); FALSE/INCORRECT INFORMATION (every claim in its status lines, TESTS-style notes, relays and final report checked against evidence files: wrong verdicts, invented paths/numbers, wrong 'done' claims, wrong causes; count per row and per report, same counting applied to the paired Sonnet lane 5090-i3). Also provide the side-by-side summary format for Shay (~3-4 h of rows). Keep the pilot rules already given (no claims, no TESTS writes, PASS only with checker RESULT line).",
+   "why": "pilotA is still running and building the shadow ledger, so the full audit scope must be in the tooling before the Haiku operator writes rows."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md, COORDINATOR #16 entry: append 'SHAY ORDER via tail #15 (Oct 16): (1) cost audit REDO window 14 Oct 00:00 to now only, operators/coordinators/investigators separate, Haiku what-if with 1.5x/2x turns, cache split, fable-5-1 pricing; script option --since/--until sent to pilotC, then spawn imm26-costaudit2 for the run and report to Shay. (2) Haiku pilot audits COST, TIME, QUALITY and FALSE-INFO per row (columns in the shadow ledger), same counting on the Sonnet 5090-i3 lane; sent to pilotA; side-by-side summary to Shay after ~3-4 h of rows.'",
+   "why": "The program state must live in HANDOFF 'Right now' after every event so a handoff loses nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the pilotC DONE notification, then spawn imm26-costaudit2 ([case:generate], run cost-audit.py --since 2026-10-14 --until now, rebuild ledger.md/.csv and the docs/cost-audit copy, hand-check a few totals, write agents/out/imm26-costaudit2/latest.md, answer whether a Haiku-high lane operator changes cost and what it implies for the pilot). Wait for pilotA DONE, then spawn imm26-5090-i4-hk1 with the audit scope in its brief. Keep the waker running; send Shay the cost-audit result and later the pilot summary via his relay session.",
+   "why": "Both spawns depend on those two running agents finishing; spawning earlier would collide on cost-audit.py or start the Haiku operator without the audit columns."
+  }
+ ],
+ "checks": [
+  "grep -n -E 'since|until' /mnt/c/KenshiModding/tools/automation/cost-audit.py",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ls C:/KenshiModding/docs/cost-audit C:/KenshiTestRuns/agents/out/imm26-costaudit"
+ ]
+}

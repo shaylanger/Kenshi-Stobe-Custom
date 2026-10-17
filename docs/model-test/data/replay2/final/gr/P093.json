@@ -1,0 +1,18 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Understood: read-only from now on. I will not write, edit, commit or run anything that changes files or state. The model-test edits from this session are still uncommitted and I have not reverted them: tools/model-test/mt.py, docs/MODEL_TEST.md, docs/MODEL_ROUTING.md, CLAUDE.md (one line added) and the archive folder docs/model-test/2026-10-15-investigation-suite/. Say if you want them reverted or committed and I will wait for your word.",
+   "why": "Shay's inbound message limits this session to reading, so the coordinator confirms the stop and lists what was already changed without touching it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for Shay's reply on the uncommitted model-test edits before any write",
+   "why": "A write or revert now would break his read-only instruction, and only he can decide whether those edits stay."
+  }
+ ],
+ "checks": [
+  "cd /c/KenshiModding; git status --short CLAUDE.md docs/MODEL_ROUTING.md docs/MODEL_TEST.md tools/model-test docs/model-test"
+ ]
+}

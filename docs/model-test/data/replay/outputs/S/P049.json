@@ -1,0 +1,11 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action. The task-notification for a40822a174c298c23 ([case:investigate] 19-d resumed trip fails, completed) only announces the end of an agent whose report was already delivered as a hand-back message just before this batch.",
+   "why": "The 19-d root cause (arrival half fails after a 14.6 km teleport fall, resume itself works) was already read and forwarded to a0220684160339b7b by SendMessage, the agent finished cleanly with nothing left to respawn, and nothing in the event asks for a new action."
+  }
+ ],
+ "checks": []
+}

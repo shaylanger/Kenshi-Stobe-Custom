@@ -1,0 +1,35 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (the previous waker task b89u1wzjw exited; restart it at once so nothing in flight is unwatched)",
+   "why": "The waker background task completed, and agents (sfW, sfR2, sfU2) and tail-owned lane operators are still in flight, so a waker must be running."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on the sfX and ctxfix2 DONE(quiet) lines and the duplicate TAIL-RELAY sfS inbox messages (20261016-120823/120826/120834). Do not run tail-ack for them.",
+   "why": "sfX and ctxfix2 were already reported and routed in this session, and tail-ack fails for agents not in a program ledger (HANDOFF note), so the relays are results to read, not orders."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append to C:\\KenshiTestRuns\\inbox\\operators\\coordinator16-server-fixes.txt: 'imm26-sfS DONE (a85c7b7a, new files only in testing/live-stobe-queue/imm26-assert/rowtools): 05-cx v2 = hxrun_cx2.sh 05-cx <lane> --allow-retry (distinct names, per sfS relay); 08-d v2 row tooling per C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md. 08-d: lane-deploy first (sfT follow-up-retire server fix, sfV sid fallback), then rerun 08-d with the sfS runner. A GATED/step-skipped outcome is not a FAIL.'",
+   "why": "Operators read routing from this note, and sfS's new 05-cx and 08-d tooling must reach the lanes between rows."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Write C:\\KenshiTestRuns\\inbox\\operators\\4080-i4-08d-unblock.txt for the 4080-i4 operator (imm26-4080-i4op13, owned by the tail session 48b778a7): 'SETUP-FAIL 08-d (msg 20261016-121056-setupfail-08-d): the native walk completed (NATIVE_TRAVEL_FINISH phase=completed reason=measured_route_arrival) but the row still failed, so it is not a walk failure. Run lane-deploy-4080.sh once between rows to put sfT (follow-up retire above the speech gates plus reason logs) and sfV on the lane, then use the one remaining attempt with the sfS 08-d v2 runner (see latest.md), not unblockrun_a.sh. Do not rebuild the DLL unless the sfS report says so.'",
+   "why": "The setup-fail says one more attempt is allowed only with the new server fixes, and sfT and sfS now exist as composed fixes, so the retry should use them rather than repeat the same recipe."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' COORDINATOR #16 line: add 'DONE: sfS (05-cx v2 hxrun_cx2.sh, 08-d v2; a85c7b7a). 08-d SETUP-FAIL on 4080-i4 routed to op13 with sfT + sfS (one attempt left). Still running: sfW, sfR2, sfU2 plus tail operators.'",
+   "why": "HANDOFF must be updated after every agent report, and it should record the sfS result and the 08-d routing."
+  }
+ ],
+ "checks": [
+  "Read C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md (head, the 08-d and 05-cx sections only)",
+  "grep -n '08-d' C:\\KenshiTestRuns\\inbox\\coordinator\\20261016-121056-setupfail-08-d.msg | cut -c1-600",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix15bx05cx2 (live successor already working on the 05-cx candidates): 'New evidence for 05-cx from hk2 pilot (lane 5090-i4, PILOT-ESCALATE 20261016-140625): SETUP-FAIL, E scene is not empty at E1, the prompt lists Malzin (female) under Nearby People Awareness. Make the 05-cx recipe leave the E1 scene empty at start (Malzin is a test character; remove or relocate her per the recipe). Change no assertion. Cover it in your selftest, save the candidate, keep your status and handoff current.'",
+   "why": "05-cx is already an open setupfail ticket needing a recipe fix (setupfail list: needs=recipe, planned) and fix15bx05cx2 is the live agent on the 05-cx candidates; this adds the new E1 evidence without a duplicate spawn."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The background event waker just completed and must be restarted while agents are in flight."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list | grep -E '^(05-cx|15-bx) '",
+  "Read the full EVENT INBOX message 20261016-140625-pilot-escalate-05-cx.msg to confirm the E1 reason; do not message hk2, which belongs to tail #17."
+ ]
+}

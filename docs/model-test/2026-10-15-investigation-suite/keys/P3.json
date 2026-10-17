@@ -1,0 +1,16 @@
+{
+ "R01": "sonnet-xhigh-p3",
+ "R02": "sonnet-high-p3",
+ "R03": "opus-xhigh-p3",
+ "R04": "suite1-A-p3",
+ "R05": "suite1-B-p3",
+ "R06": "haiku-low-p3",
+ "R07": "opus-low-p3",
+ "R08": "sonnet-medium-p3",
+ "R09": "haiku-xhigh-p3",
+ "R10": "haiku-high-p3",
+ "R11": "sonnet-low-p3",
+ "R12": "haiku-medium-p3",
+ "R13": "opus-medium-p3",
+ "R14": "opus-high-p3"
+}

@@ -1,0 +1,23 @@
+{
+ "id": "P022",
+ "session": "5720e5b8",
+ "ts": "2026-10-15T23:21:33.584Z",
+ "class": "relay",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: can you do these improvments:   <pasted_content id=\"62d7\"> 1. Count evidence files as activity befor"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cat C:/KenshiTestRuns/agents/wpT2.status | cut -c1-600; cd /c/KenshiModding; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "`wpT2` (the ledger routing/ack commands, relay scripts and `session-start.ps1` changes for the tail handoff) reports DONE. I haven't read its report or confirmed its selftest result yet.\n\nStill running:\n- **Tail handoff:** `wpT1` (hooks and context meter). The docs package (`CLAUDE.md`, `AGENT_PROMPTS`, `HANDOFF`) starts once it finishes.\n- **Operators:** all five lanes have one.\n- **Fix and install:** the 13-d fix (`imm26-compose-fix-batch2e`) and `imm26-install-nc-rest2b`.\n- **Investigations:*...[truncated 50 chars]"
+ ],
+ "event_text_chars": 2872
+}

@@ -1,0 +1,21 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The one-shot waker (blxyv3bfh) just woke the coordinator and exited, so it must be restarted at once to keep the batch and digest events flowing."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:investigate] imm26-inv19e - read-only root cause + minimal fix proposal for SETUP-FAIL 19-e (4080-i4): 'no trip proposed after two asks (s1/s1b): nothing to accept'. Brief: read the 19-e evidence under C:\\KenshiTestRuns\\imm26-4080\\rows\\19-e and the ticket json in C:\\KenshiTestRuns\\setupfail\\; row spec = grep IMM-19-e in C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md. Determine whether the propose step itself fails (distinct from the accept-leg defect in 20-a/19-a/14-a). Read imm26-inv20a's status file C:\\KenshiTestRuns\\agents\\imm26-inv20a.status for shared findings; do NOT message that agent and do NOT touch the 4080-i4 lane (live operator imm26-4080-i4op14 owns it). Cap 3 rows. Propose the fix, do not edit code, report via save-report.ps1 (agents/out/imm26-inv19e).",
+   "why": "19-e is a distinct SETUP-FAIL symptom (no trip proposed at all) in the same trip-setup family as the 20-a investigation, so it needs its own read-only investigator instead of expanding the capped 20-a brief."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "cat C:\\KenshiTestRuns\\inbox\\coordinator\\*setupfail-19-e*.msg",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "grep -n \"IMM-19-e\" C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md"
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run as a background Bash job, run_in_background; no --batch because no batch is running in this event; restart it every time it wakes)",
+   "why": "The Stop hook blocked because 7 inflight markers are live (imm26-4080-i4op8 and imm26-rowtools44 among them) with no waker running, so the session would go quiet and miss peer messages and stalls; the agents are live, so the stale-marker release does not apply."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the waker's next wake-up (inbox message, agent status DONE/FAILED/STOPPED-CONTEXT, batch or rig problem, or the 10-minute backstop)",
+   "why": "After the waker is armed there is nothing else to act on in this batch; imm26-rowfix-reload is RUNNING and its result arrives by notification."
+  }
+ ],
+ "checks": [
+  "ls C:/KenshiTestRuns/inflight",
+  "head -5 C:/KenshiTestRuns/agents/imm26-rowtools44.status",
+  "head -5 C:/KenshiTestRuns/agents/imm26-4080-i4op8.status"
+ ]
+}

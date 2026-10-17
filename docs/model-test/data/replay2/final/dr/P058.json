@@ -1,0 +1,24 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-setupfail-19a, description \"[case:investigate] SETUP-FAIL 19-a unblock plan\". Brief: row 19-a on lane 4080-i4 (4080 rig, isolated lane, not the held 5090) raised SETUP-FAIL: no trip proposed after two asks (s1/s1b), nothing to accept. Find why the NPC never proposed a trip (server trip-proposal path, lane DLL/server state, row setup) and write an unblock plan file in your work dir. Never touch Shay's live install, live server tree or live DB; do not edit rowdefs.sh, tripdefs.sh or rowcheck.py (owned by other fixers); propose edits in the plan only. Keep C:\\KenshiTestRuns\\agents\\imm26-setupfail-19a.status current via agent-status.ps1. Save the report with save-report.ps1 under agents/out/imm26-setupfail-19a and name the plan path in it.",
+   "why": "19-a is blocked on lane 4080-i4 with no trip proposed, so it needs a diagnosis and an unblock plan; the 4080 is allowed, the 5090 hold does not apply."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 19-a imm26-setupfail-19a",
+   "why": "Give the setup-fail an owner immediately (plan_path is optional per the event text); pass the plan path later when the report names it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add one line that imm26-setupfail-19a is RUNNING for SETUP-FAIL 19-a on lane 4080-i4 (no trip proposed after s1/s1b); next step is to pass its plan to the 4080-i4 operator (imm26-4080-i4op8) via inbox/operators.",
+   "why": "State must be recorded in HANDOFF after every agent spawn."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "tail -n 40 C:\\KenshiTestRuns\\agents\\imm26-4080-i4op8.status"
+ ]
+}

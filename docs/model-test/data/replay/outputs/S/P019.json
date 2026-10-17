@@ -1,0 +1,18 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on the imm26-hidden-test2 DONE inbox event itself: it is a finished 6-heartbeat test of the hidden agent-host mechanism, already proven and reported; its report is C:\\KenshiTestRuns\\agents\\out\\imm26-hidden-test2\\latest.md. Its status is DONE so agent-status.ps1 already removed its inflight marker (it is not in the remaining marker list).",
+   "why": "A DONE test agent needs no respawn, ack or message; the proven result was already relayed, and Shay's later order reversed the hidden-agent approach anyway."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Background Bash task: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v -E \"SWEEP (MARKER|STATUS)\" | tail -15",
+   "why": "The waker exited after this event, and inflight markers (imm26-compose-fix-batch2c, imm26-4080-op2f, imm26-5090-ctxop3, imm26-4080-i4op4, lane markers and others) are still live, so the Stop hook requires a running waker."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

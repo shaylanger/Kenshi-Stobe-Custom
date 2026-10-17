@@ -1,0 +1,25 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "Hold lane 5090-i4: spawn no 5090 operator and do not respawn imm26-5090-i4-hard2b2 (STOPPED-CONTEXT, no successor); leave lane-owners.json and the inflight marker for the 5090-i4 lane untouched",
+   "why": "Shay's order 'please dont start any new 5090 tesitng sessions for now. until i say otherwise' overrides the LANE NO-OPERATOR respawn rule, so the event is held rather than respawned"
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-no-operator-5090-i4 'held: no new 5090 sessions until Shay says otherwise (2026-10-15)'",
+   "why": "Acknowledges the open 5090-i4 no-operator alert with the action taken so the Stop hook does not block; the id is inferred from the lane-no-operator-5090-i3 pattern in the hook note and is not confirmed in this file"
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "5090-i4 lane has no operator: imm26-5090-i4-hard2b2 is STOPPED-CONTEXT with no successor. Holding it per your 'no new 5090 testing sessions' order. Tell me when to resume 5090 sessions and I will respawn 5090-i4 from its handoff.",
+   "why": "Shay makes the decision on resuming 5090 work, and the held lane needs one explicit answer from him"
+  }
+ ],
+ "checks": [
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.status",
+  "ls /c/KenshiTestRuns/inflight/",
+  "ls /c/KenshiTestRuns/agents/ | grep -i 5090-i4"
+ ]
+}

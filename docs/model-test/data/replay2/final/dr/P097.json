@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1",
+   "why": "The Stop hook reports one test/automation leftover older than 24 h (4080:C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch, a launch log, not corpus or fixtures), and Shay's rule is to clean up after every batch, so the sweep removes stale items; if a lab check cites that log, corpus.sh add it first or use testruns-sweep.ps1 -Keep <path> \"<reason>\" instead."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the testruns-sweep.ps1 result, then re-check the Stop hook output",
+   "why": "The hook blocks until no item older than 24 h remains, and the sweep result shows whether it is cleared."
+  }
+ ],
+ "checks": [
+  "grep -n -i \"param\\|-Keep\\|stale\" C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 | head -20 (confirm the sweep's flags before running it)",
+  "grep -rn \"20261015-110406-before-launch\" C:\\KenshiModding\\testing C:\\KenshiTestRuns\\agents 2>/dev/null | head -5 (check whether any lab check cites this log before it is deleted)"
+ ]
+}

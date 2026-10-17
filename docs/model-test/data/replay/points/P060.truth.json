@@ -1,0 +1,23 @@
+{
+ "id": "P060",
+ "session": "2a0cfe9b",
+ "ts": "2026-10-16T03:39:02.782Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "bad",
+  "why": "abandoned an agent spawned in the point"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] imm26-rowtools44 hx selftest+docs\nprompt: You are imm26-rowtools44, a FRESH successor of imm26-rowtools43. Read C:\\KenshiTestRuns\\agents\\imm26-rowtools43.handoff.md fully first and do its TODO 1-4 in order, but KEEP IT SMALL (target <= 60k tokens, hard stop 100k): selftest = one PASS-path scenario and one SETUP-FAIL scenario per row at most (reuse tripfake.py/trip-selftest.sh patterns, do not build large new fakes), README_HX.md compact, operator note compact (row -> one command). The code (commit 3ce900f) is already written: do not rewrite it, only fix what the selftest proves broken with small anchored edits. Offline only: no game, no lane, no 5090 (Shay hold). Run selftests in WSL only. Never find /. Checkpoint with tools/automation/agent-status.ps1 name imm26-rowtools44 after each TODO (latest = done items + commit sha); write agents\\imm26-rowtools44.handoff.md if stopping early. Commit one logical change per commit (git pull --rebase --autostash first), push `git push -q origin HEAD:main`. Final report to C:\\KenshiTestRuns\\agents\\out\\imm26-rowtools44\\latest.md (save-report.ps1 if Write blocked); final answer <= 5 lines.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiTestRuns/agents; cat imm26-rowtools43.status | head -8 | cut -c1-400; echo ---; head -40 imm26-rowtools43.handoff.md | cut -c1-300; date"
+ ],
+ "narration": [],
+ "event_text_chars": 480
+}

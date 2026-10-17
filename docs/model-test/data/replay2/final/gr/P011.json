@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'cd /mnt/c/KenshiModding && exec bash tools/automation/event-wait.sh' (run_in_background: true)",
+   "why": "The kenshi-waker-guard Stop hook blocks ending the turn while work is in flight (Kenshi running, inflight markers, RUNNING imm26-wpA3 and imm26-wpB3) and no waker is running, so the event waker must be restarted in the background before the turn can end."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the event-wait.sh background task to report an event or exit",
+   "why": "Nothing else in this batch needs action: the waker is the only missing piece, the lane, DeepInfra and CLAUDE.md work is already spawned or blocked on Shay's permission, and the agents report through their own notifications."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'pgrep -af event-wait.sh'",
+  "powershell -NoProfile -Command \"Get-ChildItem C:\\KenshiTestRuns\\inflight | Select-Object Name,LastWriteTime\""
+ ]
+}

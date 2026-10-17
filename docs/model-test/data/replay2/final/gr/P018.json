@@ -1,0 +1,36 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-deferred-confirm-20a, description '[case:generate] imm26 row 20-a deferred confirm', brief: 'Implement row 20-a Natural plan changes: when a travel plan is swapped to a new destination the NPC still decides. If the NPC does not want to go there (example: a cannibal camp) he declines and the current destination is kept. Read testing/NPC_IMMERSION_26_HANDOFF.md (top) and the row 20-a text in testing/NPC_IMMERSION_26_TESTS.md first. The travel accept path is also under investigation (report agents/out/imm26-travel-blocker), so read that report before editing. Code plus a stobe-tests row only; no live game run. Checkpoint and set status latest per the WP rules.'",
+   "why": "Shay ordered the deferred confirm built now (build means implement), and his question is answered yes: the NPC still decides."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Row 20-a: yes. The NPC still decides. If the new destination is one he refuses (example: a cannibal camp), he declines and the current destination stays. Building the deferred confirm now.",
+   "why": "Shay asked a design question inside the build order; answering it in the message lets the coordinator proceed without a round trip."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-trade-leak-15a, description '[case:investigate] imm26 row 15-a trade-line leak', brief: 'Find the root cause of the trade-line leak in row 15-a Personal, imperfect knowledge: trade events reach NPCs or chat that should not know them. Shay asks for the fix: filter trade events by awareness (an NPC only sees a trade event he was aware of). Read the row 15-a text in testing/NPC_IMMERSION_26_TESTS.md first. Report the root cause with file and function names. If the cause is clear, write the smallest fix as an anchor-assert patch in pending-fixes/ and a stobe-tests row. No live game run.'",
+   "why": "A bug or odd behaviour starts with [case:investigate] under the routing rules, and the fix is already specified by Shay."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Row 24-a in plain words (coordinator fills it from testing/NPC_IMMERSION_26_TESTS.md row 24-a after the first check): the one decision still open, the two or three options as a sentence each, and what each option does for the NPC.",
+   "why": "The row text is not in this file, so the coordinator must read it before it can explain the decision to Shay in plain language."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "DISPLAY1 is not the Samsung display, noted. Lower resolution is possible: it would cut CPU and GPU load per game and fit more game windows on DISPLAY2. The current standard is windowed 1600x900 on DISPLAY2. Proposal: background lanes at 1280x720 windowed. Reply go or keep 1600x900. No change is made until you answer.",
+   "why": "Shay's question is a suggestion, and a question gets an answer, not a changed standard; he decides the resolution."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "grep -n -E '20-a|24-a|15-a' C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md | head -40",
+  "grep -n -i -E 'DISPLAY1|DISPLAY2|Samsung' C:\\KenshiModding\\docs\\REFERENCE.md | head -20",
+  "tail -40 C:\\KenshiTestRuns\\agents\\out\\imm26-travel-blocker"
+ ]
+}

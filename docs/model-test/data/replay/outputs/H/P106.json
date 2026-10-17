@@ -1,0 +1,30 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21",
+   "why": "Op21 stopped STOPPED-CONTEXT with no successor, so its lane brief and successor name must be recorded before a fresh operator is spawned, and the Stop hook blocks until one exists."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i3op22, description '[case:generate] 5090-i3 lane operator op22'. Brief: take over lane 5090-i3 from imm26-5090-i3op21. Read C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.handoff.md and its status file first. Game i3 (NC20, 7A5AF9EA) is running with lock game-3.lock held by rig5090-imm26: keep it up. Launch env: KAH_INSTANCE=3 KAH_OWNER=rig5090-imm26 KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KAH_FPS=60 KENSHI_MONITOR='\\\\.\\DISPLAY2'. Between rows run tools/automation/lane-setup.sh 5090 3 kah-imm26-5090-ready --with Cind. First row: 08-d rerun using the 23-a v2 walk (unblockrun_sfs.sh family). Do NOT run 22-b or 25-b (no row script yet). Mark results in testing/NPC_IMMERSION_26_TESTS.md, one RESULT line per row, save the full report to a file and hand back at most 8 lines.",
+   "why": "The 5090-i3 lane is idle with the game up and a runnable rerun (08-d via the 23-a v2 walk) exists, so a fresh successor is spawned now per the respawn rule."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sf22b, description '[case:generate] 22-b row script and 25-b FX-MINE row'. Brief: build (compose only, do not run on any live lane) the 22-b row script (tick driver and checker on top of the 23-a v2 walk) and the 25-b FX-MINE row script for a native lane. Read testing/NPC_IMMERSION_26_TESTS.md for the row definitions. Commit with selftests, save the report to a file, hand back at most 8 lines.",
+   "why": "Op21 listed 22-b and 25-b as having no row script, and the coordinator builds missing row scripts itself rather than leaving the lane without runnable work."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Two decisions needed together: (a) 05-cx roster_has_sleeper fails only because the prompt shows the sleeper as 'moving' while the NPC reply is correct: is the checker or the prompt rendering the defect? (b) 23-a ack-count check counts two acknowledgements 8 s apart: one reply split in two, or two replies? Note 08-d has the same trip-ended-early defect as 23-a. Also 22-b and 25-b row scripts are being built now.",
+   "why": "These are real decisions the checker/product owner must make, so they are asked once in the final summary and work continues without waiting."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/session-start.ps1 -Brief",
+  "head -n 12 C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.handoff.md",
+  "powershell tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

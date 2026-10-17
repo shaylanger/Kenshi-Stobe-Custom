@@ -1,0 +1,25 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Understood: read-only from now. I will not write, edit, commit, install, spawn or run anything until you say so; I will only read files and report. The running lanes and the waker stay untouched. Do you want the running lanes paused, or do they keep their current rows? FYI: the code-fixes session reported a candidate Stobe.dll installed in the 5090 Kenshi mod folder; I took no action on it.",
+   "why": "Shay's batch message says files may be read but nothing may be written or modified, so the coordinator confirms that and asks the one open question about lanes, which keep writing results."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no action on the Code fixes session report (candidate Stobe.dll installed on the 5090)",
+   "why": "That report is inbound session data and Shay's read-only instruction forbids new installs or changes; it is mentioned to Shay in the message above instead."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for Shay's answer on pausing lanes and his next instruction; no writes, no tool runs beyond reads",
+   "why": "The batch is a read-only restriction, so after acknowledging it the coordinator has nothing to act on until Shay replies."
+  }
+ ],
+ "checks": [
+  "Read C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' section to confirm the current state before answering Shay",
+  "git -C C:\\KenshiModding status --short (read only) to confirm nothing uncommitted was added by the code-fixes session",
+  "git -C C:\\KenshiModding log --oneline -5 (read only)"
+ ]
+}

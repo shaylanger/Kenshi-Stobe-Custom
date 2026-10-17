@@ -1,0 +1,29 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "write the tail closing review decisions file process-ideas/review-ded82aa7-d30d-451d-8954-28e72d95c908-tail.json (directory as in testing/AGENT_PROMPTS.md step 2b; not named in this file): up to 3 new entries drawn only from this session since the handoff, big ideas only, each with a concrete example, e.g. the Stop-hook tail block: every block re-sends the full ~1.5 KB feedback text and forces a new turn that re-reads the tail context; propose one block per wait arm or a short repeat text. Also list no-change items as reviewed",
+   "why": "Shay asked for the conversation since the handoff to be reviewed and the PI list updated; tail closing review requires this file before tail-close.ps1 will run."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/process-ideas.ps1 review process-ideas/review-ded82aa7-d30d-451d-8954-28e72d95c908-tail.json",
+   "why": "Applies the review to docs/PROCESS_IDEAS.md (max 15 active, <= 3 new), so the entries are recorded for Shay's first summary; ideas are not applied."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Done: I reviewed this tail session since the handoff and updated the PI list (docs/PROCESS_IDEAS.md). You are right that the repeated Stop-hook blocks cost context: each block re-sends its feedback text and forces another turn that re-reads the tail context. I am keeping one armed tail-wait and not replying per block. Still open: the three lane operators imm26-5090-i3op20, imm26-4080-i4op12b and imm26-4080-i3op20. This tail stays alive until their results are relayed to the new coordinator, then it ends. The hxA report was relayed already.",
+   "why": "Shay asked for the review and for the context cost to be explained, and the reply must say what remains open before the tail can end."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-wait.ps1 -Session ded82aa7-d30d-451d-8954-28e72d95c908 (already armed as bj26uv2kf; re-arm only if it has exited)",
+   "why": "Three lane operators are still running and must be relayed before the tail can close; no new spawns or decisions."
+  }
+ ],
+ "checks": [
+  "Read C:/KenshiModding/docs/PROCESS_IDEAS.md (confirm the active count is at most 15 before the review adds entries)",
+  "sed -n 3p /c/KenshiTestRuns/agents/imm26-5090-i3op20.status; sed -n 3p /c/KenshiTestRuns/agents/imm26-4080-i4op12b.status; sed -n 3p /c/KenshiTestRuns/agents/imm26-4080-i3op20.status (confirm they are still RUNNING before waiting)"
+ ]
+}

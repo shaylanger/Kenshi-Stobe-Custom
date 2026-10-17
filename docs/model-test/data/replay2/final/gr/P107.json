@@ -1,0 +1,19 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "process-ideas/review-48b778a7-13d7-4f96-bc6b-30dba5670ae0-tail.json (tail closing review per testing/AGENT_PROMPTS.md): review the conversation since handoff #16, add at most 3 new PI entries each with a concrete example, apply none",
+   "why": "tail-close.ps1 refuses to close the tail without this review file, and the review is the last step before the tail ends."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-close.ps1 -Session 48b778a7-13d7-4f96-bc6b-30dba5670ae0",
+   "why": "tail-wait exited 0, so all tail agents are done and every relay is delivered; the tail session can close (the argument form is inferred from tail-wait.ps1 and must be confirmed in tail-close.ps1)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (confirm the TAIL 48b778a7 line shows no live agent and no undelivered relay)",
+  "powershell tools/automation/agent-ids.ps1 list -Live (confirm no live id is still owned by tail 48b778a7)"
+ ]
+}

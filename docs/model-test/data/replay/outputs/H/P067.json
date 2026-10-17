@@ -1,0 +1,18 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 lane-idle-5090-i3 'lane held by Shay order: no new 5090 testing (memory no-new-5090-sessions); operator hard2c abandoned, not restarted'",
+   "why": "The 5090-i3 idle alert is the intentional hold Shay ordered (HANDOFF records 5090-i3/i4/i5 HELD), so closing it with that reason is correct and not a restart."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no restart of 5090-i3, no SendMessage to imm26-5090-i3-hard2c, no spawn",
+   "why": "Shay's no-new-5090-testing order overrides the waker's idle-lane prompt, and the live work runs on 4080-i4 (op9) and 5090-i5 (op9b)."
+  }
+ ],
+ "checks": [
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i3-hard2c.status | cut -c1-260"
+ ]
+}

@@ -1,0 +1,41 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background Bash task, cd /c/KenshiModding first)",
+   "why": "the waker returned on this RIG STALL event and must keep watching the lanes."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-op2c: RIG STALL: the 4080 Kenshi game is gone while your i3 row is claimed. Within 5 min write your state to your status file: is i3 down because of your planned gfx/windowed restart or because it crashed, the last row result, and whether you are restarting i3 now. Do not relaunch i3 until the coordinator answers.",
+   "why": "this operator owns the i3 row and the planned restart, so its state decides whether this is a crash or an expected restart."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op: RIG STALL: the 4080 Kenshi game is gone while your i4 row is claimed. Within 5 min write your state to your status file: is i4 down, the last row result, and any crash dump. Do not relaunch i4 until the coordinator answers.",
+   "why": "the same check for lane i4, which is also on the 4080 and still claimed."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "any row that was running on 4080 i3 or i4 when the game vanished is recorded as INTERRUPTED (not PASS) in its out dir until a rerun passes",
+   "why": "a row that lost its game cannot count as evidence, because a pass needs real game state changed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "the two operator replies (latest line of C:\\KenshiTestRuns\\agents\\imm26-4080-op2c.status and C:\\KenshiTestRuns\\agents\\imm26-4080-i4op.status) and the ctl.ps1 status result for instances 3 and 4",
+   "why": "whether the games died in a crash or in a planned restart decides whether the 4080 lanes are relaunched."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "if both operators confirm the games are gone and no restart is in progress: relaunch 4080 instances i3 and i4 with each lane's own launch step from 4080-imm26-lib.sh, then run lane-isolation-check.ps1 4080",
+   "why": "the rig is idle while markers are claimed, so the lanes must come back, and the isolation check proves they are isolated again."
+  }
+ ],
+ "checks": [
+  "C:\\KAH\\ctl.ps1 status -Instance 3 and C:\\KAH\\ctl.ps1 status -Instance 4 on the 4080 over ssh 4080 (read-only: pids and up or down)",
+  "last line of C:\\KenshiTestRuns\\agents\\imm26-4080-op2c.status and of C:\\KenshiTestRuns\\agents\\imm26-4080-i4op.status",
+  "newest crash dump or Kenshi log for 4080 i3 and i4 (read-only)",
+  "confirm which rig the kenshi=no field refers to (the 5090 lanes were reported up at 15:23), then check C:\\KenshiTestRuns\\alerts\\open for a RIG STALL alert to ack after the fix"
+ ]
+}

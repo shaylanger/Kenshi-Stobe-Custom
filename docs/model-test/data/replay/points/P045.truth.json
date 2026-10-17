@@ -1,0 +1,21 @@
+{
+ "id": "P045",
+ "session": "6cd72ef5",
+ "ts": "2026-10-16T01:46:08.990Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Get-Date -f HH:mm:ss; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \"C:\\KenshiTestRuns\\agents\\$n.status\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1); Get-Content $i.FullName -TotalCount 3 | Select -Skip 2 | % {$_.Substring(0,[Math]::Min(160,$_.Length))} }; Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator -ErrorAction SilentlyContinue | Sort LastWriteTime -Desc | Select -First 2 Name",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 1369
+}

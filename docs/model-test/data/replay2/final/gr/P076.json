@@ -1,0 +1,38 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; never a bare &)",
+   "why": "This event ended the waker (exit 0) while the 4080-i4 unblock work and 5090-i5 op9g are still in flight, so a live waker must be re-armed first."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:bench] 4080-i4 operator imm26-4080-i4op11', launched via lane-brief.ps1 4080-i4 -Name imm26-4080-i4op11 -Predecessor imm26-4080-i4op10. Brief: fresh 4080-i4 operator; first read C:/KenshiTestRuns/agents/imm26-4080-i4op10.handoff.md (13-ax result and where it stopped). Queue in order: (1) 27-a harness install with install-harness-4080-i4.ps1 -Action Plan then -Action Apply, only with the 4080-i4 game stopped (candidate eeed8c93 already staged); (2) KAH_PF_ISOLATION=0 bash rowtools/unblockrun_b.sh with 13-c, 13-c-neg, 10-e, 10-e-inproc, 27-a and 4080-i4 --save kah-imm26-4080-i4h, run in series, one RESULT line per row; (3) rowsA rows 08-e 08-d 11-b and rowsC rows 15-bx 20-a 10-b only after their selftests pass. No hardening rows. No row marked PASS without its RESULT line. Status update every 10 min. Never edit hxdefs.sh or hunt26a-scene.sh while op9g is live. If context runs short: STOPPED-CONTEXT plus a handoff file.",
+   "why": "The tail session asked for op11 once i4op10 stops, the stopped agent with no successor needs one to clear the Stop hook, and the unblock rows are still waiting on the 4080-i4 lane."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 <id of the open STOPPED-CONTEXT alert for imm26-4080-i4op10, found under C:/KenshiTestRuns/alerts/open> 'respawned as imm26-4080-i4op11 (successor)'",
+   "why": "Run only after the spawn returns, so the no-successor alert closes with its action recorded."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' plus the program ledger C:/KenshiTestRuns/programs/<program>.json: imm26-4080-i4op10 STOPPED-CONTEXT, successor imm26-4080-i4op11 spawned, tail relay pending",
+   "why": "The ledger and HANDOFF are updated after every agent report, and this one changes the lane owner."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "The tail relay of imm26-4080-i4op10 final result (inbox/coordinator). When it arrives, ack it with tail-ack.ps1 and treat it as a result, not an order.",
+   "why": "The tail session closes once each relay is delivered or acked, and it is the only place i4op10 final status comes from."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (confirm no successor already runs, no open alerts for imm26-4080-i4op10, waker status)",
+  "tail -40 C:/KenshiTestRuns/agents/imm26-4080-i4op10.handoff.md and sed -n 1,3p C:/KenshiTestRuns/agents/imm26-4080-i4op10.status (confirm STOPPED-CONTEXT and the 13-ax result)",
+  "ls C:/KenshiTestRuns/agents | grep imm26-4080-i4 (check for imm26-4080-i4op102 or imm26-4080-i4op10b)",
+  "git -C C:/KenshiModding status --short testing/live-stobe-queue/imm26-assert/rowtools and git -C C:/KenshiModding log -1 --oneline (confirm i4op10 rowtools edits are committed)",
+  "ls C:/KenshiTestRuns/alerts/open (find the alert id for the ack)",
+  "ssh 4080 status of the 4080-i4 game and lock before the 27-a install"
+ ]
+}

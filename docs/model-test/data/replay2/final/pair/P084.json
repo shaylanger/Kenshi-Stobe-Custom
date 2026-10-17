@@ -1,0 +1,41 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "testing/NPC_IMMERSION_26_TESTS.md: set rows 26-dx and 26-e to SETUP-FAIL on 5090-i3 (NC16 96C6FDDF, no Hunt proposal after the offer). Unblock = NC17 installed on 5090-i5, then run 26-d, 26-dx, 26-e there right after 26-c (per the 10:2x addendum in inbox/operators/5090-i5-ready-nc17.txt).",
+   "why": "Both SETUP-FAIL messages have the same root cause as 26-d (old DLL gives no Hunt proposal; NC17 d0221bf is built but not installed), so the tests table must show SETUP-FAIL, not UNRUN, and no new agent is needed."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add '#14 10:2x: 26-dx and 26-e SETUP-FAIL from 5090-i3 (NC16 96C6FDDF, Hunt offer needs NC17). Unblock = 5090-i5 after 26-c and 26-a PASS, scene hunt26a-noface.sh. 5090-i3 moved to the next runnable row.'",
+   "why": "The handoff is the live state file and must record each setup-fail as soon as it arrives, per the large-programs rule."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "rmdir C:/KenshiTestRuns/claims/26-dx ; rmdir C:/KenshiTestRuns/claims/26-e   (only after the claims check shows these claims are held by 5090-i3 and that lane did not run either row)",
+   "why": "Releasing the claims lets 5090-i5 take the rows once NC17 is installed, as the addendum asks; the check comes first because the target must be looked at before deleting."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for 5090-i5 to report NC17 installed and 26-a PASS (inbox/operators/5090-i5-ready-nc17.txt), then 26-d, 26-dx, 26-e run there.",
+   "why": "Those rows cannot pass until the NC17 Hunt-accept fix is on the lane, and the install happens at the lane's row boundary."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background)",
+   "why": "The waker just delivered this batch and must be restarted to catch the next event, per the waker rule."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No new message to the 5090-i3 operator: the note already written this session (10:2x, stop on 26-dx, 26-e, 26-f, 24-c and go to the hardening rows) covers these two rows, and the SETUP-FAIL messages confirm it was followed. No new Agent spawn. No alert-ack unless alerts/open holds an entry for these two rows.",
+   "why": "A re-append would duplicate the instruction already given, and a setup-fail with a known, already-assigned cause is not an urgent alert and no agent is stalled or orphaned."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief   (read the full text of the 20261016-102128-setupfail-26-dx and -26-e messages: the unblock recipe text was truncated in this batch)",
+  "ls C:/KenshiTestRuns/claims   (see which claims 5090-i3 holds for 26-dx and 26-e before any rmdir)",
+  "ls C:/KenshiTestRuns/alerts/open   (check whether any open alert names 26-dx or 26-e; ack with alert-ack.ps1 only if one does)",
+  "grep -n -E '26-dx|26-e' C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md   (confirm the rows are still UNRUN before marking them)"
+ ]
+}

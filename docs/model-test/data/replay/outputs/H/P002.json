@@ -1,0 +1,14 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Partly. Claude quota and usage credits cover only the Claude agents and coordinator sessions. They do not stop the game, the test harness or the STOBE server, which pay for their LLM calls from their own credits (DeepInfra for chat, OpenRouter for relationship eval). Last usage read in this session: weekly all-models 100 percent used, resets 23:00 UTC, extra usage 70.41 USD spent. I have not confirmed that the recorder logs quota or usage, so I am checking that now. Until the weekly reset I will start no new Claude agents, since they would draw extra usage, and I will let in-flight runs finish with the STOBE server off unless a STOBE batch needs it. Say if you want all runs paused.",
+   "why": "Shay asked whether the setup accounts for the maxed quota and usage credits, and this file does not show that the recorder tracks it, so the answer must separate what is known from what is being checked."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "grep -rIli quota C:/KenshiModding/tools/automation"
+ ]
+}

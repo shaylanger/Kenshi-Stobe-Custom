@@ -1,0 +1,26 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Not all of them yet. Known open items: the travel accept bug (gates 19-c, 20, 21, 23-a, 23-c, 23-d) is still under investigation (imm26-travel-investigate, report agents/out/imm26-travel-blocker), so it has no fix in place. Rows 04-b, 06-d, 14-b, 18-a, 18-b on 5090 lane i5, plus all applicable i4 rows, are queued with the successor agent imm26-5090-ctxop32, which also reruns the rows changed by the batch2d fixes (compose a299993, deployed to all lane sites). I am now checking every open FAIL against its fix and its re-queue state, and will send you the exact list: fixed and re-queued, fixed but not re-queued (I queue those now), and no fix yet (I start a fixer for each).",
+   "why": "Shay asked a direct status question; the input shows one failure group without a fix and queued reruns for the rest, so the honest answer is partial, with the next action named."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[case:debug] one fresh agent per FAIL row that the inventory check shows has no fix in place and no running fixer (agent names and rows taken from the check output, none are known yet); brief: root cause from the row's evidence excerpt, smallest fix, patch script in pending-fixes/, then re-queue the affected rows. Do NOT spawn for the travel accept bug while imm26-travel-investigate is running; read its report agents/out/imm26-travel-blocker first and spawn a fixer from it once it lands.",
+   "why": "Failures with no fix must be fixed now rather than reported as blocked, but the target rows are unknown until the check runs and the travel bug already has an investigator."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "For each failure the inventory shows as fixed but not re-queued, add its rows to the imm26 row queue of the lane that owns them (row list taken from the inventory check, not guessed), and note them in testing/HANDOFF.md Right now.",
+   "why": "A fix that is not re-queued for testing does not count as done, and Shay asked for re-queued fixes."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "grep -n -i \"FAIL\\|fix\\|re-queue\" C:/KenshiModding/testing/HANDOFF.md | head -n 60",
+  "grep -n -i \"state\\|fail\" C:/KenshiTestRuns/programs/imm26.json | head -n 40",
+  "ls C:/KenshiTestRuns/agents/out/imm26-travel-blocker"
+ ]
+}

@@ -1,0 +1,63 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/alert-ack.ps1 lane-no-operator-5090-i4 'held per Shay 2026-10-15: no new 5090 testing sessions until he says otherwise; no respawn'",
+   "why": "The NO-OPERATOR condition is Shay's standing hold, not a missing operator; the id is inferred from the event text (LANE NO-OPERATOR 5090-i4) and the hook note's lane-no-operator-5090-i3 pattern, so confirm the exact id in alerts/open before running it."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/kenshi-ctl.ps1 idle 'Shay 2026-10-15: no new 5090 testing sessions until he says otherwise'",
+   "why": "Shay's explicit order is the real reason the 5090 is idle, so recording it is correct (not a way to silence the hook), and the respawn the event asks for is not executed."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/agent-abandon.ps1 imm26-5090-i4-hard2b2 'Shay 2026-10-15: no new 5090 testing sessions until he says otherwise'",
+   "why": "imm26-5090-i4-hard2b2 is STOPPED-CONTEXT with no successor, which blocks the Stop hook, and any successor would be a new 5090 session; drop it on purpose (handoff file kept) only after the first check shows no live tail owns it."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/agent-abandon.ps1 imm26-5090-i3-hard2b 'Shay 2026-10-15: no new 5090 testing sessions until he says otherwise'",
+   "why": "Its successor imm26-5090-i3-hard2c was dropped at 20:53, so this STOPPED-CONTEXT agent has no successor and still counts as work for the Stop hook; abandon it on purpose under the same hold, only after the check shows no live tail owns it."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/alert-ack.ps1 lane-idle-5090-i4 'held per Shay 2026-10-15: no new 5090 testing sessions; lane idle on purpose'",
+   "why": "lane-idle-5090-i4 is in the open-alert list in the hook note and is the same deliberate hold, so it should close with the real action taken."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/alert-ack.ps1 lane-no-operator-5090-i3 'held per Shay 2026-10-15: no new 5090 testing sessions until he says otherwise'",
+   "why": "The 5090-i3 NO-OPERATOR alert is open in the hook note and is covered by the same hold; its operator was already dropped at 20:53."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/alert-ack.ps1 agent-stopped-context-imm26-5090-i3-hard2b 'abandoned on purpose: 5090 hold per Shay 2026-10-15'",
+   "why": "Closes the open STOPPED-CONTEXT alert for imm26-5090-i3-hard2b after its marker is dropped; skip it if alerts/open no longer lists it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, Right now: add '#10 hold: 5090 lanes held per Shay (no new 5090 testing sessions until he says otherwise); imm26-5090-i4-hard2b2 and imm26-5090-i3-hard2b abandoned, no successor; 5090 rows 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax 03-b 10-d stay UNRUN until he says resume; 4080 lanes continue'",
+   "why": "HANDOFF must show the hold so the next session does not respawn a 5090 operator from the monitor line."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: add open question 'three kenshi_x64 processes still up on the 5090 after the i3/i4/i5 lanes stopped: stop them or leave them running? default: leave running until Shay answers'",
+   "why": "Open Shay decisions live in SHAY_DECISIONS.md, and killing game processes is not something to do without his answer."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Shay: the monitor asked to respawn a 5090-i4 operator; I did not, because of your order (no new 5090 testing sessions until you say otherwise). 5090 lanes are idle by that order; imm26-5090-i4-hard2b2 and imm26-5090-i3-hard2b are dropped with no successor (handoff files kept); the 4080 lanes keep running. Question: three kenshi_x64 processes are still up on the 5090 (the i3, i4 and i5 lanes are stopped). Stop them, or leave them running? Default: leave them. Tell me when 5090 testing resumes and I start a fresh 5090-i4 operator from its handoff.",
+   "why": "Shay should see in his summary that the respawn was refused by his own order, what unblocks the lane, and the one open decision about the idle game processes."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls /c/KenshiTestRuns/alerts/open",
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.status; ls /c/KenshiTestRuns/agents/imm26-5090-i4-hard2b2*",
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i3-hard2b.status; ls /c/KenshiTestRuns/agents/imm26-5090-i3-hard2b*",
+  "grep -l 'imm26-5090-i4-hard2b2\\|imm26-5090-i3-hard2b' /c/KenshiTestRuns/programs/*.json; ls /c/KenshiTestRuns/tail/",
+  "tasklist | grep -i kenshi_x64"
+ ]
+}

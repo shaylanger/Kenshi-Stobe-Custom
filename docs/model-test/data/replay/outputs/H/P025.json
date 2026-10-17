@@ -1,0 +1,39 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the completion notification of task a91b48e8b761d5f7b (agent a91b48e8b761d5f7b, N5a) before treating N5a as final",
+   "why": "the agent stopped while its own background work was still running, so this hand-back is interim and it may report again"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root -- git -C /var/www/html/StobeServer show --stat ee28e15 (read-only check that the N5a commit is on main and pushed)",
+   "why": "verify the agent's claimed commit before relying on the row 13-b server half"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "record N5a DONE in the program ledger and in C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': commit ee28e15, compose.patch at C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\compose\\compose.patch (APPLY-IDENTICAL), deployed to 5090 i3/i4/i5 and 4080 i3/i4",
+   "why": "the coordinator updates the ledger and HANDOFF after every agent report, not only at the context limit"
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "row 13-b: server half landed (ee28e15); keep the row open until an in-game rerun passes on the lanes",
+   "why": "the abandonedInDanger fix only accepts a victim with no agreement_id; the game state change has not been observed yet"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "add a 13-b rerun to the compose-fix rerun list for the lane operators (file path: the existing rerun list for the compose fixes), not a message to any lane operator",
+   "why": "isolated test arms get no coordinator input, so the rerun has to go through the row queue at their next row boundary"
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "before the next game batch, confirm the offline stobe-tests failure set (6 FAILED: the 5 known pre-existing failures plus the playthrough_rollback_lock flake) matches the known list",
+   "why": "CLAUDE.md requires offline stobe-tests to pass before the next game batch, and the 6 failures must be shown to be the known set"
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- git -C /var/www/html/StobeServer log --oneline -3",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

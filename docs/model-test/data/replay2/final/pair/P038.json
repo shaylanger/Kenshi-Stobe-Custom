@@ -1,0 +1,72 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record 'imm26-fix-pq DONE (e7e70c4): 10-a player_quote fix = stobeSocialRepairQuoteMatches (strips a trailing (talking to: X), a trailing [Player tone: ...] and a leading <speaker>: on both sides before comparing); patch script pending-fixes/imm26-fix-pq/apply.py; NOT yet in compose; 10-a rerun only after the deploy'",
+   "why": "The coordinator records every agent report in HANDOFF Right now at once so the next session knows the fix exists and is waiting."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "program ledger: run ls C:/KenshiTestRuns/programs/ first, then mark the imm26-fix-pq package DONE with checkpoint e7e70c4, owner imm26-fix-pq, next step = apply to compose after imm26-tripresume-a and imm26-tripresume-b are DONE",
+   "why": "The ledger is updated after every agent report, and the batch does not name the ledger file, so it is looked up first."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP (background Bash)",
+   "why": "The waker exits each time it wakes the coordinator, and work is still in flight (tripresume, lane operators, imm26-stream, imm26-hookq, imm26-n3), so one waker must keep running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait until C:/KenshiTestRuns/agents/imm26-tripresume-a.status and C:/KenshiTestRuns/agents/imm26-tripresume-b.status both read DONE before touching /root/imm26/compose",
+   "why": "apply.py edits the same compose tree that the two tripresume WP agents are still writing, and WP-C needs both."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "after both tripresume DONE: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiModding/pending-fixes/imm26-fix-pq/apply.py /root/imm26/compose ; then php -l on lib/social_repair_dialogue.php and tests/imm26_pq_quote_regression.php ; then the full offline stobe-tests suite with no pattern filter",
+   "why": "Applies e7e70c4 to the compose tree; the agent ran only the repair/pq_quote/social_dialogue pattern, and CLAUDE.md requires the full offline suite to pass before the next game batch."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "after the full suite passes: mkcompose_patch.sh APPLY-IDENTICAL",
+   "why": "Builds the compose.patch that carries the tripresume WP-A/WP-B changes and the e7e70c4 fix, in the WP-C order from HANDOFF."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "commit compose.patch with the tripresume WP-A/WP-B changes and the e7e70c4 pq fix together, then push",
+   "why": "All lanes must get the trip-resume and pq fixes in one committed build."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "imm26-install\\b4\\mk.sh (before any deploy)",
+   "why": "WP-C order requires the install build step before deploy.sh."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "deploy.sh of the new compose build to 5090 i3, 5090 i4, 5090 i5 and 4080 i3, 4080 i4 (no DLL), each lane picking it up at its next row boundary, never mid-row",
+   "why": "WP-C lists all five lanes, and a build installs at the next boundary, so the lanes stay on one build without a mid-row disturbance."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-5090-i5-op4, once the deploy is confirmed and its current row finishes: rerun 10-a with --allow-retry \"e7e70c4 player_quote suffix fix: 10-a FAILED no_valid_repair before the fix\"",
+   "why": "10-a is a FAILED row, so the row guard (PI-06) requires the --allow-retry reason, and only a real rerun proves the fix because the model's raw output was not in the evidence."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-4080-i4op52, once the deploy is confirmed: if its 10-a row reads FAILED, rerun 10-a with --allow-retry \"e7e70c4 player_quote suffix fix: 10-a FAILED no_valid_repair before the fix\"; otherwise do nothing",
+   "why": "The 4080-i4 lane also carries 10-a, so it gets the same rerun only when that row is actually FAILED."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep pending-fixes/imm26-fix-pq (apply.py) in place until the server commit carrying the fix exists, then delete it.",
+   "why": "Patch scripts are deleted only after the fix is committed in its repo, and the fix is not in the server repo yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -c 400 C:/KenshiTestRuns/agents/imm26-fix-pq.status",
+  "git -C C:/KenshiModding log --oneline -3 ; git -C C:/KenshiModding show --stat e7e70c4 | tail -5",
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-tripresume-a.status ; head -c 600 C:/KenshiTestRuns/agents/imm26-tripresume-b.status",
+  "ls C:/KenshiTestRuns/programs/"
+ ]
+}

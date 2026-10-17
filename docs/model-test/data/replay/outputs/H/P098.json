@@ -1,0 +1,45 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: '[case:investigate] imm26-sfY 08-d SETUP-FAIL unblock recipe 4080-i4'. Prompt: 'Read the full text of C:/KenshiTestRuns/inbox/coordinator/20261016-121056-setupfail-08-d.msg (the batch cut it off at planar=5.0). Lane 4080-i4, operator op13, NC20 7A5AF9EA plus bundle ba83148e5fa0; the native walk finished (stobe.log NATIVE_TRAVEL_FINISH phase=completed reason=measured_route_arrival). Find why 08-d reports SETUP-FAIL and write the smallest unblock recipe for unblockrun_a.sh 08-d --back 120. One more attempt is allowed; new DLL and server changes are OK; isolated lane only; never Shay live install, server tree or DB. Report via save-report.ps1 to agents/out/imm26-sfY and keep your status current with agent-status.ps1. Do not touch the running operator.'",
+   "why": "The 08-d setup failure needs a root-cause and unblock recipe before the single allowed retry, and the coordinator builds missing tooling itself instead of reporting blocked."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Record the new agent id for imm26-sfY with tools/automation/agent-ids.ps1 right after the spawn (check the script header for the exact argument form; not shown in this file).",
+   "why": "Standing rule PI-36: every spawn's id must be recorded so the handoff chain can find it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Append the sfS routing lines to C:/KenshiTestRuns/inbox/operators/coordinator16-server-fixes.txt: 05-cx v2 via hxrun_cx2.sh 05-cx <lane> --allow-retry (distinct names, pinned per the sfS report) and the 08-d v2 row tooling from commit a85c7b7a, to run on the next free lane between rows.",
+   "why": "imm26-sfS finished and its 05-cx and 08-d v2 tooling must reach the operators through the operator note, as was done for sfX."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-sfY to report DONE (or STOPPED-CONTEXT with a successor) before any 08-d rerun on lane 4080-i4.",
+   "why": "The rerun is the single allowed attempt and must use the recipe the agent writes, not the failed setup."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "EVENT DONE(quiet) for the background task 'Restart waker with PI-40 quiet-DONE' (exit 0).",
+   "why": "The waker restart succeeded and the waker is running, so no restart is needed."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "EVENT DONE(quiet) STATUS imm26-sfX and imm26-ctxfix2 DONE, and the imm26-sfX tooling relay.",
+   "why": "The sfX scripts were already appended to coordinator16-server-fixes.txt, and ctxfix2 only affects newly spawned operator briefs."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "tail-ack.ps1 for the imm26-sfS TAIL-RELAY messages (20261016-120823, 120826, 120834).",
+   "why": "imm26-sfS is not in a program ledger, and tail-ack fails for non-ledger agents, so the relays are treated as delivered."
+  }
+ ],
+ "checks": [
+  "Read the full text of C:/KenshiTestRuns/inbox/coordinator/20261016-121056-setupfail-08-d.msg (the path is inferred from the HANDOFF note that relays arrive in inbox\\coordinator)",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-brief.ps1 4080-i4",
+  "Read C:/KenshiTestRuns/agents/out/imm26-sfS/latest.md for the exact 05-cx and 08-d v2 routing lines before appending"
+ ]
+}

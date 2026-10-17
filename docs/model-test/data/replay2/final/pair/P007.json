@@ -1,0 +1,37 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (run_in_background=true; restart the same way after each wake)",
+   "why": "Task bzbwr5kui has completed, so no waker is running and agent results would be missed."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/CLAUDE.md: first confirm with git diff that the only uncommitted change is the 11-line section 7 brief block (starts '[case:generate] <wpName>') plus the removed 'Size work packages' line; then rebuild the working copy from git HEAD (git show HEAD:CLAUDE.md, no git checkout) and replace HEAD's single line starting '- **Size work packages before spawning:**' with the three bullets copied verbatim from the first fenced block AFTER the heading '## 8. PROPOSED CLAUDE.MD TEXT' in docs/WP_SIZING.md (Size work packages, Big files are read through code maps, Checkpoints and handoffs). Keep the line endings HEAD uses. Verify grep finds 'Big files are read' exactly once and no '[case:generate]' line remains. Do not commit.",
+   "why": "The earlier python took the first fenced block (the section 7 brief template) instead of section 8, so CLAUDE.md holds a brief template and lacks the approved bullets; Shay's go covers applying the approved section 8 text."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': record agent wp-sizing-codemap (acf948d67e7eca45c, [case:generate]) DONE, committed and pushed as 688ed0f (tools/automation/codemap.sh, docs/WP_SIZING.md, testing/AGENT_PROMPTS.md block; 24 code maps plus INDEX.txt, 332 KB, in /root/imm26/codemap); no successor needed; state whether the CLAUDE.md Large-programs fix is applied or still pending.",
+   "why": "The handoff rule requires 'Right now' to be updated after every agent report."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/programs/<name>.json, where <name> is the program file that lists wp-sizing-codemap (found by the ls check; the name is not in this batch): set that work package DONE, owner acf948d67e7eca45c, output commit 688ed0f, same checkpoint line as the HANDOFF entry.",
+   "why": "The ledger must match each agent report, and the program file must be found by the ls check, not guessed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "The running claude-md-trim backup and rule-checklist agent, then a SEPARATE reviewer agent. No commit or push of CLAUDE.md in this event; the trim commit follows only a clean reviewer verdict.",
+   "why": "Shay approved applying the trim with review, but the backup, checklist and independent review have not run and are not in this batch."
+  }
+ ],
+ "checks": [
+  "tail -5 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/277ebe12-067a-4b4a-b63d-8c4b6c5f3aa2/tasks/bzbwr5kui.output | cut -c1-300",
+  "cd /c/KenshiModding; git diff -- CLAUDE.md | cut -c1-140; git show HEAD:CLAUDE.md | grep -n 'Size work packages' | cut -c1-80",
+  "awk '/^## 8\\./,/^## 9\\./' /c/KenshiModding/docs/WP_SIZING.md | cut -c1-160",
+  "ls /c/KenshiTestRuns/programs/; ls /c/KenshiTestRuns/inflight/",
+  "cd /c/KenshiModding; git log --oneline -3"
+ ]
+}

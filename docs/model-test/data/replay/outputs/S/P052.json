@@ -1,0 +1,13 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the already-armed background wait bm22iu58s (loop over imm26-5090-i3-hard2b, imm26-5090-i4-hard2b2, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-fix19 status files) running; end the turn with a one-line note and do not reply per Stop block. No spawns or decisions as a tail session.",
+   "why": "This is the tail session's unchanged Stop-hook block for 5 still-running owned agents; the waker is already armed, the PI-21 relay was already sent, and nothing new needs action until an agent status goes DONE/FAILED/STOPPED-CONTEXT, at which point the report is saved and relayed with tail-relay.ps1 plus SendMessage to the new coordinator."
+  }
+ ],
+ "checks": [
+  "bash -c 'cd /c/KenshiTestRuns/agents; for a in imm26-5090-i3-hard2b imm26-5090-i4-hard2b2 imm26-4080-op2jb imm26-4080-i4op7c imm26-fix19; do head -1 $a.status | cut -c1-80; done'"
+ ]
+}

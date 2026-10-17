@@ -1,0 +1,13 @@
+imm26-fixrunner: replay2-headless.py (commit 4c8a1047, tools/automation/shadow-replay/)
+Flags: claude -p --model haiku|sonnet --effort high --tools Read,Write --allowedTools Read Write --permission-mode dontAsk --setting-sources "" --no-session-persistence --disable-slash-commands --strict-mcp-config --max-turns 8 --output-format stream-json --verbose --add-dir <replay2 root> --append-system-prompt-file headless\context.md (user+project CLAUDE.md + MEMORY.md, as subagents see them). cwd = replay2\headless\cwd (scratch). Hooks: --setting-sources "" disables all user/project hooks (context-meter, coord-heartbeat, waker guard, router, readonly guard); no interference seen.
+Test (scratch tree replay2-headless-test, 3 real r2 calls P119-pa2, P119-pb2, P120-pa2, parallel 3): 3/3 valid via C.valid_output, 41 s total; per run 19 / 24 / 41 s, 83-87k tokens (6 in, ~19-37k cache-w, ~49-66k cache-r), $0.0046-0.0080 API-equiv. Subagent r2 mean in runs2.tsv: 146k tokens, 41.6 s, $0.0091. Model reported claude-haiku-5-5.
+Note: streamed assistant events under-report output_tokens (first chunk only); the tool takes totals from the final result event (verified equal to reported total_cost_usd).
+Claims: headless\claims\<rid>.claim (O_EXCL, stale 25 min); also skips rids whose subagent transcript changed < 12 min ago. hpairexec11 does not know claims, so a run it issues at the same moment could be duplicated (harmless overwrite, same file schema).
+Commands (Windows, in any dir, REPLAY2_ROOT default):
+ python -I C:\KenshiModding\tools\automation\shadow-replay\replay2-headless.py status
+ python -I ...\replay2-headless.py run --round r2 --parallel 16 [--dry-run]   (all missing r2; --batch NN restricts to a plan file)
+ python -I ...\replay2-headless.py run --round r3 --parallel 16   (after r2 is complete; creates the r3 job files itself, no `plan` needed)
+ run --round r1|dr|gr same; --round all runs every round in order of listing (r3 only for points whose r2 is done).
+ python -I ...\replay2-headless.py run --round grade   (graders, Sonnet; untested because grading\ does not exist yet; key.json read denied via --disallowedTools Read(path))
+ python -I ...\replay2-headless.py merge-cost   (appends headless rows to runs2.tsv so aggregate-cost counts them; re-run after any collect; side file replay2\headless-usage.jsonl)
+Then: replay2-run.py status / finalize as usual. collect does not see headless runs (no transcript), merge-cost covers cost; outputs are read from runs\.

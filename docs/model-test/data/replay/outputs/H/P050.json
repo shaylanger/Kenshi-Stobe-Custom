@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the one background wait running (bash tools/automation/event-wait.sh in WSL, run_in_background); do not reply per block; wait for the next of the 9 owned agents (imm26-5090-i3-hard2b, imm26-5090-i4-hard2b2, imm26-5090-i5-op7, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-fix19, imm26-wpR1, imm26-wpR2, imm26-pi21) to finish, then save its report and relay it with tail-relay.ps1 to inbox C:\\KenshiTestRuns\\inbox\\coordinator",
+   "why": "The tail session spawns and decides nothing new and may end only once every owned agent is finished and its relay is delivered."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background), only if the process check shows no event-wait.sh is running",
+   "why": "The waker guard needs a running waker while agents are in flight, but a second wait must not be started on top of a live one."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-ChildItem C:\\KenshiTestRuns\\agents -Filter *.status | ForEach-Object { $_.Name + ': ' + (Get-Content $_.FullName -TotalCount 1) }\"",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh"
+ ]
+}

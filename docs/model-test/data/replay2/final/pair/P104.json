@@ -1,0 +1,44 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to uds:\\\\.\\pipe\\LOCAL\\cc-msg-bdae596d58e6afcdfa0a54295c30a827 (tail #15): 'Coordinator #16 received Shay order (1) cost-audit redo for 2026-10-14 00:00 to now (16 Oct) only and (2) the Haiku pilot audit. Routing: the redo goes to imm26-pilotC (single writer of tools/automation/cost-audit.py); the pilot audit columns and side-by-side generator go to imm26-pilotA; Haiku operator imm26-5090-i4-hk1 starts when pilotA reports the audit columns ready and RAM allows. Cost answer to Shay once the redo is verified; side-by-side after 3-4 h of pilot rows. Do not resend the order.'",
+   "why": "The peer relays Shay's authority, so it gets one acknowledgement with the routing and timeline and does not resend the order or start a parallel redo."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-pilotC (agent id a10e0b733c56138df): 'Shay order via tail #15 (2026-10-16) supersedes your scope where it differs: REDO the cost audit for 14 Oct 00:00 to now (16 Oct) ONLY; ignore earlier output. Add --since/--until (local date and time, inclusive) to tools/automation/cost-audit.py if missing, then rebuild agents/out/imm26-costaudit/ledger.md, the .csv and the docs copy in docs/cost-audit; one commit for the script change, pushed right after. Required: (a) lane operators as their own category (every imm26-*op* agent, including -hk pilots): Sonnet-high actual cost per operator, per operator-hour, and per row where countable from status-mark or mark-row calls; (b) coordinators separately; (c) investigators, fixers and recipe agents separately; (d) Haiku-high what-if for operators at the docs/MODEL_ROUTING.md ratio, plus a sensitivity case at 1.5x and 2x the turns; (e) operator cost split into cache read, cache write, input and output; (f) claude-fable-5-1 priced only if the price table gives a price, else listed separately for the window with count and tokens. Recheck 3 totals by hand from raw transcripts; category sums must equal the grand total. Top section answers: would a Haiku-high lane operator change cost, and what it implies for the pilot. Do not edit the pilot ledger or any lane. Do not message Shay. Report DONE with status path, save-report path and the answer. If STOPPED-CONTEXT or FAILED, spawn imm26-costaudit2 with this same text as a fresh generator.'",
+   "why": "pilotC already has cost-audit.py open for the lane-operator line and the redo is a superset of that scope, so one writer avoids a collision and a re-read."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-pilotA (agent id ac12b657f0aab5448): 'Shay order via tail #15 (2026-10-16): add to C:/KenshiTestRuns/pilot/haiku-i4/verdicts.csv the columns row, lane, model, start, end, wall_s, tokens, cost, operator_verdict, checker_result, agree, false_claims_n, notes. Fill start, end, wall_s, tokens and cost from the pilot transcript via cost-audit.py (read-only, do not edit it); checker_result from the checker RESULT line; agree = operator_verdict equals checker_result; PASS only with the checker RESULT line. Send a short status line to the coordinator as soon as the columns exist (that releases the Haiku operator), then build the side-by-side generator for Haiku 5090-i4 (imm26-5090-i4-hk1) vs Sonnet 5090-i3 on the same rows: COST per row and per hour (tokens and API-price equivalent); TIME (wall s per row, rows per hour, idle gaps, time to first row after start); QUALITY (verdict vs checker per row, rows completed, escalations, SETUP-FAIL diagnosis vs the Sonnet lane diagnosis of the same row, handoff and report quality); FALSE or INCORRECT claims per row and per report, checked against evidence files (status lines, TESTS-style notes, relays, final report), counted the same way for both lanes. No claims, no TESTS writes. Report DONE with script and file paths.'",
+   "why": "Pilot rows are only measurable once the audit columns exist, and pilotA owns that shadow-ledger tooling, so the fields go into its open package rather than a new writer."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the audit-columns-ready status line of imm26-pilotA in C:/KenshiTestRuns/agents/imm26-pilotA.status, and for the DONE or STOPPED status of imm26-pilotC in C:/KenshiTestRuns/agents/imm26-pilotC.status; keep event-wait.sh running in the background",
+   "why": "The Haiku spawn and the cost answer depend on these two packages, and the waker stays on so nothing idles while they run."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "After pilotA's columns-ready line: check free RAM (powershell -NoProfile -Command \"Get-CimInstance Win32_OperatingSystem | Select-Object FreePhysicalMemory\") and the running Kenshi count (session-start.ps1 -Brief); spawn only if RAM allows, otherwise keep waiting. Then powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-brief.ps1 5090-i4 -Name imm26-5090-i4-hk1; then Agent with description '[case:<lane-operator tag from tools/automation/model-policy.json>] imm26-5090-i4-hk1 Haiku-high pilot operator', model and subagent_type from model-policy.json for that case (Haiku high); prompt = the lane-brief text, same row list and lane brief as the Sonnet lane 5090-i3; shadow ledger C:/KenshiTestRuns/pilot/haiku-i4/verdicts.csv only; no claims, no TESTS writes; PASS only with the checker RESULT line; escalate odd cases to the coordinator; per-row audit fields as in pilotA's column list. Then powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-5090-i4-hk1 <agentId>",
+   "why": "The Haiku pilot operator starts once the audit columns are recording and RAM is confirmed, so every row it runs is captured with the cost, time, quality and false-claim fields Shay asked for; the case tag name is not in this file and must be taken from model-policy.json."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "hold the cost-audit answer until imm26-pilotC reports DONE and its 3 hand-checked totals match; then send ONE message to Shay via SendMessage to his relay session (its id is in the handoff, not in this file) with the top section of C:/KenshiTestRuns/agents/out/imm26-costaudit/ledger.md (would a Haiku-high lane operator change cost, sensitivity case, fable price note) and what it implies for the pilot; the side-by-side pilot summary follows after 3-4 h of pilot rows",
+   "why": "Shay asked for the answer once it exists and the totals must be checked first; no decision is needed from him now, so there is one summary rather than an early acknowledgement."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-pilotA.status | head -5 | cut -c1-300",
+  "cat C:/KenshiTestRuns/agents/imm26-pilotC.status | head -5 | cut -c1-300",
+  "git -C C:/KenshiModding log -3 --format=%h_%s -- tools/automation/cost-audit.py",
+  "grep -n -i 'since\\|until' C:/KenshiModding/tools/automation/cost-audit.py | head -20",
+  "grep -n -i 'fable' C:/KenshiModding/docs/MODEL_ROUTING.md C:/KenshiModding/tools/automation/cost-audit.py | head -20",
+  "ls C:/KenshiTestRuns/pilot/haiku-i4/",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

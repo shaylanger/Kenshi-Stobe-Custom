@@ -1,0 +1,31 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add line '#8 01:4x UTC: imm26-batch5 DONE f62a91b (pending-fixes/imm26-batch5/apply.py <tree-root>, 29/29 own test, stobe-tests on copy 107 pass / 5 pre-existing FAIL: chat_json_endpoint, main_ingress_http, npc_player_view, social_property, social_fights). FIX1 16-c, FIX2 02-bx, FIX3 17-bx. NOT composed/deployed/proven live. Next: WP-C compose together with trip-resume (tripresume-a/b) and imm26-fix-pq (e7e70c4) patches; live reruns 16-c/02-bx/17-bx (+17-bx fixture changes from triageB item 3) wait for DeepInfra balance (402).' and update the program ledger entry for the batch5 work package to DONE",
+   "why": "The ledger and HANDOFF must be updated after every agent report so a coordinator stop loses nothing; the agent's own status file already says DONE so no abandon or respawn is needed."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:patch] imm26 WP-C compose server fixes' (name imm26-wpc-compose): Brief: offline only, no LLM and no game needed, so the DeepInfra 402 does not block it. Work in /root/imm26/compose (a copy, never the live tree). 1) Apply the three anchored patches in order: pending-fixes/imm26-fix-pq/apply.py (10-a quote-suffix, e7e70c4), the tripresume-a server code (already in /root/imm26/compose) and pending-fixes/imm26-batch5/apply.py (f62a91b), each with <tree-root> = /root/imm26/compose; run each twice to confirm applied then already-applied. 2) php -l on every touched file. 3) Run the new tests imm26_batch5_regression.php (expect 29/29), the trip-resume regression test tests/imm26_trip_resume_regression.php and the fix-pq test, then the full stobe-tests. The expected failures are only the 5 known pre-existing ones (chat_json_endpoint, main_ingress_http, npc_player_view, social_property, social_fights); any other new failure means stop and report. 4) Run mkcompose_patch.sh and require APPLY-IDENTICAL, then commit compose.patch with the shaylanger identity, one commit per fix, and push. 5) Do NOT deploy and do NOT touch the live tree, ss-merge, Shay's install or DB. Deploy (imm26-install\\b4\\mk.sh before deploy.sh) is a later step after the checks. Keep status current via agent-status.ps1 imm26-wpc-compose; checkpoint every ~40k tokens; target <=120k tokens. Final report: commit ids, test counts, APPLY-IDENTICAL result.",
+   "why": "Compose is the next ready, 402-independent work package that unblocks every pending row rerun; sized as one phase (patch/compose) per WP sizing rules."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "Keep all LLM-dependent reruns (16-c, 02-bx, 17-bx, 10-a, 19-a, 19-ax, 03-b, 18-a) on hold; do not spawn imm26-5090-i3-hard2b or imm26-5090-i4-hard2b and do not mark any row until Shay adds DeepInfra balance and the lane server logs show no 402; when it is back, deploy the composed patch to the lanes, then rerun with --allow-retry.",
+   "why": "The 402 outage makes every model-reply row fail on every lane, and the batch5 fixes have no in-game proof until a composed build is deployed."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No ack or tail-ack, no abandon and no respawn for imm26-batch5.",
+   "why": "The agent finished DONE with a pushed commit; its result arrived as a subagent hand-back, not as a tail relay, and DONE leaves no orphan marker."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "git -C C:\\KenshiModding log --oneline -3 f62a91b",
+  "git -C C:\\KenshiModding show --stat f62a91b",
+  "type C:\\KenshiTestRuns\\agents\\imm26-batch5.status"
+ ]
+}

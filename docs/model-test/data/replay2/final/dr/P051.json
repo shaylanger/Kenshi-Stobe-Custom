@@ -1,0 +1,24 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i3-hard2b: 'Stall check from the tail: your last status is 20:24 (RUNNING, next 10-a) and the lane has been silent about 11 minutes. Update C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.status now with what is running. If blocked, write the blocker in the status and move on to 19-ax, 02-cx, 05-cx, 01-bx, 01-cx, 11-b. If you are still silent at 20:44 the tail will stop you.'",
+   "why": "The stall rule says to message a silent agent at 10 minutes before any stop, and coordinator #10 asked for exactly this."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to kenshimodding-76 (coordinator #10): 'Tail reply: imm26-fix19 has no status file in C:/KenshiTestRuns/agents (my last check at 20:35 showed imm26-fix19.status missing), so I have no evidence it is running and will not respawn it; treat fix19b as the live one. imm26-5090-i3-hard2b: silent since its 20:24 status, stall message sent at 20:35; I will TaskStop it at 20:44 if it is still silent and tell you then.'",
+   "why": "The coordinator asked whether fix19 is running and asked to be told about the i3 operator stop."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait until 20:44 Win clock for a new status line from imm26-5090-i3-hard2b; if there is none, stop-agent imm26-5090-i3-hard2b and message kenshimodding-76 with the result.",
+   "why": "The 20-minute silence limit is the stop trigger, and a status update before then cancels it."
+  }
+ ],
+ "checks": [
+  "head -1 C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.status",
+  "ls C:/KenshiTestRuns/agents/ | grep -i fix19"
+ ]
+}

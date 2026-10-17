@@ -1,0 +1,29 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i3-hard2b: 'Stall check from the tail (coordinator #10 request): you have been silent ~10 min (last status 20:24, next 10-a; LANE IDLE alert open on 5090-i3). Right now: (1) update your status with agent-status.ps1 imm26-5090-i3-hard2b RUNNING \"<task>\" \"<step>\" \"<outputs>\" \"<next>\" stating what is actually running. (2) If you are blocked, state the blocker in the status line and move on to the next rows 19-ax, 02-cx, 05-cx, 01-bx, 01-cx, 11-b. (3) Do not leave the lane idle. If you are silent for 20 min total I will TaskStop you and tell the coordinator.'",
+   "why": "Coordinator #10 asked the tail to apply the stall rule (silent 10 min -> message the agent) and the agent is owned by this tail, not a fresh respawn target."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to kenshimodding-76 (coordinator #10): 'TAIL reply: stall message sent to imm26-5090-i3-hard2b; if still silent at 20 min (about 20:44 by its 20:24 status) I will TaskStop it and tell you so you can respawn a fresh i3 operator. Re imm26-fix19: it has no status file here and I have no evidence it is running (ledger shows it as [no status, not acknowledged]); I treat it as never started, so your imm26-fix19b is correct. I am marking fix19 abandoned on my side so it stops holding my Stop hook.'",
+   "why": "Coordinator asked directly whether fix19 is running; the only evidence in hand is that it never wrote a status file."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-fix19 \"never started (no status file, no out dir, no edits); superseded by imm26-fix19b spawned by coordinator #10\"",
+   "why": "Closes the unstarted ledger entry owned by this tail so it no longer blocks the tail Stop hook, now that a successor exists."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the single background event-wait.sh waker running; re-check imm26-5090-i3-hard2b status/lane output at about 20:44; if still no status update or new row output, TaskStop it and send coordinator #10 a message.",
+   "why": "The 20-minute stall rule requires waiting for the agent's reply before TaskStop; the tail spawns and decides nothing new."
+  }
+ ],
+ "checks": [
+  "head -1 C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.status; ls -la C:/KenshiTestRuns/agents/imm26-fix19.status C:/KenshiTestRuns/agents/out/imm26-fix19 2>&1 | head",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-scan.ps1 (confirm the LANE IDLE alert for 5090-i3 is open and its age)"
+ ]
+}

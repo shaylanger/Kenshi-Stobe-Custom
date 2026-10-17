@@ -1,0 +1,22 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the 5090-i4 operator imm26-5090-i4-hard2b3 to report PREDECESSOR-READY (its brief C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b3.brief.md says no game commands until C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b2.handoff.md exists, or the predecessor status first line is DONE, STOPPED-CONTEXT or FAILED)",
+   "why": "The 5090 is idle only because the one allowed 5090 lane (5090-i4, Shay 22:40 order) was just handed to a new operator that is deliberately waiting for its predecessor handover, so Kenshi should stay closed until then and I should not start the game myself."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1 idle \"5090-i4 held for operator imm26-5090-i4-hard2b3 predecessor handover (one-lane order, Shay 22:40); lane starts on handoff\"",
+   "why": "The reason is true (the lane is deliberately waiting on handover, and 5090-i3 and 5090-i5 stay held by Shay), so recording it is accurate, not a way to silence the hook; it expires in 60 min and must be cleared with idle clear once the operator launches Kenshi."
+  }
+ ],
+ "checks": [
+  "& C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1 idle",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b3.status -TotalCount 1",
+  "Test-Path C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b2.handoff.md",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b2.status -TotalCount 1",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 -NoMemory"
+ ]
+}

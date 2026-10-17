@@ -1,0 +1,50 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (grep for 4080-i4) and ls C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b*.status C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b*.handoff.md",
+   "why": "confirm no successor (imm26-4080-i4op12b2 or imm26-4080-i4op12bb) already runs before respawning the stopped 4080-i4 operator"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding && powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/lane-brief.ps1 4080-i4 -Name imm26-4080-i4op12b2 -Predecessor imm26-4080-i4op12b -Out C:/KenshiTestRuns/agents/out/imm26-4080-i4op12b2.brief.md",
+   "why": "build the fresh successor brief from the lane template, the same way op21 was briefed for 5090-i3"
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-4080-i4op12b2, description [case:generate] 4080-i4 lane operator op12b2. Brief text: You are imm26-4080-i4op12b2, the 4080-i4 lane operator, a FRESH successor of imm26-4080-i4op12b (STOPPED-CONTEXT). Read your brief C:\\KenshiTestRuns\\agents\\out\\imm26-4080-i4op12b2.brief.md first (rules, helper scripts, exact agent-status commands), then C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b.handoff.md and its status file C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b.status. Continue from its next: line. Read the operator notes in C:\\KenshiTestRuns\\inbox\\operators\\ that name your lane. Shay orders: 2 lanes per rig; a stuck row = SETUP-FAIL after ONE attempt, then take the next runnable row; claims = mkdir C:\\KenshiTestRuns\\claims\\<row>. Keep your own status current with tools\\automation\\agent-status.ps1 imm26-4080-i4op12b2 RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b2.handoff.md. Never SendMessage the old agent.",
+   "why": "the stopped operator has no successor, so its lane would sit idle; a fresh agent from its handoff keeps the 4080-i4 lane working"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "tools/automation/program-ledger.ps1 route the imm26 ledger entry for imm26-4080-i4op12b to imm26-4080-i4op12b2 (exact args per its usage line; the old routing note owner is tail:ded82aa7-d30d-451d-8954-28e72d95c908)",
+   "why": "the ledger must name the live successor as owner so session-start and the Stop guard stop reporting the old operator"
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md, Right now section: record imm26-4080-i4op12b STOPPED-CONTEXT at 4080-i4 and the successor imm26-4080-i4op12b2 (brief C:\\KenshiTestRuns\\agents\\out\\imm26-4080-i4op12b2.brief.md)",
+   "why": "HANDOFF Right now is the live state file and must name the new 4080-i4 owner the moment the agent starts"
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id of the open AGENT STOPPED alert for imm26-4080-i4op12b, from session-start OPEN ALERTS> \"respawned as imm26-4080-i4op12b2\"",
+   "why": "the alert closes only after the successor exists; the id is not in this file, so it must be read from session-start"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "restart the waker, which exited on this event, so the coordinator keeps getting woken for in-flight work"
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none",
+   "why": "the imm26-5090-i3op20 tail-ack was already done and the Stop-hook request for imm26-5090-i3op20b is stale because imm26-5090-i3op21 is running as its successor (status RUNNING since 11:16); no respawn for op20b"
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b*.status C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b*.handoff.md",
+  "head -3 C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b.status"
+ ]
+}

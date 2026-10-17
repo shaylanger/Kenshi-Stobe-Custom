@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background Bash task, grep -v SWEEP as before)",
+   "why": "The event-wait background task bjjwra6y5 exited (completed, code 0) after waking the coordinator, and the waker must be restarted each time it wakes so the session stays reachable while operators, fixers and the tail-mode work are in flight."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none (wpT2 report already read: DONE, commit 7744453, tail-ledger-selftest 33/33)",
+   "why": "The wpT2 DONE result is already reported in the preceding conversation, so no new action is needed for it beyond the waker restart."
+  }
+ ],
+ "checks": [
+  "tail -5 C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\5720e5b8-42a8-4aaf-9e29-db0072586324\\tasks\\bjjwra6y5.output | cut -c1-700",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

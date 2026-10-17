@@ -1,0 +1,31 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker that carried this batch has completed while imm26-nc12, imm26-5090-i5-op9c and imm26-4080-i4op9 are still in flight, so a waker must be re-armed."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op9: \"Lane 4080-i4 is flagged idle: your status file was last written 22:54 (10-a PASS, 10-b SETUP-FAIL marked, next 03-b). Update your status file now with the row you are on, what is blocking it, and your next command. If there is no progress within 5 minutes, write your handoff and set STOPPED-CONTEXT so a successor takes the lane.\"",
+   "why": "The LANE IDLE alert for 4080-i4 has been open 16.9 min with no status write, and the lane alert says to ask the operator first."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 <id of the LANE IDLE 5090-i5 alert, from alerts/open> \"op9 stopped at 23:04 with handoff written; successor imm26-5090-i5-op9c started 23:05 and took over the lane (game pid 48688, backend and lock held); alert named the old operator\"",
+   "why": "The 5090-i5 alert names op9, which is already STOPPED-CONTEXT; once the checks confirm op9c is running the lane, the alert is stale and can be closed with that reason. The alert id is not in this file, so it is read from alerts/open first."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "No message to imm26-5090-i5-op9c yet: it started at 23:05 and is still reading its brief and the predecessor handoff. Check its status file on the next event; ask it for status only if it stays silent past 10 min.",
+   "why": "A successor taking over a lane needs several minutes before its first status write, so the 6.2 min idle reading is not yet a stall."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls C:/KenshiTestRuns/alerts/open (to get the exact id of the LANE IDLE 5090-i5 and LANE IDLE 4080-i4 alerts)",
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op9.status; head -3 /c/KenshiTestRuns/agents/imm26-5090-i5-op9c.status; date",
+  "Read C:/Users/Shay/.claude/projects/C--KenshiModding/memory/no-new-5090-sessions.md and the latest Shay order on the 5090 lanes (the 10-14 handoff holds 5090-i3/i4/i5; op9c's brief cites a single allowed lane), before the 5090-i5 alert is closed"
+ ]
+}

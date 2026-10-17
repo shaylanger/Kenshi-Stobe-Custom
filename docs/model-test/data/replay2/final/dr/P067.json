@@ -1,0 +1,19 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no new ack, no restart of 5090-i3, no SendMessage to imm26-5090-i3-hard2c, no spawn",
+   "why": "lane-idle-5090-i3 was already acked in the preceding turn (ACKED lane-idle-5090-i3, 5090-i3/i4 held by Shay's order), so a repeat ack is a duplicate and the waker line is a stale re-report; a still-true condition only re-opens after 30 min."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker bkmrwu2zb just completed and work is in flight (4080-i4 op9 and 5090-i5 op9b are RUNNING), so a new waker must be armed before ending the turn."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-scan.ps1 | head -5 | cut -c1-200",
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i3-hard2c.status | cut -c1-260"
+ ]
+}

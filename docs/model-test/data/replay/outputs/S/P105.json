@@ -1,0 +1,40 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\lane-brief.ps1 5090-i4 -Name imm26-5090-i4-hk2 -Predecessor imm26-5090-i4-hk1",
+   "why": "LANE NO-OPERATOR on the pilot lane 5090-i4: no RUNNING operator, so generate the successor brief from the lane state (hk1 stopped after escalating 00-ask without retry or diagnosis)."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i4-hk2, description '[case:bench][model:haiku][effort:high] imm26-5090-i4-hk2 pilot operator 5090-i4', brief = output of lane-brief.ps1 5090-i4 plus: successor of imm26-5090-i4-hk1 (pilot, rows in pilot rows-i4.txt, shadow ledger pilot\\haiku-i4 verdicts.csv); first step re-check world state (stobe-auto wait-world; the log shows combat/Malzin events so the world is probably loaded and wait-world is mis-reporting), diagnose the 00-ask wait-world failure once before escalating; keep agent-status.ps1 current.",
+   "why": "Shay's GO for the Haiku pilot is still standing and the lane must not idle over 2 min while rows exist; a fresh successor (never SendMessage the old one) continues the pilot and the audit data."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 add imm26-5090-i4-hk2 <id returned by the spawn>",
+   "why": "Record the new agent id so it can be reached by SendMessage for pilot-escalate answers (id unknown until spawn)."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i4 \"spawned imm26-5090-i4-hk2 as pilot successor to hk1\"",
+   "why": "Closes the open LANE NO-OPERATOR alert after the successor exists."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': note hk1 stopped on 00-ask (wait-world 'no answer (loading?)', no diagnosis), hk2 spawned as successor; add this as a pilot-quality data point for pilot-audit.",
+   "why": "State file must be updated after every agent event and the stop-without-diagnosis is evidence for the Haiku audit and the report to Shay."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The waker just exited on this event and work is in flight, so it must be restarted."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "cat C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hk1.status",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live"
+ ]
+}

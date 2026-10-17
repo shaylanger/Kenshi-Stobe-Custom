@@ -1,0 +1,26 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add line '#10 SHAY DECISION: option A, the rumor hook also runs in director-mode turns (row 03-b). Built by imm26-rumor-dir; row 03-b stays open until a lane passes it.' (replace the open 'Rumor hook: option A or B' item)",
+   "why": "Shay answered A (yes, my recommendation); the open question must leave the Right now list so no agent re-asks it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "memory: new file rumor-hook-director-turns.md in C:/Users/Shay/.claude/projects/C--KenshiModding/memory/ (Shay 2026-10-15: rumor hook runs in director-mode turns too, option A) plus one index line in MEMORY.md",
+   "why": "A standing product decision must persist across sessions, the same way the trip-resume and work-goal decisions were stored."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:generate] imm26-rumor-dir director-turn rumor hook'; name imm26-rumor-dir; brief: 'You are imm26-rumor-dir. Shay (2026-10-15) chose option A: the rumor hook (a witness NPC gossips to a bystander, row 03-b) must also run in director-mode turns (TriggerBoredEvent mode=director, ChatBox.cpp:5411-5813), not only mode=autochat. Read C:/KenshiTestRuns/agents/out/imm26-inv-03b/latest.md sections 0-1 (exact code paths), row 03-b in testing/NPC_IMMERSION_26_TESTS.md, and the block B of testing/AGENT_PROMPTS.md (Overlap handoff and tail mode). Goal: the server calls the same rumor-share step (stobeKnowledgeShareFromSpeech) after a director-mode turn that has speech, with the same guards as the autochat path. Autochat behaviour must stay byte-for-byte the same. Server work: find the call with grep -n in the codemap, patch BOTH /var/www/html/StobeServer and /root/stobe-work/ss-merge with anchor scripts (never git checkout in ss-merge, never chown), back up, php -l, offline stobe-tests must pass, deploy both, commit and push per the CLAUDE.md server rule. Keep your status file current with agent-status.ps1 and checkpoint at each milestone. Do NOT install DLLs, do NOT touch any test lane, the 4080 or 5090 operators, Shay live install or DB, and do NOT message any lane operator. Report: changed files, commit hash, stobe-tests result, and the exact expected row 03-b evidence line.'",
+   "why": "Shay's decision needs an implementation now (build means implement), and a server-side patch is in scope for an isolated offline agent with no lane contact."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "ListAgents, plus program-ledger owner check for any imm26 rumor agent (CLAUDE.md PI-26 rule: check before spawning a duplicate)",
+  "grep -rn stobeKnowledgeShareFromSpeech C:/KenshiModding/components/STOBE/src (confirm the call site is only on the autochat path)",
+  "git -C C:/KenshiModding status --short testing/HANDOFF.md"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on task bgz6z5j2t: it is only the completion of my own 'Hold i5, update handoff, re-arm waker' command. It recorded the 5090-i5 idle reason (60 min), lanes.held already contains 5090-i5, and the EVENT BACKSTOP after 600s carries no new events.",
+   "why": "Nothing new arrived; I already acted on this command's output, so repeating anything would only duplicate work."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-26a-recipe completion notification (agent a288bea3776dd69b9), then spawn imm26-5090-i5-op9g with the goat recipe. Also wait for imm26-4080-i4op10 on the 4080. Stay on the re-armed event-wait waker, and re-arm it again on its next wake.",
+   "why": "The next real events are the recipe agent's report and the 4080 operator's results; op9g was deliberately deferred until the recipe exists."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -f 'event-wait.sh$' | head -3",
+  "head -4 /c/KenshiTestRuns/agents/imm26-4080-i4op10.status | cut -c1-250"
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 (delete mode, only for the single 24.1 h item C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch, 4080 rig; never corpus\\, inflight\\, game.lock or fixtures)",
+   "why": "Shay's clean-up rule: the Stop hook blocks on the one leftover older than 24 h, so the coordinator removes that item once no lab check or Misses row cites it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 -Keep C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch \"<reason: the Misses/lab row that cites it, or corpus.sh add first>\"",
+   "why": "Used instead of the delete above if the citation check finds a row that needs the log; the -Keep record (good 7 days) clears the hook."
+  }
+ ],
+ "checks": [
+  "& C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 (list only, no arguments; confirms stale=87 old24=1 and the exact 24.1 h path before any deletion)",
+  "grep -rn \"20261015-110406\" /c/KenshiModding/testing /c/KenshiModding/docs | head (citation check for the 24.1 h log dir)",
+  "ls -la /c/KenshiTestRuns/logs/20261015-110406-before-launch (confirm it is still there and is the 4080 launch log)"
+ ]
+}

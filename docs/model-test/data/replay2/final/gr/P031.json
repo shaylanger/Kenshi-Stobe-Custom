@@ -1,0 +1,19 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i3op3 \"superseded: successor imm26-5090-i3op4 already spawned for lane 5090 i3, same task (handoff imm26-5090-i3op3.handoff.md names it)\"",
+   "why": "The waker guard does not recognise the successor imm26-5090-i3op4, which the coordinator already spawned for the same lane and task, so the marker is stale; closing it on purpose with agent-abandon stops the repeated NO SUCCESSOR block without a duplicate spawn."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no Agent spawn of imm26-5090-i3op3b",
+   "why": "A second operator on lane 5090 i3 would duplicate imm26-5090-i3op4 and fight it over the same game lane and rows."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i3op4.status"
+ ]
+}

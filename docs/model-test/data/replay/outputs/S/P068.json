@@ -1,0 +1,31 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i5 \"LANE IDLE names stale operator imm26-5090-i5-op9 (replaced by op9b, then op9c); op9c was spawned 23:05 and status says 'started, taking over lane' at 23:11, still within takeover; no action, re-check in 10 min\"",
+   "why": "The 5090-i5 idle alert is attributed to an old operator name while op9c only just started taking over the lane, so it is a false positive caused by the handover; the alert would otherwise block the Stop hook."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op9 (agent id not in this file, address by name): \"Coordinator check: 4080-i4 shows LANE IDLE 16.9 min and your status has not changed since 22:54 (10-a PASS, 10-b SETUP-FAIL, next 03-b). Reply with one line: which row are you on, is a game/batch running, and are you blocked? If stuck on a SETUP-FAIL, mark the row with its needs: recipe and move to the next row (03-b, 13-g, 14-e, 13-f, 27-a, 08-e) instead of waiting.\"",
+   "why": "A silent agent over 10 min gets a message per the stall rule, and the 4080-i4 lane has had no status change for 17 min, so I need to know whether it is working or stuck."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 4080-i4 \"LANE IDLE 16.9m: messaged operator imm26-4080-i4op9 for status; will respawn via lane-brief.ps1 4080-i4 if no reply or status change in 10 min\"",
+   "why": "Records the action taken so the alert ledger and Stop hook do not block, while keeping a concrete escalation deadline."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background)",
+   "why": "The waker just completed; agents (i4op9, op9c, nc12) are in flight, so it must be re-armed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ls -lt /c/KenshiTestRuns/imm26-4080/rows | head -5",
+  "ls /c/KenshiTestRuns/inflight; ls /c/KenshiTestRuns/alerts/open",
+  "tail -3 /c/KenshiTestRuns/agents/imm26-5090-i5-op9c.status"
+ ]
+}

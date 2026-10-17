@@ -1,0 +1,14 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "No spawn and no relay re-send. Wait for imm26-5090-ctxop322 to leave RUNNING, then relay its final report with tail-relay.ps1 to the new coordinator and wait for its ACK. Keep waiting for the tail-ack of imm26-5090-i3op3 (already relayed, addendum sent). If ctxop322 is silent 10 min (last status line 18:18 local) message it; at 20 min TaskStop it and tell the new coordinator. Keep the waker running.",
+   "why": "Both owned agents are still open (i3op3 STOPPED-CONTEXT and unacknowledged, ctxop322 RUNNING with a status under 10 min old), so the waker guard correctly blocks the tail and nothing new may be spawned."
+  }
+ ],
+ "checks": [
+  "head -4 C:/KenshiTestRuns/agents/imm26-5090-ctxop322.status",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/program-ledger.ps1 records imm26"
+ ]
+}

@@ -1,0 +1,16 @@
+{
+ "id": "L19",
+ "batch_id": 19,
+ "class": "setup-fail ticket",
+ "window": [
+  "2026-10-16T22:15:13.602Z",
+  "2026-10-16T22:18:05.562Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": true,
+ "real_action_count": 1,
+ "action_types": []
+}

@@ -1,0 +1,23 @@
+{
+ "id": "P057",
+ "session": "4cdf261b",
+ "ts": "2026-10-16T03:02:56.526Z",
+ "class": "shay-message",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; for l in 5090-i3 5090-i4 5090-i5; do echo \"== $l\"; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/lane-backend.sh stop $l 2>&1 | tail -3; done; wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c \"ps -eo pid,args | grep -E 'php -S 127.0.0.1:1808|manager|bridge' | grep -v grep | cut -c1-150 | head\"",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding/tools/automation; sed -n 1,30p lane-backend.sh | cut -c1-200"
+ ],
+ "narration": [],
+ "event_text_chars": 37
+}

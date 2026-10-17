@@ -1,0 +1,25 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-nativecomp2, description \"[case:generate] imm26 native compose N1+N2 (successor of imm26-nativecomp, STOPPED-CONTEXT 14:44). Brief: read C:/KenshiTestRuns/agents/imm26-nativecomp.handoff.md first; continue the N1+N2 compose onto the newest components/STOBE/src, build nc.patch/DLL, checkpoint status with agent-status.ps1 imm26-nativecomp2 RUNNING; keep the work dir and outputs of imm26-nativecomp; checkpoint every ~40k tokens; on context limit set STOPPED-CONTEXT with a handoff file.\"",
+   "why": "imm26-nativecomp stopped at its context limit with no successor, so the Stop guard blocks until a fresh successor (imm26-nativecomp2) is started from its handoff file."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-nativecomp2 RUNNING \"native compose N1+N2 successor\" \"resume from handoff\" \"\" \"continue compose\"",
+   "why": "Marks the successor RUNNING so the inflight marker and the respawn todo are updated as the guard requires."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-nativecomp2 status line and the next event-wait.sh STATUS output",
+   "why": "Other agents (imm26-4080-op2, imm26-wpA3, imm26-wpB3, claude-md-reviewer, program-ledger) are still RUNNING and report through the waker; nothing else needs action on this batch."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "sed -n 1,40p C:/KenshiTestRuns/agents/imm26-nativecomp.handoff.md",
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-nativecomp.status"
+ ]
+}

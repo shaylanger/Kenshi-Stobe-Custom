@@ -1,0 +1,37 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'cd /mnt/c/KenshiModding && exec bash tools/automation/event-wait.sh'",
+   "why": "The Stop hook blocks ending the turn while work is in flight with no waker running; start this in the background (run_in_background: true) first."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not delete any C:/KenshiTestRuns/inflight/ marker",
+   "why": "The guard lists real work (Kenshi running, lane and agent markers), so the release-the-lock branch of the hook message does not apply."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-compose-ci \"superseded: compose agent respawned after the wpA4/wpB4 patches land (handoff 15:05)\"",
+   "why": "The handoff already records imm26-compose-ci as abandoned but its inflight marker is still listed; run this only if the check shows no live process for it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-wpA3 STOPPED-CONTEXT \"WP-A items 1,12,13,16,17\" \"stopped at the context limit\" \"agents/imm26-wpA3.handoff.md\" \"successor imm26-wpA4 already running\"",
+   "why": "The handoff records wpA3 as stopped at the limit with successor wpA4, but its status still reads RUNNING and keeps the guard counting it; correct it only if the status tail and process check show nothing live."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-wpB3 STOPPED-CONTEXT \"WP-B items 3,4,10,15\" \"stopped at the context limit\" \"agents/imm26-wpB3.handoff.md\" \"successor imm26-wpB4 already running\"",
+   "why": "Same stale-RUNNING case as wpA3 (successor wpB4); correct it only if the status tail and process check show nothing live."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -Command Get-Content C:/KenshiTestRuns/agents/imm26-wpA3.status -Tail 3",
+  "powershell -NoProfile -Command Get-Content C:/KenshiTestRuns/agents/imm26-wpB3.status -Tail 3",
+  "powershell -NoProfile -Command Get-ChildItem C:/KenshiTestRuns/inflight",
+  "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh"
+ ]
+}

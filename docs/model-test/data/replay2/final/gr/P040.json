@@ -1,0 +1,14 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op5: Coordinator check: lane 5090-i5 has been idle 6.8 min, newest activity 'status'. Reply in one line: the row you are on, the command you are running or waiting for, and any blocker (permission, missing helper, failed step). If nothing is running, say so and the coordinator will restart the lane.",
+   "why": "The lane-idle event says to ask the operator what it is doing before any fix, and the operator is the only one who knows its current step."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "Read C:/KenshiTestRuns/agents/imm26-5090-i5-op5.status"
+ ]
+}

@@ -1,0 +1,29 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Yes. Every PI item comes off docs/PROCESS_IDEAS.md as soon as its build is committed and its selftest passes. PI-06, PI-07, PI-08, PI-09, PI-10 and PI-12 come off as their agents finish. PI-11 stays until you answer it, and comes off once it is built too.",
+   "why": "Shay asked for finished PI items to be removed so the list has no stale entries, and this confirms the rule and names the entries it covers."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for DONE in C:/KenshiTestRuns/agents/imm26-pi06-09.status, C:/KenshiTestRuns/agents/imm26-pi07-08.status, C:/KenshiTestRuns/agents/imm26-pi10.status and C:/KenshiTestRuns/agents/imm26-pi12.status",
+   "why": "An entry can only come off after its build is committed and selftested, so removal waits for those agent reports."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "docs/PROCESS_IDEAS.md: delete each entry whose build is committed and selftested (PI-06, PI-07, PI-08, PI-09, PI-10, PI-12 once done); keep PI-11 and any unanswered entry",
+   "why": "This applies Shay's standing removal rule to the entries he approved, and leaves PI-11 open because he has not answered it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add one line stating that PI items are deleted from docs/PROCESS_IDEAS.md once built and committed (Shay 2026-10-15)",
+   "why": "The rule has to survive a handoff, and HANDOFF is the state file the next coordinator reads first."
+  }
+ ],
+ "checks": [
+  "grep -n 'PI-[0-9][0-9]' docs/PROCESS_IDEAS.md | head -40",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-pi06-09.status -TotalCount 3 (same for imm26-pi07-08, imm26-pi10 and imm26-pi12)"
+ ]
+}

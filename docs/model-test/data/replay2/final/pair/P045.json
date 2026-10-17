@@ -1,0 +1,15 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Hold as the TAIL session: do not end the turn, spawn nothing, decide nothing new. Wait for imm26-wpC-b5 (last status write 19:39, about 7 min silent at this 19:46 event) and imm26-5090-i5-op6 (last status write 19:45). When either reports DONE or FAILED, save its report to a file, relay it with tail-relay.ps1 plus SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator, and wait for the ack. Timed rule: at 19:49 Win clock (01:49 UTC) with wpC-b5 still silent, message it to write its current step to C:\\KenshiTestRuns\\agents\\imm26-wpC-b5.status; at 20 min silent, TaskStop it and tell the new coordinator. Keep the event-wait.sh watcher running and restart it when it wakes.",
+   "why": "Both agents are still RUNNING and inside the silence thresholds, the 10-minute message is not due at this event, and a TAIL session may end only when every agent is done and acknowledged."
+  }
+ ],
+ "checks": [
+  "PowerShell: Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \"C:\\KenshiTestRuns\\agents\\$n.status\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1) }",
+  "WSL: pgrep -af event-wait.sh",
+  "PowerShell: Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator (look for a relay or ack from the new coordinator)"
+ ]
+}

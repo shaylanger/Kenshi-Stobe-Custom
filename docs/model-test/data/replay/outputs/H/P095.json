@@ -1,0 +1,29 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+   "why": "Confirm the 20-d SETUP-FAIL ticket is open and unowned before assigning it, as the event batch reports it."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sfQ, description \"[case:investigate] 20-d no pending_change recipe\", brief: You are imm26-sfQ, a fresh offline investigator (no lane use, no installs, no builds). Standard block C:\\KenshiModding\\testing\\AGENT_PROMPTS.md (agent-status.ps1 imm26-sfQ RUNNING|DONE...). FACT: row 20-d on lane 5090-i3 SETUP-FAILED: the NPC never recorded a pending plan change for the change request (no pending_change in travel_alternatives); needs a recipe, 20-a first leg. Evidence C:/KenshiTestRuns/imm26-5090-i3/rows/20-d. Setup-fail ticket 20-d (setupfail.ps1). TASK: find why the change request is not stored as a pending plan change, then write a recipe (row script, not an edit of any script a running operator uses) that gets the NPC to record it, with a selftest. Use codemap.sh for big files and grep before reading. Report the recipe path and what the 20-a first leg must do.",
+   "why": "A SETUP-FAIL row gets an agent on its recipe, per Shay's orders, and an unexplained missing state change is investigated first."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 20-d imm26-sfQ",
+   "why": "Records the owner on the ticket so the row is not picked up twice."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-sfQ completion notification and the imm26-5090-i3 lane to report its next runnable row.",
+   "why": "The lane moves on to the next runnable row under the one-attempt rule, and the recipe lands at the next row boundary."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "Read C:/KenshiTestRuns/imm26-5090-i3/rows/20-d (RESULT line and excerpt= file only)"
+ ]
+}

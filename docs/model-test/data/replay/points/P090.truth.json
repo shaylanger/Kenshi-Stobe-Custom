@@ -1,0 +1,31 @@
+{
+ "id": "P090",
+ "session": "48b778a7",
+ "ts": "2026-10-16T17:17:13.805Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: it seems like  SETUP-FAIL (couldn't be set up to run) category has grown since last time i checked i"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/lane-brief.ps1 4080-i4 -Name imm26-4080-i4op13 -Predecessor imm26-4080-i4op12b -Out C:/KenshiTestRuns/agents/out/imm26-4080-i4op13.brief.md 2>&1 | tail -1; tail -4 /c/KenshiTestRuns/agents/imm26-4080-i4op12b.status",
+   "why": ""
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] 4080-i4 lane operator op13\nprompt: You are imm26-4080-i4op13, the 4080-i4 lane operator, a FRESH successor of imm26-4080-i4op12b (STOPPED-CONTEXT). Read your brief C:\\KenshiTestRuns\\agents\\out\\imm26-4080-i4op13.brief.md first (rules, helper scripts, exact agent-status commands), then C:\\KenshiTestRuns\\agents\\imm26-4080-i4op12b.handoff.md and its status file. Its next line: 03-b via unblockrun_d.sh (NOTE: sfD2 produced the newer unblockrun_d2.sh / unblockdefs_e.sh for 03-b and 10-b; use those per C:\\KenshiTestRuns\\inbox\\operators\\sfD-03b.txt / sfD-10b.txt). Also install NC20 (SHA 7A5AF9EA...) at a row boundary and run 13-c / 13-c-neg (unblockrun_f.sh), 23-a, 19-d, 08-d; apply server deploys per inbox\\operators\\4080-deploys-before-rows.txt and coordinator15-10e-route.txt (between rows only, never interrupt a running test). Shay orders: 2 lanes per rig; stuck row = SETUP-FAIL after ONE attempt then the next runnable row; claims via mkdir C:\\KenshiTestRuns\\claims\\<row>; isolated lane trees only. Keep status current with agent-status.ps1 imm26-4080-i4op13 RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:\\KenshiTestRuns\\agents\\imm26-4080-i4op13.handoff.md. Final report <= 8 lines via save-report.ps1.",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 1055
+}

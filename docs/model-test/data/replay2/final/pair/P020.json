@@ -1,0 +1,56 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "mv C:/KenshiTestRuns/inbox/coordinator/20261015-170414-imm26-compose-fix-batch2d.msg C:/KenshiTestRuns/inbox/coordinator/delivered/ (only after the full relay text has been read in checks)",
+   "why": "The batch2d relay is consumed, and leaving it in the inbox would make the waker report it again."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP (as a BACKGROUND Bash task)",
+   "why": "event-wait.sh exited with code 0 after delivering this relay, so nothing watches the lanes until a new waker runs."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, 'Right now' section, new top line: 'batch2d DONE 2026-10-15 17:04: batch2 fixes 20-a,15-a,far-NPC,14-a,19-a,24-a,24-b in compose patch a299993, deployed to the 5 lane sites; reruns running (inflight imm26-batch2-rerun); 13-d RETURN_ITEM open as imm26-compose-fix-batch2e'",
+   "why": "Right now must carry the batch2d result as soon as the agent reports, so a later coordinator does not redo finished work."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "program-ledger.ps1 on C:/KenshiTestRuns/programs/imm26.json (subcommand and arguments from its header; not shown in this replay): compose work package batch2d DONE, outputs compose patch a299993 and the 5 deployed lane sites, successor none; 13-d open as imm26-compose-fix-batch2e",
+   "why": "The ledger must match the agent report so the supervisor does not respawn a finished package."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "touch C:/KenshiTestRuns/inflight/imm26-batch2-rerun; then tools/automation/run-batch.sh (usage from its header; dry run first, then the detached real run): rows 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a 24-b plus the travel rows over 80u (full IDs from the full relay), on compose patch a299993, as two parallel background jobs, one per rig: 5090 lanes i3/i4/i5 and 4080 lanes i3/i4. Skip any lane still held by a live agent or another inflight marker (5090 i4/i5 imm26-5090-ctxop3, 4080 i4 imm26-4080-i4op4, 5090 i3 and 4080 i3/i4 imm26-install-nc-rest2b) and start those rows when the holder finishes.",
+   "why": "The batch2d fixes are on the lane sites and these rows need a rerun; a detached batch uses no agent slot, so the free lanes start now without waiting for a slot."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent tool: name imm26-compose-fix-batch2e, description '[case:patch] imm26-compose-fix-batch2e', brief: 'Apply the 13-d RETURN_ITEM fix to negotiation_engine.php near line 1005 in compose patch a299993. Find the function with codemap grep, never read the whole file. Run php -l after the edit and regenerate the codemap. Do NOT deploy to the lane sites while C:/KenshiTestRuns/inflight/imm26-batch2-rerun exists; deploy only after it is gone. Keep status with agent-status.ps1, write a batch2e handoff, and save any report file with save-report.ps1.'",
+   "why": "13-d is not in batch2d, and the patch edit can run now while the deploy waits for the reruns, using the slot batch2d released (3 live + batch2e = 4, the limit)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the rerun batch results on both rigs and the batch2e patch report; read the report before any deploy.",
+   "why": "The reruns test the currently deployed patch a299993, and batch2e must not change the lane sites while they run."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Hold imm26-rowtools2 (brief C:/KenshiTestRuns/agents/briefs/imm26-rowtools2.md) until agent-rollcall.ps1 shows fewer than 4 live agents, then spawn it.",
+   "why": "The 4-agent host limit is full once batch2e starts, so rowtools2 waits for the next free slot."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Hold the compose-ci2 spawn until the wpA4 and wpB4 patches are reported landed.",
+   "why": "compose-ci2 needs the wpA and wpB patches, which the relay does not report as landed."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/inbox/coordinator/20261015-170414-imm26-compose-fix-batch2d.msg | cut -c1-600 (read the full relay: the event text cuts off the report path and the full rerun row list)",
+  "cat C:/KenshiTestRuns/agents/imm26-compose-fix-batch2d.status (confirm DONE before any rerun or ledger write)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-rollcall.ps1 | cut -c1-220 | head -20 (live agents against the 4-slot limit, and which lanes each one holds)",
+  "ls C:/KenshiTestRuns/inflight (confirm no batch already holds the lanes and imm26-batch2-rerun does not exist yet)"
+ ]
+}

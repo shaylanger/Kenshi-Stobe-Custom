@@ -1,0 +1,19 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/alert-ack.ps1 <id of the open alert for LANE NO-OPERATOR 5090-i4> \"5090 hold: Shay's order, no new 5090 testing until he says otherwise; 5090-i4 stays stopped and is not respawned; 4080 and offline work continue\"",
+   "why": "The 5090 hold is Shay's standing order and the handoff says 5090 lane alerts are closed with that reason; the alert id is not in this file, so it is read from alerts/open first (the alert will re-open after 30 min while the hold stands)."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no Agent spawn for imm26-5090-i4-*; the 5090 resume brief agents\\imm26-5090-i4-hard2b2.handoff.md stays unused",
+   "why": "No new 5090 testing until Shay says so, and this tail session spawns nothing; the coordinator's respawn order from the handoff is overridden by the hold."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "ls C:/KenshiTestRuns/alerts/open"
+ ]
+}

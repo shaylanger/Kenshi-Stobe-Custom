@@ -1,0 +1,25 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the single background wait running: Bash run_in_background \"bash tools/automation/event-wait.sh\" (WSL form: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh). Restart it when it wakes.",
+   "why": "The tail session owns 9 unfinished agents (imm26-5090-i3-hard2b, imm26-5090-i4-hard2b2, imm26-5090-i5-op7, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-fix19, imm26-wpR1, imm26-wpR2, imm26-pi21), spawns and decides nothing new, and may only end once each is finished and its relay is delivered."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix19: \"TAIL check: your status is still missing. Reply now with your state, or write agent-status.ps1 imm26-fix19 RUNNING with your current step.\" Send only if its status file has been silent for 10 min or more; if it stays silent 20 min, use TaskStop on imm26-fix19 and tell the new coordinator it needs a fresh successor named imm26-fix19b.",
+   "why": "The Stop hook lists imm26-fix19 as [no status, not acknowledged]; the tail stall rule (10 min message, 20 min TaskStop) applies and the tail may not respawn it itself."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No relay or ack action for imm26-wpR3 or imm26-pi13.",
+   "why": "Both were already relayed (tail-relay.ps1 and the SendMessage to kenshimodding-76) before this batch, and the stop hook no longer counts them as owned."
+  }
+ ],
+ "checks": [
+  "Get-ChildItem C:\\KenshiTestRuns\\agents\\*.status | Sort-Object LastWriteTime | Select-Object Name,LastWriteTime   (silence per running agent)",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-fix19.status -ErrorAction SilentlyContinue   (fix19 status, if any)",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator | Sort-Object LastWriteTime | Select-Object -Last 5 Name   (confirm relays for wpR3 and pi13 were written)"
+ ]
+}

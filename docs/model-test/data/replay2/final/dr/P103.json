@@ -1,0 +1,14 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash tool with run_in_background=true; never a bare & or disown)",
+   "why": "The single waker exited with code 0, meaning it fired an event or ended; imm26-pilotA, imm26-pilotC, imm26-4080-i4op14 and imm26-sfR2 are in flight, so re-arm one waker right after reading its output."
+  }
+ ],
+ "checks": [
+  "tail -20 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/245d8ad7-6bab-4115-8188-ea4724f6a5b6/tasks/bvpgoc6vb.output",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

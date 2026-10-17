@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-wpC-b5 and imm26-5090-i5-op6 to report DONE/FAILED/STOPPED-CONTEXT (status files C:\\KenshiTestRuns\\agents\\imm26-wpC-b5.status and C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op6.status); no new spawn, no edits",
+   "why": "The batch is only the tail-session Stop-hook repeat; both agents are still RUNNING with no new result, so there is nothing to relay or act on yet."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "bash tools/automation/event-wait.sh (background, WSL) if the watcher is not already running",
+   "why": "The tail session must keep a waker alive while agents are in flight, and the previous watcher is not confirmed alive in this batch."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item 'C:\\KenshiTestRuns\\agents\\'$n'.status'; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1) }\"",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 status"
+ ]
+}

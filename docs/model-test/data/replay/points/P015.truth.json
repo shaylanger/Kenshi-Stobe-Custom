@@ -1,0 +1,36 @@
+{
+ "id": "P015",
+ "session": "06891207",
+ "ts": "2026-10-15T21:47:16.299Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh >/dev/null 2>&1 &\ncat /c/KenshiTestRuns/agents/out/imm26-compose2/latest.md | cut -c1-600 | head -80",
+   "why": "Restart the waker and read the report."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:patch] install composed server on lane sites\nprompt: WP \"install-server\" (imm26 program, workspace C:\\KenshiModding; read CLAUDE.md short core + testing/NPC_IMMERSION_26_HANDOFF.md top + pending-fixes/npc-immersion-26/compose/NOTES.md). Goal: install the composed server patch (/root/imm26/compose.patch in WSL DwemerAI4Skyrim3, copy in pending-fixes/npc-immersion-26/compose/, base = /root/imm26/base) onto the ISOLATED LANE private sites ONLY: 5090 lanes i3 (/tmp/stobe-imm26-5090/site), i4, i5 and 4080 lanes i3, i4 (find site dirs via tools/automation/lane-defs*.json, lane-backend.sh, lane-setup.sh, testing/live-stobe-queue/*imm26*lib.sh). NEVER touch /var/www/html/StobeServer, ss-merge, Shay's live install, server tree or DB. Steps per site: back up (dir copy or tar, name .bak-pre-compose-20261015), apply compose.patch (check the site is base-identical first; if a site has local edits such as the travel-fix in 5090 i3 or the i4 fixture profile lib/test_provider_reply_fixture.php, preserve them: reapply or note), php -l every changed file, restart that lane's php backend if needed (lane-backend.sh), run a smoke (HTTP health + one scripted chat/bundle if a lane helper exists). 4080 is via `ssh 4080` / C:\\KAH\\ctl.ps1 (see handoff/4080-test-rig.md); if 4080 sites need the patch copied over, scp it. Lane games may be running with operators finishing rows: do not kill games; only restart php backends and say so. Then write the result to pending-fixes/npc-immersion-26/compose/INSTALL.md (per site: path, backup, lint, smoke), keep C:\\KenshiTestRuns\\agents\\imm26-install-server.status current via tools/automation/agent-status.ps1, commit (identity shaylanger, check git config user.email; end commit message with 'Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>') and push to origin HEAD:main. Target <=120k tokens; checkpoint to your status file; if you stop early write agents\\imm26-install-server.handoff.md. Do not run game rows; report one line per site.",
+   "why": "Restart the waker and read the report."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "cd /c/KenshiModding; sed -i '28i **15:50 #4:** compose2 DONE (93 pass, 5 known fails, compose.patch 846 KB, commit 7731cb8). Spawned in-session generator imm26-install-server (composed server onto lane private sites 5090 i3/i4/i5 + 4080 i3/i4; INSTALL.md). Next: fresh operators rerun failing rows on composed lanes; native-contract WP (CONTRACTS items) as independent session; NC DLL install plan.' testing/HANDOFF.md; git add testing/HANDOFF.md; git commit -q -m \"HANDOFF: compose done, install-server spawned\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\"; git push -q origin HEAD:main 2>&1|tail -1",
+   "why": "Restart the waker and read the report."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding; ls tools/automation | grep -i -E \"lane|imm26\"; grep -n -i -E \"private site|site dir|/tmp/stobe\" testing/NPC_IMMERSION_26_HANDOFF.md | head -15 | cut -c1-300"
+ ],
+ "narration": [
+  "Restart the waker and read the report.",
+  "`imm26-compose2` finished, and I've started the next step: installing the composed server on the isolated lane sites. I haven't touched any game rows yet.\n\n- **Compose result:** `compose.patch` (846 KB) applies cleanly to a fresh copy of the base. The full `stobe-tests` run had 93 passes and 5 failures, the same 5 that already fail on the base: `chat_json_endpoint`, `main_ingress_http`, `npc_player_view`, `social_property`, `social_fights`. The merge also found and fixed a real bug in `destinati...[truncated 924 chars]"
+ ],
+ "event_text_chars": 709
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add one line that wpT2 (tail handoff ledger/relay side) is DONE, commit 7744453 pushed, tail-ledger-selftest 33/33; wpT1 (hooks + context meter) still running, docs package starts after it",
+   "why": "CLAUDE.md requires HANDOFF 'Right now' and the program ledger to be updated after every agent report, and the wpT2 result has arrived."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP (background Bash task, started after the output check below)",
+   "why": "The event-wait background task bjjwra6y5 exited code 0 and must be restarted each time it wakes so the session stays reachable while wpT1, operators, the 13-d fix and the installer are in flight."
+  }
+ ],
+ "checks": [
+  "tail -5 C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\5720e5b8-42a8-4aaf-9e29-db0072586324\\tasks\\bjjwra6y5.output | cut -c1-700",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

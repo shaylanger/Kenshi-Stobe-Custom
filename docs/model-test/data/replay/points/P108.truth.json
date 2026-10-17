@@ -1,0 +1,28 @@
+{
+ "id": "P108",
+ "session": "60ad9d7d",
+ "ts": "2026-10-16T19:05:27.704Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "mv /c/KenshiTestRuns/inbox/coordinator/20261016-130448-tail-imm26-5090-i3op21.msg /c/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "Waiting on agents. Two things changed since my last update:\n\n- **5090-i3:** its operator stopped with no runnable row left, so I stopped the idle i3 game and released its lock and inflight marker. That frees a display slot for the i5 lane, and I've told the tail to pass it to `imm26-5090-i5-op9o`.\n- **Tail #15:** it has closed. All its agents were done and relayed.\n\nI'm watching for hk2's 02-cx result and op9o relaunching i5."
+ ],
+ "event_text_chars": 812
+}

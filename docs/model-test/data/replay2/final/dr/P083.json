@@ -1,0 +1,23 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No respawn and no SendMessage to ad156516b336b83a9 or imm26-sfB; this task-notification is the old agent finishing after its CONTEXT LIMIT handoff.",
+   "why": "The successor imm26-sfB2 (agentId a2f174c4a489c4f06) was already spawned from the imm26-sfB handoff, so respawning again would duplicate work and resuming the old agent is forbidden."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add one line '#14 sfB STOPPED-CONTEXT (DLL not built); root cause: server only learns arrival while building a prompt (stobeCommitmentReconcileNative, needs native snapshot <=120 s old), 13-c/13-c-neg row scripts only poll the eventlog; native arrival check needs 3D distance <= 8 u. Successor imm26-sfB2 RUNNING from imm26-sfB.handoff.md.' then commit and push.",
+   "why": "Rules require HANDOFF 'Right now' to be updated after every agent report, and this report's root cause is not yet recorded there."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the completion notification of imm26-sfB2 (agentId a2f174c4a489c4f06) and keep the event waker running.",
+   "why": "The NC18 DLL is not built yet, so the next change is the successor's DONE or STOPPED-CONTEXT report."
+  }
+ ],
+ "checks": [
+  "Get-Content C:/KenshiTestRuns/agents/imm26-sfB2.status"
+ ]
+}

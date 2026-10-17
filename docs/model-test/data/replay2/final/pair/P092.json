@@ -1,0 +1,43 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No command. Duplicate task-notification for agent a048ccb5a3144dd61 (imm26-sfJ, recipes for 20-d and 23-e). Its SubagentHandback report was already read and routed at 11:30 (inbox/operators/coordinator15-10e-route.txt, commit 23ee82e9).",
+   "why": "The completion was already handled, and routing it again would duplicate the operator note."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-sfJ DONE (commit 23ee82e9, offline selftest 40/40), 20-d and 23-e recipes ready via testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfj.sh, and that the earlier 20-d/23-e claims were made under the OLD recipe. Also update the imm26 program ledger in C:/KenshiTestRuns/programs/ (list the folder first; the exact file name is not in this file).",
+   "why": "The large-programs rule requires HANDOFF and the ledger to be updated after every agent report, and the routing note did not update them; 20-d and 23-e stay UNRUN/SETUP-FAIL in the table until a live run passes."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: add open item 'sfJ 23-e follow pass: end<=35 changed to end<=70 (control chase 120 u away for 45 s, distance sampled every 5 s; control must stay >= 0.8 x start, else SETUP-FAIL)', with options (keep 70 / restore 35 / other), in-game effect, and default = no 23-e PASS recorded until Shay confirms.",
+   "why": "Shay decisions must live in the repo, and relaxing an assertion is Shay's call under the no-weakened-assertions rule."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Put into the next single batched question to Shay via his relay session, together with the other open items (not as a separate message): 'sfJ (commit 23ee82e9) changed the 23-e follow pass from end<=35 to end<=70 (control chase: teleport 120 u away for 45 s, distance sampled every 5 s; the control must stay at or above 0.8 x its start, else SETUP-FAIL). Rows 20-d and 23-e have working recipes but have not run live. Please confirm the 70 u threshold before any 23-e PASS is recorded.'",
+   "why": "The threshold relaxation is Shay's decision and belongs in the single combined question list."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "First run pgrep -fa event-wait.sh; only if no event-wait.sh process is running: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The Stop guard blocks the coordinator while agents and inflight markers are live, and a waker that ended on an earlier event must not be left down."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "A lane operator (imm26-5090-i3op21 on 5090-i3, or imm26-4080-i4op13 on 4080-i4 with --save kah-imm26-i4-trip2) claims 20-d and 23-e under C:/KenshiTestRuns/claims/ and returns RESULT lines. No claim is removed while its owner is not STOPPED-CONTEXT.",
+   "why": "The recipes are offline-checked (selftest 40/40) but neither row has run live, and the routing note already tells the operators how to take them over."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "tail -n 3 /c/KenshiTestRuns/agents/imm26-sfJ.status",
+  "ls /c/KenshiTestRuns/claims/ /c/KenshiTestRuns/inflight/",
+  "pgrep -fa event-wait.sh",
+  "git -C C:/KenshiModding log --oneline -3"
+ ]
+}

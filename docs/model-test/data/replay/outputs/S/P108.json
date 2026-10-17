@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiTestRuns/inbox/coordinator && mv -f 20261016-130436-tail-imm26-5090-i3op21.msg 20261016-130448-tail-imm26-5090-i3op21.msg delivered/ 2>/dev/null; ls",
+   "why": "The EVENT INBOX line is a re-announcement of the i3op21 relay already read and handled (i3 stopped, lock and inflight released); file the relay and its duplicate in delivered/ so the waker stops re-firing on them."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i3op21 \"STOPPED-CONTEXT with no runnable row left; i3 game stopped and locks released by coordinator 17; a fresh op22 is spawned only when new row scripts exist (22-b, 25-b, 08-d rerun)\"",
+   "why": "The Stop hook blocks on a STOPPED-CONTEXT agent with no successor and a successor now would have nothing to do, so drop it on purpose rather than spawn an idle operator."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker exited with this event and the 5090-i4/i5 lanes and the offline agents are still in flight, so a new waker must be running before the turn ends."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls /c/KenshiTestRuns/inbox/coordinator /c/KenshiTestRuns/alerts/open",
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i5-op9o.status"
+ ]
+}

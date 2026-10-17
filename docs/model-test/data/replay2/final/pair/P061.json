@@ -1,0 +1,62 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'cd /mnt/c/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools && bash selftest.sh 2>&1 | tail -3'",
+   "why": "Check the agent's claim (56/56 including trip 72/72) myself before relying on items 5-7; offline WSL selftest only, no game, no lane."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding/tools/automation && powershell -NoProfile -File lane-window.ps1 -Action selftest",
+   "why": "Mechanical check of the item 6 lane-window change; the coordinator runs it, not the agent. Do NOT run the sync action (it rewrites the lane registry)."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "run the setup-fail selftest script found by the ls check (its name is not in this batch; agent reports 36/36)",
+   "why": "Confirm the item 5 logic: a GATED mark no longer closes a setup-fail ticket; only PASS or FAIL closes it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section 'Right now': add '#11 rowtools42 DONE': items 5, 6, 7 done and pushed (commits 7b3c04d 37285bd 4924239; report C:/KenshiTestRuns/agents/out/imm26-rowtools42/latest.md). IMM-10-d is now UNRUN (BASE), not SETUP-FAIL (pending Shay). A GATED mark no longer closes a setup-fail ticket. IMM-03-b opened with needs=server-fix, lane 5090-i4, not runnable under the 5090 hold. LANE LAYOUT: DISPLAY1 is the Samsung (forbidden), DISPLAY2 is the ASUS primary; i5 has no legal slot; at most i3 and i4 side by side on DISPLAY2 until Shay changes the layout. Still running: imm26-rowtools44 (item 4), imm26-fix10a, imm26-fix03b, 4080 operators imm26-4080-i4op8 and imm26-4080-op2jc.",
+   "why": "The handoff must carry each finished item and the lane-layout limit so no later session relaunches i5 onto the forbidden display."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: add two entries, each with options, in-game or code effect, and default. (a) IMM-10-d status: UNRUN (BASE) versus SETUP-FAIL; default keep UNRUN (BASE) as built. Note that the agent changed this from the handoff text, so Shay decides whether to restore SETUP-FAIL. (b) Monitor layout: keep two 5090 lanes (i3 and i4 on DISPLAY2) versus change the monitor setup so i5 gets a legal slot; default two lanes.",
+   "why": "Every open Shay question lives in the repo file with options and a default (standing rule); both are real decisions only Shay can make and go into his next single summary."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/program-ledger.ps1 (check its usage line first; the ledger file is under C:/KenshiTestRuns/programs/, name not in this batch): imm26 work package rowtools42 -> DONE; outputs 7b3c04d 37285bd 4924239 and the report path; next = none (item 4 stays with imm26-rowtools44).",
+   "why": "The ledger is the state that survives a handoff; the finished package must be recorded right after the agent report."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-stream.sh --as event-wait 2>&1 | grep -v --line-buffered SWEEP",
+   "why": "Only if the WAKER STATUS line shows the armed Monitor (30 min expiry) has lapsed; work is still in flight, so an expired waker is re-armed, a live one is not duplicated."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no mark-row, no tail-ack, no message-shay now",
+   "why": "IMM-10-d and IMM-03-b are already written by the agent (a mark-row would be a no-op); rowtools42 is an in-session subagent, not a tail relay, so there is nothing to ack; the two decisions go into SHAY_DECISIONS and the next single summary, not a separate message."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for results from imm26-rowtools44 (item 4 selftest, README, operator note), imm26-fix10a, imm26-fix03b and the 4080 operators imm26-4080-i4op8 and imm26-4080-op2jc; keep the waker armed; spawn nothing new; no 5090 launch while the hold stands.",
+   "why": "Four agents and two 4080 lanes are still running and nothing new can start until their results arrive; the 5090 hold is in force."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding log --oneline -6",
+  "git -C C:/KenshiModding branch -r --contains 4924239",
+  "git -C C:/KenshiModding status --short testing/live-stobe-queue/imm26-assert/rowtools",
+  "head -60 C:/KenshiTestRuns/agents/out/imm26-rowtools42/latest.md",
+  "head -8 C:/KenshiTestRuns/agents/imm26-rowtools42.status",
+  "grep -n 'IMM-10-d' C:/KenshiModding/testing/HANDOFF.md C:/KenshiModding/testing/SHAY_DECISIONS.md",
+  "ls /c/KenshiModding/tools/automation | grep -i setupfail",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-window.ps1 -Action plan",
+  "ls C:/KenshiTestRuns/programs/",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

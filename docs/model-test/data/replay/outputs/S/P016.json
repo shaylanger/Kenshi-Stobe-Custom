@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add 'user_message meta-key fix DONE in the composed tree (commit 070c795 pushed, ace5a8d0d55b08800 finished, targeted suites 4 passed; full stobe-tests 5 expected failures). Single fixer (usermsg + inv-c1 06-c/08-a + travel P-NONE/P-REAFFIRM/P-REGION + trust fixes) still HELD until imm26-inv-trust finishes, to avoid a compose.patch collision. NC DLL installed on 5090 lanes i4/i5 (isolation PASS). i5 window slot still REFUSED (overlaps i4 on DISPLAY2, y=630 patched in lanes-5090.json).' and update the program ledger entry for the usermsg work package to done",
+   "why": "The ledger and HANDOFF must be updated after every agent report, and this one removes one of the two blockers on the single fixer."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Not all of them yet. Fixed and pushed: the user_message meta-key bug (commit 070c795, all 5 lane sites carry it). Diagnosed, with patches ready in the investigator's report: the travel bugs (P-NONE, P-REAFFIRM, P-REGION) and the inv-c1 patches 06-c and 08-a. Still being diagnosed: the trust rows (imm26-inv-trust is on 16-c now). Nothing is re-queued for testing yet. I am holding the single fixer until imm26-inv-trust finishes, because both edit the composed tree and a second editor would collide on compose.patch. Then the fixer applies everything, and the failing rows are re-queued on the lanes. Two decisions are open and I am not blocking on them: (20-a) replacing a trip mid-way: keep the code, which ends the old trip and proposes the new one in one turn, and change the row, or change the code to wait for your confirmation? (24-a) 'where would you take me': relax the row to accept a proposal of a known place, or stop the prompt proposing a trip when you named no destination? Until you answer I will keep the current code and rows.",
+   "why": "Shay asked a direct status question in the preceding conversation. It gets an honest answer, with the two open decisions asked together once and nothing blocked."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-inv-trust DONE (its status file reaches DONE or its hand-back arrives). Then spawn the single compose fixer as a fresh agent: [case:patch] imm26-compose-fixer, with a brief listing the user_message fix as already done (070c795), the inv-c1 patches (06-c, 08-a), the travel patches P-NONE/P-REAFFIRM/P-REGION, and the trust fixes from the inv-trust report.",
+   "why": "The spawn is gated on inv-trust finishing, since a second editor on the same composed tree would collide on compose.patch."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not restart the event waker and do not abandon ace5a8d0d55b08800 via agent-abandon.",
+   "why": "A background event-wait.sh was already started in the last command, and the agent finished normally and reported DONE, so there is nothing to close."
+  }
+ ],
+ "checks": [
+  "grep -h '^latest\\|^state' /c/KenshiTestRuns/agents/imm26-inv-trust.status /c/KenshiTestRuns/agents/imm26-compose-fix-usermsg.status | cut -c1-300",
+  "git -C /c/KenshiModding log --oneline -3 -- components/STOBE",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the single background wait bm22iu58s armed over imm26-5090-i3-hard2b, imm26-5090-i4-hard2b2, imm26-4080-op2jb, imm26-4080-i4op7c and imm26-fix19. No reply per block, no spawn, no relay, no ack until one of them reaches DONE, FAILED or STOPPED-CONTEXT.",
+   "why": "This tail session still owns 5 running agents and the Stop hook only lets the turn end once each is finished and relayed, so one long wait is the correct action and the tail must decide nothing new."
+  }
+ ],
+ "checks": [
+  "cd /c/KenshiTestRuns/agents && for a in imm26-5090-i3-hard2b imm26-5090-i4-hard2b2 imm26-4080-op2jb imm26-4080-i4op7c imm26-fix19; do head -1 $a.status; done",
+  "cd /c/KenshiTestRuns/agents && ls -l --time-style=+%H:%M:%S imm26-5090-i3-hard2b.status imm26-5090-i4-hard2b2.status imm26-4080-op2jb.status imm26-4080-i4op7c.status imm26-fix19.status",
+  "tail -3 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/6d1f3011-2310-4986-85aa-5667f654842c/tasks/bm22iu58s.output"
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add line 'imm26-5090-i4-hard2b alive (agent ad38178c9940fc1ed): preflight OK after the i3/i4/i5 windows were moved off the Samsung display; 402 reported fixed, NOT yet verified by log; 03-b running; then 18-a and reruns 13-ax 15-bx 16-bx 17-bx 18-cx 02-ax with --allow-retry'",
+   "why": "HANDOFF must record each agent report as it arrives, and the operator's 402-fixed claim stays unverified until the lane's log shows it."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not mark any row, do not respawn imm26-5090-i4-hard2b, do not message it again, do not ack the LANE IDLE alert yet",
+   "why": "the operator answered the stall ping and is running 03-b; the alert clears by itself once the lane is active, and acting now would disturb a running row."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "the RESULT line for row 03-b on lane 5090-i4 in C:\\KenshiTestRuns\\row-timing.log, then row 18-a, and a fresh status line in C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b.status",
+   "why": "only a real game-state pass counts, not the operator's preflight or 402 claims."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 (confirm 5090-i4 no longer reports LANE IDLE)",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c \"grep -c 'http_code.:402' /tmp/stobe-imm26-5090-i4/site/log/stobeserver.log; grep 'Latency stage llm complete' /tmp/stobe-imm26-5090-i4/site/log/stobeserver.log | tail -2 | cut -c1-200\" (verify the 402 is fixed on this lane from log evidence)",
+  "tail -5 /c/KenshiTestRuns/row-timing.log | cut -c1-160 (confirm 03-b started or finished on 5090-i4)",
+  "head -1 /c/KenshiTestRuns/agents/imm26-5090-i4-hard2b.status; grep -m2 '^latest\\|^next' /c/KenshiTestRuns/agents/imm26-5090-i4-hard2b.status (confirm RUNNING with a fresh status)"
+ ]
+}

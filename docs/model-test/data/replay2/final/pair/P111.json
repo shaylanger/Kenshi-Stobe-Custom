@@ -1,0 +1,37 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Record row 20-a as SETUP-FAIL (needs: recipe), lane 4080-i3, cause: no ACCEPTED travel_agreement during trip setup (propose/accept legs failed), same defect as 14-a and 19-a; no PASS/FAIL verdict.",
+   "why": "A setup failure is not a game verdict, so 20-a is recorded as SETUP-FAIL and is not rerun until the cause is known."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-travelaccept1, description '[case:investigate] trip travel_agreement never ACCEPTED during setup', brief: 'Root-cause why the trip travel_agreement is never ACCEPTED during trip setup (propose and accept legs fail). Seen in rows 14-a, 19-a and 20-a on lane 4080-i3; evidence under C:/KenshiTestRuns/imm26-4080/ (full path in the 20-a SETUP-FAIL inbox message). First check testing/NPC_IMMERSION_26_HANDOFF.md and the program ledger in C:/KenshiTestRuns/programs for an existing owner; if one exists, stop and report its name. Otherwise diagnose only: no code edits, no lane or game starts, no row reruns, no messages to any test arm. Name the failing step with file and line evidence, say whether 14-a, 19-a and 20-a share it, and propose the smallest fix and the file to patch. Keep C:/KenshiTestRuns/agents/imm26-travelaccept1.status current with tools/automation/agent-status.ps1.'",
+   "why": "The same trip-accept defect has failed three setup rows, so one shared root-cause pass beats per-row recipes, and the ledger check prevents a duplicate owner."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 add imm26-travelaccept1 <agent id returned by the spawn>",
+   "why": "Every new spawn is recorded by id so tail routing and SendMessage keep working."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to peer tail 245d8ad7 (owns lane 4080-i3 op22): '20-a SETUP-FAIL on 4080-i3 (no ACCEPTED travel_agreement during trip setup, same defect as 14-a and 19-a). Row 20-a is parked: do not rerun it and do not respawn a 4080-i3 row on this trip until a recipe is in. Root-cause agent imm26-travelaccept1 is spawned by coordinator #17 (diagnose only). Keep the lane's other rows going; the tail decides the lane and the arm gets no direct steering.'",
+   "why": "The live tail owns the 4080-i3 lane, so it is told through its owner and the test arm itself gets no message."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-travelaccept1 DONE report (waker event or inbox/coordinator relay) and the tail's reply on 20-a before writing any unblock plan or recipe.",
+   "why": "Neither the root cause nor a fix proposal exists yet, so the lane must not re-run on a defective trip setup."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live (confirm tail 245d8ad7 still owns imm26-4080-i3op22)",
+  "Read the 20-a SETUP-FAIL inbox message 20261016-131540-setupfail-20-a.msg in full to get the evidence= path (the path is truncated in the event text, so do not guess it)",
+  "grep -n travel_agreement in the s1, s1b, s2 and s2b logs under that evidence path to confirm the propose/accept legs failed",
+  "grep -n -i travel_agreement C:/KenshiModding/testing/NPC_IMMERSION_26_HANDOFF.md and the program ledger files under C:/KenshiTestRuns/programs/ to check for an existing owner of this defect",
+  "Locate the 14-a and 19-a SETUP-FAIL records by row id (do not guess paths) and confirm they name the same travel_agreement defect"
+ ]
+}

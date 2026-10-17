@@ -1,0 +1,15 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-op3, description starts with [case:generate], subagent_type kenshi-generator. Brief: You are the successor of imm26-5090-op2 (STOPPED-CONTEXT 14:44, same work dir). Read C:\\KenshiTestRuns\\agents\\imm26-5090-op2.handoff.md first, then grep its status file for the last step. Rows 14-26 on the 5090 lane (lane D:\\KenshiInst, backend port 18086, marker 5090-imm26/imm26-5090-op2). Before any row, check the llama-server kill and the DeepInfra switch from the HANDOFF first action; do not touch Shay's live install, server tree or DB. Continue from the next unrecorded row, write one RESULT line per row, checkpoint via agent-status.ps1 imm26-5090-op3 RUNNING, and report with save-report.ps1.",
+   "why": "The 5090 lane agent hit its context limit and has no successor, which the Stop guard blocks on; the handoff names the next row and the successor is the standard +1 respawn from its handoff file."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Read C:\\KenshiTestRuns\\agents\\imm26-5090-op2.handoff.md",
+  "tasklist /FI \"IMAGENAME eq llama-server.exe\""
+ ]
+}

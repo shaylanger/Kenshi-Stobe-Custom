@@ -1,0 +1,18 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent call, name imm26-5090-ctxop32, tagged [case:generate], brief file C:/KenshiTestRuns/agents/briefs/imm26-5090-ctxop32.md. Spawn only if C:/KenshiTestRuns/agents/imm26-5090-ctxop32.status does not show RUNNING; the earlier launch was never confirmed.",
+   "why": "Its launch was started in the background but never confirmed, and its remaining 5090 rows (04-b, 06-d, 14-b, 18-a, 18-b and all i4 rows) are not run yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "grep -n FAIL C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md | tail -40",
+  "grep -n state C:/KenshiTestRuns/programs/imm26.json",
+  "ls C:/KenshiTestRuns/alerts/open",
+  "cat C:/KenshiTestRuns/agents/imm26-5090-ctxop32.status",
+  "ls C:/KenshiTestRuns/agents/out/imm26-travel-blocker"
+ ]
+}

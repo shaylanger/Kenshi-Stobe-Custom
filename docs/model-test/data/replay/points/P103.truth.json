@@ -1,0 +1,21 @@
+{
+ "id": "P103",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:31:05.703Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/agent-ids.ps1 add imm26-pilotA ac12b657f0aab5448 >/dev/null; powershell -NoProfile -File tools/automation/agent-ids.ps1 add imm26-pilotC a10e0b733c56138df >/dev/null\npython3 - <<'EOF'\np='testing/HANDOFF.md'\ns=open(p,encoding='utf-8',newline='').read()\na='Ask Shay once: PI-37/38/39/41/42/43'\nb='HAIKU PILOT (Shay GO via peer 12:3x): 5090-i4 hold lifted FOR THIS PILOT ONLY (Haiku-high operator imm26-5090-i4-hk1 vs Sonnet 5090-i3, sha...[truncated 877 chars]",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 392
+}

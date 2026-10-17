@@ -1,0 +1,30 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (never a bare &)",
+   "why": "The last event-wait printed LANE NO-OPERATOR and exited with code 0, so nothing watches for the next event (4080 i4op10, the investigator and the game lock are still in flight) until it is re-armed."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 lane-idle-5090-i5 \"NO-OPERATOR 5090-i5: op9d STOPPED-CONTEXT after 10-d PASS; 26-a FAIL and 22-a/26-b/26-c need native (canISeeThisGuy drops all targets); lane idle reason recorded 60 min; imm26-nc13-investigate running; operator respawns from the op9d handoff after the NC13 DLL is built\"",
+   "why": "The NO-OPERATOR state is true but deliberate, since every remaining 5090-i5 row waits on the native fix; ack only if lane-idle-5090-i5 is still in the open list (checked first), since the earlier ack may have closed it."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not respawn op9d or start a new 5090-i5 operator from C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.handoff.md yet",
+   "why": "Nothing on NC12 can run until the NC13 fix exists, and an operator now would only burn context on a dead end, even though the alert text says spawn or respawn one."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the completion notification of agent a72d7afc149d84b9e (imm26-nc13-investigate); then spawn the NC13 native fixer (Agent, [case:patch]) from its root cause; respawn the 5090-i5 operator as imm26-5090-i5-op9d2 from C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.handoff.md only after the NC13 DLL is built and the lane is free to run rows.",
+   "why": "The root cause decides the native fix, and the fix target is unknown until the investigation reports, so spawning a fixer now would be guessing."
+  }
+ ],
+ "checks": [
+  "ls C:/KenshiTestRuns/alerts/open",
+  "head -5 C:/KenshiTestRuns/agents/imm26-nc13-investigate.status | cut -c1-500",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

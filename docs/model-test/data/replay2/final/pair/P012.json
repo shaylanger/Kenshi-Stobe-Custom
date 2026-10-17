@@ -1,0 +1,32 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash (run_in_background): bash tools/automation/event-wait.sh (only after the check shows no event-wait process is running)",
+   "why": "The waker that printed this digest exited with code 0 on the event while lanes and row work are still in flight, so the never-idle rule needs a new waker."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Read the full EVENT INBOX file 150721-imm26-lanes-4080.txt before acting on lane i4; the digest cuts off at 'DeepInfra applied to i3+i4 DBs (--'. Lane i4 counts as up only when the inbox shows the isolation-check PASS lines (own ports 18085 vs i3 18084, own DB stobe_standalone4080_i4_test, own save kah-imm26-4080-i4, own window position, no shared files, no log lines from another lane) and one real DeepInfra chat reply on i4. If those are missing, message imm26-lanes-4080 with: 'Lane i4 is not counted as up until tools/automation/lane-isolation-check.ps1 on i4 prints its PASS lines and you paste one real DeepInfra chat reply on i4; then stop the 4080 local llama and report its PID and the RAM freed. Never print, log or commit the key file.'",
+   "why": "The interim 'lane i4 is UP' does not meet the rule that a lane is up only after isolation PASS and a chat reply, and the agent's UP report came without those lines visible, so the full inbox text decides before anything else."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not spawn the i4 row operator (planned name imm26-4080-op3) until the full inbox shows isolation PASS and a real DeepInfra chat reply on i4. Then spawn it with a [case:...] tag and the brief: rows on lane i4 only (Kenshi pid 348, save kah-imm26-4080-i4, backend 127.0.0.1:18085, db stobe_standalone4080_i4_test, KAH_INSTANCE=4, C:/KenshiInst/4), one RESULT line per row, never touch lane i3 or the live install.",
+   "why": "A row operator on an unverified lane would test a lane that does not count as up yet; both coordinators agree on this gate."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No new message to imm26-lanes-4080 or imm26-lanes-5090 from this event unless the inbox check above fails; leave 5090 llama PID 74148 and its bridge running.",
+   "why": "The lane agents already received the isolation, chat and llama-stop instructions, so repeating them now would duplicate work, and the 5090 llama is killed only after lane i3 passes its DeepInfra chat check, which this event does not report."
+  }
+ ],
+ "checks": [
+  "Glob C:/KenshiTestRuns/**/150721-imm26-lanes-4080.txt, then Read the whole file and grep it for i4, isolation, PASS, FAIL, llama, RAM and chat",
+  "wsl.exe -- pgrep -af event-wait.sh (read-only: confirm no waker is running before restart-waker)",
+  "ssh 4080 \"tasklist | findstr llama\" (confirm the 4080 local llama is gone and RAM was freed; also confirm Kenshi lane i4 pid 348 is alive)",
+  "powershell -NoProfile -Command \"Get-Process -Id 74148\" (5090 llama, stays until lane i3 passes)",
+  "grep -n RESULT under C:/KenshiTestRuns/imm26-4080 outputs and compare timestamps with the DeepInfra switch on i3: rows that straddle the switch are not valid evidence"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "id": "P025",
+ "session": "5720e5b8",
+ "ts": "2026-10-15T23:33:58.289Z",
+ "class": "other",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding/tools/automation; powershell -NoProfile -ExecutionPolicy Bypass -File agent-rollcall.ps1 | cut -c1-170; powershell -NoProfile -ExecutionPolicy Bypass -File agent-host-monitor-selftest.ps1 2>&1 | grep -i -E \"FAIL|not ok\" | head -4 | cut -c1-200",
+   "why": ""
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "cd /c/KenshiModding/tools/automation; sed -i \"33s/'orphan' 12 -1/'orphan' 34 -1/\" agent-host-monitor-selftest.ps1; sed -n 33p agent-host-monitor-selftest.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File agent-host-monitor-selftest.ps1 2>&1 | tail -1; cd /c/KenshiModding; git add tools/automation/agent-host.ps1 tools/automation/agent-host-monitor-selftest.ps1; git commit -q -m \"agent-host: in-session (INPROC) agents get an ORPHANED wake only after 30 min (false wakes); selftest updated\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\"; git push -q origin main 2>&1 | tail -1\nMSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding/tools/automation; grep -n -i \"orphan\" agent-host-monitor-selftest.ps1 | head -10 | cut -c1-220"
+ ],
+ "narration": [
+  "I'm cutting the false \"orphaned\" wake-ups for in-session agents and restarting the waker.\n\n- **Fix:** in-session agents have no process or log for the monitor to see. They now trigger an ORPHANED wake only after 30 minutes without a status update, instead of 10. I updated the monitor selftest to match, committed and pushed the change, and reloaded the agent-host without disturbing the running agents.\n- **Selftest:** I did not capture its result after the fix. It failed 1 check before I updated t...[truncated 772 chars]"
+ ],
+ "event_text_chars": 928
+}

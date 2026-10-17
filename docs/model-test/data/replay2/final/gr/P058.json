@@ -1,0 +1,19 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op8: SETUP-FAIL 19-a (lane 4080-i4): no trip was proposed after the s1/s1b asks. Reply now with one trip plan path for row 19-a on the 4080 lane (kah-* fixture copy only, no 5090 session). The coordinator then assigns it with: powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/setupfail.ps1 assign 19-a imm26-4080-i4op8 <plan_path>",
+   "why": "The setup-fail needs a concrete trip plan from the operator that owns the 4080-i4 lane, and the handoff lists imm26-4080-i4op8 as running on that lane."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-4080-i4op8 reply carrying the plan path; then run the setupfail.ps1 assign 19-a line above with that path",
+   "why": "assign needs the real plan path, which does not exist yet, so it must not be invented; the inbox mv error in the event is a harmless race on an already-moved file and needs no action."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/setupfail.ps1 list",
+  "ls /mnt/c/KenshiTestRuns/inbox/coordinator | grep setupfail"
+ ]
+}

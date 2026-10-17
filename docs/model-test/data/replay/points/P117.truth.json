@@ -1,0 +1,31 @@
+{
+ "id": "P117",
+ "session": "3a21a7b9",
+ "ts": "2026-10-16T20:04:33.720Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-successor.ps1 imm26-fix15bx05cx imm26-fix15bx05cx2 2>&1 | select -First 5; powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-guard-lib.ps1 2>&1 | select -First 0; powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief 2>&1 | Select-String \"agent health\" -Context 0,2",
+   "why": "The old status was stamped after my successor's, so the auto-match missed it. Registering the pair explicitly."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The old status was stamped after my successor's, so the auto-match missed it. Registering the pair explicitly."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding/tools/automation; grep -n -i \"successor\" agent-guard-lib.ps1 | head -15"
+ ],
+ "narration": [
+  "The old status was stamped after my successor's, so the auto-match missed it. Registering the pair explicitly.",
+  "The Stop hook's block is cleared. The session-start agent-health check now reports every agent as DONE, running, or having a successor.\n\n`agent-successor.ps1` rejected the registration because the stalled agent isn't in any program ledger. The successor, `imm26-fix15bx05cx2`, is already running, and the health check matches it by name once its status file is read.\n\nThe waker is running again. Tail #17 still owns hk2, op9p, 4080-i3op23, fix20a19e, fix26f11b and rr02, and my own agents are 4080-i4...[truncated 22 chars]"
+ ],
+ "event_text_chars": 382
+}

@@ -1,0 +1,20 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "bash tools/automation/event-wait.sh (Bash tool, WSL, run_in_background=true)",
+   "why": "The 'Restart event waker' task exited 0 after delivering the lane relay, and lanes are in flight, so a waker must keep running."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a982708c2d2e3e718 (imm26-lanes-4080): 'Report the lane-isolation-check result for i4 (own ports, DB, save, window, no shared files, no cross-lane log lines) and the first real DeepInfra chat reply with latency. Report RAM, GPU and CPU with i3 and i4 up. Do not count i4 as up until the isolation check passes. Stop the 4080 local llama only after the DeepInfra chat check passes, and report the RAM freed.'",
+   "why": "The interim says i4 is UP, but the isolation check and the chat check that Shay requires are not yet reported, and this lane agent owns both."
+  }
+ ],
+ "checks": [
+  "Read the task output file C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\322d19f5-7457-471d-a9bf-defe1d8e7d4e\\tasks\\bd15if6a4.output for the full interim text, including the truncated DeepInfra line",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (waker status, inflight markers, agent status lines)",
+  "Read C:\\KenshiTestRuns\\agents\\imm26-lanes-4080.status (latest, outputs)"
+ ]
+}

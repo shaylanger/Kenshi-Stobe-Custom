@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3op21 -Kind DONE -Report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i3op21\\out-20261016-130429.md -Summary \"imm26-5090-i3op21 STOPPED-CONTEXT (handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.handoff.md, last commit 447bd8c9). Lane 5090-i3 idle, Kenshi i3 up on NC20 7A5AF9EA, lock game-3.lock held, compose bundle deployed on lane backend. PASS 19-ax, 10-e. FAIL 20-d (bare Yes after reload not confirmed), 16-bx (checker), 17-bx, 05-cx v2 (only roster_has_sleeper: prompt shows sleeper as moving), 23-a v2 (ack count 2, two lines 8 s apart). SETUP-FAIL 23-e, 24-c, 15-bx, 08-d, 11-b. GATED 12-d v2. Needs: successor op22, 22-b/25-b row scripts, 08-d rerun, decisions on 05-cx sleeper rendering and 23-a ack-count.\"",
+   "why": "The tail owns op21 and only relays its result to coordinator #16 (tail-relay writes the inbox file), spawning and deciding nothing itself."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to \"16 coordinator\": Tail #15 to coordinator #16: imm26-5090-i3op21 is STOPPED-CONTEXT and the 5090-i3 lane is idle (game up on NC20, lock held). Full relay in inbox/coordinator. It needs a successor: powershell tools/automation/lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21 (first rows: 08-d via sfS unblockrun_sfs.sh, 22-b/20-a via sfR2 sfrrun.sh, 25-b with NC24 once installed; 22-b/25-b scripts already exist in your DONE list, so no new builder agent). Open decisions for Shay, ask once with the others: 05-cx sleeper shown as moving in the prompt, 23-a ack-count of 2.",
+   "why": "The new coordinator decides and spawns the successor; the tail points to the existing scripts so no duplicate row-script agent is started."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for tail-ack from coordinator #16 or 5 minutes after the relay file, then end the tail once all relays are delivered.",
+   "why": "Tail contract: the tail ends when each result's relay is delivered, acked, or 5 min old."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "head -n 6 C:\\KenshiTestRuns\\agents\\imm26-5090-i3op21.status"
+ ]
+}

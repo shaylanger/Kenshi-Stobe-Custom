@@ -1,0 +1,25 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 idle \"5090 held by Shay order: no new 5090 sessions (2026-10-15); imm26 continues on 4080\"",
+   "why": "The 5090 is idle under Shay's standing hold (no new 5090 sessions), and without a recorded reason the waker fires RIG IDLE again at once."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (run in background)",
+   "why": "The previous waker ended on this event and six agents are still in flight, so a waker must keep running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for completion reports from imm26-wpA3, imm26-wpB3, imm26-wpC1c, imm26-wpC2c, imm26-wpD3, imm26-N2c",
+   "why": "The 4080 BUSY marker (4080-imm26) is correct, and no agent has reported yet, so nothing else is due."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "ls C:/KenshiTestRuns/inflight",
+  "tail -n 3 C:/KenshiTestRuns/agents/imm26-wpA3.status"
+ ]
+}

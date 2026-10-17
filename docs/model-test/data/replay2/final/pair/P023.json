@@ -1,0 +1,31 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash tool with run_in_background=true: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP",
+   "why": "The waker task bjjwra6y5 exited with code 0 while wpT1, the install and fix agents, the two investigations and the lane operators are still in flight, so a waker must run again before anything else."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Record wpT2 DONE in its tail-handoff program ledger entry with program-ledger.ps1 (program name taken from the session-start.ps1 -Brief output, not guessed), outputs: commit 7744453 (pushed), tail-ledger-selftest 33/33, program-ledger -Selftest 46/46, agent-host-ensure-selftest 12/12",
+   "why": "The ledger is updated after every agent report and wpT2 has reported DONE with its selftest results."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: wpT2 DONE (7744453, selftests 33/33, 46/46, 12/12); waker restarted; still running: wpT1 (hooks and context meter; the docs package waits for it), imm26-install-nc-rest2b, imm26-compose-fix-batch2e, both investigations, and the lane operators",
+   "why": "HANDOFF Right now must reflect every agent state change so a session that dies here can resume."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "C:/KenshiTestRuns/agents/wpT1.status reaches DONE or STOPPED-CONTEXT",
+   "why": "The docs package (CLAUDE.md, AGENT_PROMPTS, HANDOFF) depends on wpT1 finishing, so nothing is spawned for it yet."
+  }
+ ],
+ "checks": [
+  "tail -n 5 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/5720e5b8-42a8-4aaf-9e29-db0072586324/tasks/bjjwra6y5.output\" | cut -c1-600",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "cat C:/KenshiTestRuns/agents/wpT1.status | cut -c1-600",
+  "git -C C:/KenshiModding show --stat -1 7744453"
+ ]
+}

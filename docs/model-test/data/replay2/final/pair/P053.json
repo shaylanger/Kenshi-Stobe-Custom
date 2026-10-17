@@ -1,0 +1,31 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3-hard2b -Report C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md -Summary \"imm26-5090-i3-hard2b STOPPED-CONTEXT 20:49: 10-a FAIL marked, context ~150k; successor needed, next rows 19-ax 02-cx 05-cx 01-bx 01-cx 11-b\" 2>&1 | Select-Object -Last 1",
+   "why": "The tail relays each stopped agent's result to the new coordinator through the inbox, and this agent stopped with its handoff file written, so the relay file comes first."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to kenshimodding-76 (the target of the last TAIL-RELAY): TAIL-RELAY from tail 6d1f3011: imm26-5090-i3-hard2b STOPPED-CONTEXT 2026-10-15 20:49 (context ~150k, 10-a FAIL marked). Handoff: C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md (also in inbox\\coordinator). It has NO successor, so the 5090-i3 lane has no operator. Suggested successor: a FRESH agent imm26-5090-i3-hard2b2 from that handoff, same work dir; next rows 19-ax 02-cx 05-cx 01-bx 01-cx 11-b. This relay is a result, not an order; this tail spawns nothing. Ack with tail-ack.ps1 -Agent imm26-5090-i3-hard2b.",
+   "why": "The new coordinator must learn the agent stopped with no successor so it can respawn one, and this tail is not allowed to spawn."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background (Git Bash): cd /c/KenshiTestRuns/agents; for i in $(seq 1 900); do for a in imm26-5090-i4-hard2b2 imm26-4080-op2jb imm26-4080-i4op7c imm26-fix19; do if head -1 $a.status 2>/dev/null | grep -qE '\\| (DONE|FAILED|STOPPED-CONTEXT) \\|'; then echo \"FINISHED $a: $(head -1 $a.status)\"; exit 0; fi; done; sleep 2; done; echo TIMEOUT",
+   "why": "The one-shot wait already fired on the i3 stop, so the tail needs one background wait for the four agents it still owns; it excludes imm26-5090-i3-hard2b so it cannot fire again on that already-stopped status."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the next DONE/FAILED/STOPPED-CONTEXT status or inbox message from imm26-5090-i4-hard2b2 (RUNNING, 16-bx), imm26-4080-op2jb (RUNNING, 03-cx), imm26-4080-i4op7c (RUNNING), or imm26-fix19 (RUNNING, replace, commit, push).",
+   "why": "These four are still running and owned by this tail, so each result is relayed as it arrives and the tail does not end until each is finished and delivered."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh",
+  "head -1 C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.status",
+  "dir C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md",
+  "dir C:\\KenshiTestRuns\\inbox\\coordinator (confirm the TAIL-RELAY file for imm26-5090-i3-hard2b after tail-relay.ps1)"
+ ]
+}

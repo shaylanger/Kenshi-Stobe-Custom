@@ -1,0 +1,44 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 -Agent imm26-rowtools42",
+   "why": "rowtools42 handed back items 5, 6 and 7 (commits 7b3c04d, 37285bd, 4924239), so its relay is delivered and can be closed."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "IMM-10-d: keep status UNRUN (BASE), exact-transfer proof exists, needs a stolen-flagged theft leg; ticket 10-d stays open",
+   "why": "This is the status change the coordinator asked for; the agent offered to revert it, and no revert is needed."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "IMM-03-b: record as opened by rowtools42, needs=server-fix, lane 5090-i4, not run (5090 hold)",
+   "why": "The row text was replaced per inv-03b section 6 and must be tracked, but it cannot run while the 5090 hold is in place."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "5090-i5: stays held; no legal slot on the current layout (registry puts i5 on DISPLAY1, which is the forbidden Samsung); when the hold ends run at most i3 and i4 on DISPLAY2; no lane-window sync now",
+   "why": "The agent found that i5 has no legal window, and the 5090 hold is already in force, so the registry must not be rewritten yet."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "rowtools42 done: items 5, 6, 7 pushed (7b3c04d, 37285bd, 4924239). IMM-10-d is UNRUN (BASE) with its theft leg still open; IMM-03-b opened (needs server-fix, lane 5090-i4, not run). Monitor finding: DISPLAY1 is the Samsung (forbidden) and DISPLAY2 is the ASUS primary, so 5090-i5 has no legal slot and at most two lanes (i3, i4) fit on DISPLAY2. Do you want the monitor setup changed, or keep the two-lane limit? No 5090 runs until you say so.",
+   "why": "The layout limit changes how many 5090 lanes can run and only Shay can decide it, so he needs to see it in the next summary."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "edit testing/HANDOFF.md 'Right now': add rowtools42 DONE with commits 7b3c04d, 37285bd, 4924239; IMM-10-d UNRUN (BASE); IMM-03-b opened, not run; monitor-layout finding and 5090-i5 no legal slot",
+   "why": "CLAUDE.md requires HANDOFF 'Right now' to be updated after every agent report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-fix10a, imm26-fix03b, imm26-rowtools44 (item 4 selftest and docs) and the 4080 operators imm26-4080-i4op8 and imm26-4080-op2jc; no 5090 launches",
+   "why": "These agents are still running and their results are the next work; 4080 and offline work continue while the 5090 stays held."
+  }
+ ],
+ "checks": [
+  "head -80 /c/KenshiTestRuns/agents/out/imm26-rowtools42/latest.md",
+  "git -C /c/KenshiModding log --oneline -5 -- testing/live-stobe-queue/imm26-assert/rowtools tools/automation/lane-window.ps1"
+ ]
+}

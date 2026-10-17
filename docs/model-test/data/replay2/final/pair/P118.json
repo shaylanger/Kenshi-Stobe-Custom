@@ -1,0 +1,36 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background)",
+   "why": "The waker task b9jjhwanc completed on this event, so it must be restarted to keep watching for the next lane event."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix15bx05cx2: 'SETUP-FAIL on 05-cx from lane 5090-i4 (operator verdict from imm26-5090-i4-hk2, EVENT INBOX 20261016-140625-pilot-escalate-05-cx.msg): E scene is not empty at E1, the prompt lists Malzin (female) under Nearby People Awareness. Malzin is a test character, so her values do not matter. Fix the 05-cx recipe so E is empty before the save (clear or move her out on the kah-* copy). Keep every assertion unchanged. Prove it on a fresh kah copy and write the recipe change and any commit to your status.'",
+   "why": "The 05-cx recipe defect belongs to the fresh fixer already working 05-cx (imm26-fix15bx05cx2), which is cheaper than a new spawn; hk2 belongs to tail #17 and is not touched."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "setup-fail record 05-cx via setupfail.ps1 (check its usage first): owner imm26-fix15bx05cx2, needs=recipe, state=building; evidence EVENT INBOX 20261016-140625-pilot-escalate-05-cx.msg",
+   "why": "The setup-fail list still shows owner imm26-inv15bx state=planned for 05-cx, so the record must point at the agent actually on the row."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not message, respawn or steer imm26-5090-i4-hk2 or the 5090-i4 lane",
+   "why": "hk2 and its lane are owned by live tail #17, and the escalation is answered through the recipe owner instead."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-fix15bx05cx2's next status line for 05-cx",
+   "why": "The fixer's recipe result decides whether 05-cx goes back to the lane or needs another step."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list (confirm the 05-cx owner and state)",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-fix15bx05cx2.status (confirm the fixer is RUNNING on 05-cx)",
+  "read the full checker excerpt in EVENT INBOX 20261016-140625-pilot-escalate-05-cx.msg (its location is not in this file; find it by filename, do not guess the E-scene cause)",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-scan.ps1"
+ ]
+}

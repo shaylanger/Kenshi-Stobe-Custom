@@ -1,0 +1,29 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list (confirm ticket 05-cx), then record on ticket 05-cx: SETUP-FAIL from pilot lane 5090-i4 agent imm26-5090-i4-hk2: E scene not empty at E1, prompt lists 'Malzin (female)' under Nearby People Awareness; fix = clear Malzin from the 05-cx E-scene setup (test character, her values do not matter)",
+   "why": "The operator verdict is a setup failure on the row itself, so it belongs on the 05-cx setup-fail ticket where the recipe owner will see it; the ledger shows owner imm26-inv15bx for 05-cx, so the reason is recorded there rather than only in the alert."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix15bx05cx2: SETUP-FAIL 05-cx from pilot lane 5090-i4 (hk2): E scene is not empty at E1; the prompt lists 'Malzin (female)' under Nearby People Awareness. Clear Malzin from the 05-cx E-scene setup in your recipe/candidate (she is a test character only), keep the change scoped to the 05-cx and 15-bx candidate files, and reply with the changed file paths and status when done. Do not touch the hk2 lane or its run.",
+   "why": "This agent is already working the 05-cx candidate and the 15-bx v3 scene, so the recipe fix goes to it instead of a new spawn; the isolated pilot arm (hk2) must not be steered, so the message is sent to the fixer only."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 \"pilot-escalate 05-cx\" \"SETUP-FAIL recorded on 05-cx (E scene has Malzin in Nearby People Awareness); recipe fix routed to imm26-fix15bx05cx2; hk2 lane not steered\"",
+   "why": "The coordinator has acted on the escalation, so the open alert is closed with the action taken; a still-true condition would re-open it after 30 min."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-fix15bx05cx2 to report the 05-cx recipe change; then re-run the 05-cx pilot row on lane 5090-i4 after its change is installed or committed",
+   "why": "The row cannot be re-run until the E scene is clean, and the lane itself needs no coordinator input meanwhile."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "grep -rn Malzin /mnt/c/KenshiModding/testing/live-stobe-queue/imm26-assert/ | head -20"
+ ]
+}

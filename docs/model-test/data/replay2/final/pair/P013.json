@@ -1,0 +1,59 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Doing your speed and token items from the handoff now, all code and offline selftests, no game time. Started now: (4) quieter waker, so event-wait returns only on action events; (5) token-light session start, a -Brief form of session-start; (3) one-command lane setup, built offline first; (2) travel accept fix as soon as the running imm26-travel-investigate report names a root cause (no duplicate investigator); (1) row operators on each new lane as soon as lane-isolation-check passes, 4080 i4 first. One question, asked once: the 'no new 5090 sessions' hold still applies, so the 5090 i4 and i5 row operators wait for your OK (entry in testing/SHAY_DECISIONS.md). Say yes and they start the moment their isolation check passes. Results come through the relay.",
+   "why": "Shay asked for these items by name; the plan, the order, and the one decision that is his (5090 sessions) go in one message."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-waker-quiet, description '[case:generate] imm26-waker-quiet: quiet waker (item 4)'. Brief: Your name is imm26-waker-quiet. Shay token item 4 (HANDOFF Right now, suggestion 4): make tools/automation/event-wait.sh return only on action events (lane alerts, agent stall/failed/stopped/dead with no successor, batch DONE/SUMMARY, handoff marker, Kenshi exit, open alert), and NOT on STATUS or HEALTH-OK events. Do NOT edit the running waker in place: write event-wait.sh.new, selftest it offline, and report the swap step (the coordinator swaps it in only when no event-wait process runs, then restarts the waker). First read git diff of event-wait.sh: an uncommitted change from another agent exists, so build on it and do not revert it. Commit with the repo-local shaylanger identity, naming item 4 and why, and push right after the commit. Never commit handoff/ files or logs. No game or rig time. Status via tools/automation/agent-status.ps1 imm26-waker-quiet RUNNING/DONE; report via save-report.ps1 (agents/out/imm26-waker-quiet).",
+   "why": "Token item 4: the waker wakes the coordinator on every STATUS and HEALTH-OK event and each restart costs a turn; it runs in parallel with the session-start work."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-brief-start, description '[case:generate] imm26-brief-start: session-start -Brief (item 5)'. Brief: Your name is imm26-brief-start. Shay token item 5 (HANDOFF Right now, suggestion 5): the session start output is about 75 KB. Measure tools/automation/session-start.ps1 in its full form and check whether a -Brief switch exists yet, and record both byte sizes. Add -Brief so it prints only: handoff marker, HANDOFF Right now (first ~1500 chars), one line per agent status, inflight markers, open alerts, waker status, newest review verdicts, and cut it to at most about 8 KB. Keep the full form unchanged. Do not edit session-start.ps1 in place: write a candidate, selftest both forms offline, and report the swap step. Commit with the repo-local shaylanger identity, naming item 5 and why, and push right after the commit. Never commit handoff/ files or logs. No game or rig time. Status via tools/automation/agent-status.ps1 imm26-brief-start RUNNING/DONE; report via save-report.ps1 (agents/out/imm26-brief-start) with the before and after sizes.",
+   "why": "Token item 5: a tight session start saves one large read per session and runs in parallel with the waker change, on a different file."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-lane-setup, description '[case:generate] imm26-lane-setup: one-command lane setup (item 3)'. Brief: Your name is imm26-lane-setup. Shay speed item 3 (HANDOFF Right now, suggestion 3): build one command, tools/automation/lane-setup.sh <rig> <lane> <save>, that runs in order: load save, speed 0 hold, wake, protect, teleport, speed 0.5, printing one RESULT line per step and failing loudly on any step that does not change game state. Read docs/REFERENCE.md (command list, scenario helpers) and the existing lane helpers (4080-imm26-lib.sh and the imm26 lane scripts) first, and reuse the existing kenshi-ctl and stobe-auto commands; do not reimplement or change them. Add an offline selftest. Do NOT run it on any live lane: live validation is scheduled by the coordinator later, and new 5090 sessions are on hold. Commit with the repo-local shaylanger identity naming item 3 and why, and push right after the commit. Status via tools/automation/agent-status.ps1 imm26-lane-setup RUNNING/DONE; report the one command line via save-report.ps1 (agents/out/imm26-lane-setup).",
+   "why": "Speed item 3: each Hub reload loses about 5 minutes to manual lane setup; the build needs no game time, so it runs in parallel with the tooling agents."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section 'Right now': add the line 'SHAY ORDER 2026-10-15 (speed/token items): item 1 row operators start on each new lane once lane-isolation-check PASSES (4080 i4 first; 5090 i4/i5 wait for Shay OK); item 2 travel accept fix after the imm26-travel-investigate report, no duplicate investigator; item 3 imm26-lane-setup (spawned, offline build); items 4 and 5 imm26-waker-quiet and imm26-brief-start (spawned); status per agent'. Then list C:/KenshiTestRuns/programs/ (the ledger file name is not in this file) and add these work packages to the imm26 program ledger with owners imm26-lane-setup, imm26-waker-quiet, imm26-brief-start, and the travel fixer when spawned; state spawned; checkpoint = spawn time.",
+   "why": "The coordinator updates HANDOFF and the ledger after every agent spawn so a context stop loses nothing."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: add an open entry: 'Speed item 1: start the 5090 i4 and i5 row operators as soon as lane-isolation-check PASSES. Options: (a) yes, start on PASS; (b) no, keep the no-new-5090-sessions hold. Default: (b), hold. In-game effect: none until started. Code consequence: none; the 4080 i4 lane proceeds on PASS without this decision.'",
+   "why": "Standing rule: every open Shay question lives in SHAY_DECISIONS.md with options and default before the next handoff."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not spawn a second travel investigator. Wait for the report agents/out/imm26-travel-blocker from the already running imm26-travel-investigate. When it names a root cause, spawn imm26-travel-fix with [case:debug] or [case:patch] per the report verdict, and a brief that names the root cause and the gates 19-c, 20, 21, 23-a, 23-c, 23-d to re-run after the fix.",
+   "why": "Item 2 is already under investigation; a second investigator would repeat its work, and a fixer without a root cause would repeat it too."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for lane-isolation-check PASS in the status files of imm26-lanes-4080 and imm26-lanes-5090. On a PASS for 4080 i4, spawn its row operator at once (agent imm26-4080-op2b2, rows for lane i4). Start the 5090 i4 and i5 row operators only after Shay answers the SHAY_DECISIONS entry with yes.",
+   "why": "Item 1: row operators start only after the isolation check passes, so no rows run on unverified lanes; the 5090 hold means no new 5090 session until Shay says yes."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "When imm26-waker-quiet reports its event-wait.sh.new candidate passes selftest: when no event-wait process is running, swap the candidate in and restart the waker at that boundary (never edit the running script in place).",
+   "why": "A running waker must not be edited mid-run; the swap happens at a boundary so the quieter waker takes effect without a lost event."
+  }
+ ],
+ "checks": [
+  "grep -n -i brief C:/KenshiModding/tools/automation/session-start.ps1 | head -5",
+  "git -C C:/KenshiModding diff --stat -- tools/automation/event-wait.sh tools/automation/session-start.ps1",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'ps -ef | grep event-wait | grep -v grep'",
+  "tail -n 3 C:/KenshiTestRuns/agents/imm26-lanes-4080.status; tail -n 3 C:/KenshiTestRuns/agents/imm26-lanes-5090.status",
+  "tail -n 5 C:/KenshiTestRuns/agents/out/imm26-travel-blocker",
+  "tail -n 2 C:/KenshiTestRuns/agents/imm26-travel-investigate.status",
+  "ls C:/KenshiTestRuns/programs/"
+ ]
+}

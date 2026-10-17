@@ -1,0 +1,22 @@
+{
+ "id": "L01",
+ "batch_id": 1,
+ "class": "lane alert",
+ "window": [
+  "2026-10-16T21:49:25.818Z",
+  "2026-10-16T21:50:20.498Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 6,
+ "action_types": [
+  "read",
+  "edit-file",
+  "restart-waker",
+  "spawn",
+  "spawn"
+ ]
+}

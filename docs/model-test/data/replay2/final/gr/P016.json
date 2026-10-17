@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' plus the imm26 program ledger under C:\\KenshiTestRuns\\programs\\ (exact ledger file name not shown in this batch): record agent imm26-compose-fix-usermsg (task ace5a8d0d55b08800) DONE, user_message fix in lib/imm26_ties.php and lib/imm26_knowledge.php at all 5 lane sites, commit 070c795 pushed to origin main; single compose fixer still pending",
+   "why": "The coordinator must update the ledger and HANDOFF after every agent report, not only at the context limit."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-inv-trust to finish (C:\\KenshiTestRuns\\agents\\imm26-inv-trust.status, latest line). Then spawn ONE [case:patch] fixer whose brief says the user_message fix is already in 070c795 (do not re-apply it) and lists the inv-c1 patches (06-c, 08-a), the travel patches P-NONE, P-REAFFIRM, P-REGION, and the trust fixes.",
+   "why": "Two agents still edit the same composed tree and a second editor would collide on compose.patch; the coordinator already said it would spawn the fixer only after both finish."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not accept the agent's full stobe-tests result (93 passed, 5 FAILED) until the 5 failing suite names are checked against the 7 known pre-existing failures.",
+   "why": "The agent calls the 5 failures expected, but the names are truncated in this batch, so a regression could be hidden."
+  }
+ ],
+ "checks": [
+  "grep '^latest' /c/KenshiTestRuns/agents/imm26-compose-fix-usermsg.status /c/KenshiTestRuns/agents/imm26-inv-trust.status | cut -c1-300",
+  "grep -n 'FAIL' <stobe-tests output file named in imm26-compose-fix-usermsg.status> | head -20 (the file is not named in this batch; find it from the status file)",
+  "git -C /var/www/html/StobeServer log -1 --oneline 070c795 (WSL; confirms the pushed commit exists; repo is an assumption, the batch does not name it)",
+  "pgrep -af event-wait.sh (WSL; confirm the waker is still running, restart only if it is not)"
+ ]
+}

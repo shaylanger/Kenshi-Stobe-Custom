@@ -1,0 +1,24 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-sfB2 (fresh NC18 successor, not the old agent): the predecessor imm26-sfB hit its context limit (handoff C:\\KenshiTestRuns\\agents\\imm26-sfB.handoff.md). Its code-reading findings, not yet verified in game: (1) the server updates the native travel receipt only inside stobeCommitmentReconcileNative (lib/commitment_native_bridge.php) while building a conversation prompt, and that needs a native snapshot at most 120 s old; the 13-c and 13-c-neg row scripts (unblockdefs_b.sh, rd_13c) only poll the eventlog and never trigger a turn, so the agreement stays ACCEPTED whatever native does; 23-a worked because it ran ctxpush plus a 'We're here' line. (2) The native arrival tick needs a 3D distance of at most 8 u to the order point, and the server side of that check is cut off in the report, so verify it before patching. Your scope stays the NC18 native arrival/completion fix on the NC17 tree: build, offline checks, README, patch, commit, report. Do not edit the row scripts (a separate fixer owns them). No game launches, no lane use, not installed, never Shay's live install, server or DB. Keep your status current with agent-status.ps1 and write your handoff file.",
+   "why": "The successor is already running, so it needs the root causes the dead agent found and must not rediscover them, while the row-script defect goes to a separate fixer so the native work stays in one lane."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-rd13c, description '[case:generate] Row-script fix: 13-c and 13-c-neg trigger a turn after native arrival', brief: Fix the 13-c and 13-c-neg row scripts (unblockdefs_b.sh and rd_13c; locate them under testing/live-stobe-queue/imm26-assert/rowtools with grep) so that after the native walk they trigger a chat turn, mirroring what 23-a does (ctxpush plus a 'We're here' line), so the server reads the native receipt. Offline checks only (shell syntax, mutation check against the 23-a pattern). Do not run rows, do not touch lanes, do not edit the NC18 native code or the server PHP. Commit in the native repo per repo rules, then write your report with save-report.ps1 under agents/out/imm26-rd13c and set your status to DONE or FAILED with agent-status.ps1. Mark the row scripts as a built-not-installed recipe for the operators.",
+   "why": "The dead agent's root cause for 13-c is a row-script defect (no turn is triggered), which is a separate small change that can run in parallel with the native fix."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, the 'Right now' section: add a line that imm26-sfB (NC18) stopped at its context limit, successor imm26-sfB2 is running, and list the two root causes (receipt needs a turn that the 13-c scripts never trigger; native arrival tick 8 u check). Add that imm26-rd13c is spawned for the row-script fix. Keep the 'not installed' status.",
+   "why": "Every agent report must update the canonical checkpoint so a context stop loses nothing."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "tail -n 60 C:\\KenshiTestRuns\\agents\\imm26-sfB.handoff.md"
+ ]
+}

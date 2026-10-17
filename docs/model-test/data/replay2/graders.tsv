@@ -1,0 +1,16 @@
+rid	point	round	arm	agent_id	attempts	status	schema_problems	wall_s	tool_calls	model	in	out	cache_w	cache_r	tokens	usd
+chunk-01		grader			1	ok					16	4320	73075	455858	533269	0.27151
+chunk-02		grader			1	ok					26	270	84431	944956	1029683	0.30833
+chunk-03		grader			1	ok					18	6091	78289	574522	658920	0.31412
+chunk-04		grader			1	ok					38	3891	92453	1467960	1564342	0.41691
+chunk-05		grader			1	ok					12	5676	68112	306981	380781	0.25776
+chunk-06		grader			1	ok					18	5417	63570	493088	562093	0.26244
+chunk-07		grader			1	ok					20	8919	86783	653023	748745	0.37149
+chunk-08		grader			1	ok					18	238	69849	525981	596086	0.22964
+chunk-09		grader			1	ok					14	5353	71082	385594	462043	0.26982
+chunk-10		grader			1	ok					10	7136	66002	240546	313694	0.26044
+chunk-11		grader			1	ok					22	3170	84329	780501	868022	0.32062
+chunk-12		grader			1	ok					22	3160	86152	759931	849265	0.32302
+chunk-13		grader			1	ok					16	232	67287	460766	528301	0.21665
+chunk-14		grader			1	ok					18	4762	77304	554680	636764	0.29638
+chunk-15		grader			1	ok					16	1892	68810	456233	526951	0.2366

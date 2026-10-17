@@ -1,0 +1,11 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Yes, grep.exe is what I checked, and that is how I answered. The leftover is PID 18532 (grep -rn isPlayerCharacter --include=*.h / -l). It has run since 10:06 and its parent is gone, so no live agent uses it. The two newer greps from 13:12 are current agent log checks. The permission checker denied my kill and I did not retry. To clear it, run: ! powershell -NoProfile -Command \"Stop-Process -Id 18532 -Force\"  Or tell me to go ahead and I will try again.",
+   "why": "Shay's message only corrects grp to grep; my earlier answer already covered grep.exe, so restate the finding and the kill command briefly without retrying a kill the checker denied or taking any extra action."
+  }
+ ],
+ "checks": []
+}

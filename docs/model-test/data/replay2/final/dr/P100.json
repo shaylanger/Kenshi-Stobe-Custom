@@ -1,0 +1,19 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no command; imm26-sfU2 report (commits 8c2c7911, f00884bc) was already delivered as a message from aac49e2e4018cf088 and acted on: setupfail state 15-bx ready and the coordinator16-server-fixes.txt operator note were written",
+   "why": "This task-notification is interim: the agent is only waiting on its own background work, its result was already received, and no lane or rig action follows; do not respawn it, it may notify again when it resumes."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': add one line that imm26-sfU2 reported (8c2c7911, f00884bc; 15-bx v2 selftest 40/40, 15-bx ready via unblockdefs_c_v2.sh, notes in inbox/operators/sfU.txt and coordinator16-server-fixes.txt), still waiting on its own background work",
+   "why": "HANDOFF must be updated after every agent report and the preceding actions did not record sfU2's report there."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-sfU2.status",
+  "ls C:/KenshiTestRuns/agents/out/imm26-sfU2"
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker woke on this batch and has to be restarted so no further events go uncovered."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to=<agent id of imm26-4080-i4op12, from: powershell tools/automation/agent-ids.ps1 list -Live>, message: \"Coordinator -> imm26-4080-i4op12: lane 4080-i4 has been idle 6.5 min. Reply in one line: what you are doing now, which row you are on, and what blocks you.\"",
+   "why": "The lane event says to ask the operator what it is doing before any fix or respawn, and SendMessage only reaches a live agent by its ID."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "ONLY if op12 is not live, or its reply says it is stuck or finished, and it is not owned by a live tail (check agent-ids.ps1 and the ledger): run powershell tools/automation/lane-brief.ps1 4080-i4 -Name <next free name, e.g. imm26-4080-i4op15> -Predecessor imm26-4080-i4op12, then Agent with description \"[case:investigate] 4080-i4 operator (idle lane)\" and that brief as the prompt.",
+   "why": "A stuck or dead lane operator is replaced fresh at once, since no rig may sit idle more than 2 min while work exists; the successor name is new and not in this file, and a tail-owned agent is never respawned by this coordinator."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 \"LANE IDLE 4080-i4\" \"<action taken: op12 asked; respawned as NAME; or told to continue>\"",
+   "why": "Closes the open LANE IDLE alert once the action is taken; the alert id is not in this file, so the subject is used."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "STATUS imm26-inv26nat DONE (root cause requester_now_hostile / 26-a)",
+   "why": "Already acted on: the root cause was relayed to imm26-5090-i5-op9p and 26-d, 26-dx and 26-e were set to ready, so sending again would repeat work."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live",
+  "tail -40 C:/KenshiTestRuns/imm26-4080-i4/report.txt",
+  "cat C:/KenshiTestRuns/agents/imm26-4080-i4op12.status"
+ ]
+}

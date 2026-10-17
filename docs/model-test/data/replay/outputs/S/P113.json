@@ -1,0 +1,41 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background, restart the waker first because it exited on these events)",
+   "why": "The waker exits after each wake and one waker must always run while agents and lanes are in flight."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mv /c/KenshiTestRuns/inbox/coordinator/20261016-133455-tail-imm26-4080-i3op22.msg /c/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "The op22 DONE relay is handled (result read via the report check), and the handoff says handled relays go to delivered/; tail-ack.ps1 argument syntax is not in this file so I use the move."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\lane-brief.ps1 4080-i3 -Name imm26-4080-i3op23 -Predecessor imm26-4080-i3op22",
+   "why": "The lane has no RUNNING operator and the 4080 is a real lane with queued work (03-b, 01-cx, re-judge rows), so generate the successor brief from the op22 handoff, as with the i3 pattern used for the 5090."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent: imm26-4080-i3op23 | [case:generate] 4080-i3 operator op23 | You are lane operator imm26-4080-i3op23 for the 4080-i3 lane (successor of imm26-4080-i3op22, DONE). Read your brief C:\\KenshiTestRuns\\agents\\imm26-4080-i3op23.brief.md first (written by lane-brief.ps1), then the predecessor report C:\\KenshiTestRuns\\agents\\out\\imm26-4080-i3op22\\latest.md and its handoff. Claim only runnable rows on 4080-i3; 15-bx, 05-cx and 16-bx stay with imm26-inv15bx, and 26-* rows belong to the 5090-i5 operator. Keep your status file current with agent-status.ps1, checkpoint every ~40k tokens, hand off at the meter warn level, and keep your final hand-back to 8 lines or fewer. If nothing is claimable, park with a handoff instead of idling.",
+   "why": "This ends the LANE NO-OPERATOR alert with a fresh successor named in the op22 -> op23 chain, and the agent id is recorded afterwards with agent-ids.ps1 add."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 add imm26-4080-i3op23 <agentId returned by the spawn>",
+   "why": "SendMessage to a live subagent works only by agent id, so the new id has to be recorded; the id is unknown until the spawn returns."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': record that imm26-4080-i3op22 is DONE, imm26-4080-i3op23 is running on 4080-i3, and the waker was restarted",
+   "why": "HANDOFF Right now must be updated the moment an agent finishes or starts."
+  }
+ ],
+ "checks": [
+  "sed -n 1,40p /c/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md | cut -c1-300",
+  "ls /c/KenshiTestRuns/agents/imm26-4080-i3op22.handoff.md",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live"
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the waker running (bash tools/automation/event-wait.sh in the background). Do not swap event-wait.sh.candidate in while a waker runs.",
+   "why": "Tail 16 says the digest candidate is untested live and must only be swapped with no waker running, and a waker is running now."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md: record in Right now that wk1 is DONE (tail 16 relay: waker digest candidate tools/automation/event-wait.sh.candidate, commits d87eee78 and 92c2d38e pushed, selftests digest 42/42, batch 26/26, filter 13/13; EW_DIGEST=1 default; not swapped). Also update the program ledger for wk1.",
+   "why": "The coordinator updates state after every agent report, and wk1 finished."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Move the wk1 relay file from C:\\KenshiTestRuns\\inbox\\coordinator to C:\\KenshiTestRuns\\inbox\\coordinator\\delivered\\ (filename not in this batch; locate it there first)",
+   "why": "Handled relays go to delivered/ so the waker does not wake on them again."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "In the next summary, ask once: adopt the waker digest (EW_DIGEST=1, event-wait.sh.candidate) at the next waker restart when no waker is running?",
+   "why": "Adopting the digest changes waker behaviour, which is Shay's call to make together with the other open questions."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on the grep/grp.exe process (PID 18532) in this batch; the earlier permission denial stands and is not retried.",
+   "why": "This batch does not ask for it, and the permission checker already denied the kill."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "C:\\KenshiTestRuns\\agents\\imm26-wk1.status (read the DONE line)",
+  "dir C:\\KenshiTestRuns\\inbox\\coordinator"
+ ]
+}

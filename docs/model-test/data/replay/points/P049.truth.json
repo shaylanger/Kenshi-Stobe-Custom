@@ -1,0 +1,55 @@
+{
+ "id": "P049",
+ "session": "6d1f3011",
+ "ts": "2026-10-16T02:30:54.558Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; grep -n \"Overlap handoff and tail mode\" testing/AGENT_PROMPTS.md | head -2; n=$(grep -n \"Overlap handoff and tail mode\" testing/AGENT_PROMPTS.md | head -1 | cut -d: -f1); sed -n \"$n,$((n+30))p\" testing/AGENT_PROMPTS.md | cut -c1-700",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; sed -n 1,30p tools/automation/program-ledger.ps1 | grep -i \"route\\|^#\" | cut -c1-260 | head -14; cat C:/KenshiTestRuns/programs/imm26.json | python3 -c \"\nimport json,sys;d=json.load(sys.stdin);print(list(d.keys())[:12]);w=d.get('wps') or d.get('work_packages');print(type(w), (list(w)[:3] if w else None))\"",
+   "why": ""
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "cd C:\\KenshiModding; $sid='6d1f3011-2310-4986-85aa-5667f654842c'; $pl='.\\tools\\automation\\program-ledger.ps1'\n$ag = @(\n @('imm26-5090-i3-hard2b','5090-i3 operator: 10-a, 19-ax, 02-cx 05-cx 01-bx 01-cx 11-b (isolated Cind-vs-one-enemy), 19-d as walk recipe (staged 150u from Squin, see agents/out/imm26-inv19d). On STOPPED/DONE respawn via lane-brief.ps1 5090-i3 -Name <new> -Predecessor <old>.'),\n @('imm26-5090-i4-hard2b2','5090-i4 operator: reruns 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax (--allow-retry), then 03-b autochat (speed 30 hold under goal-watch). 18-a PASS. On finish respawn via lane-brief 5090-i4.'),\n @('imm26-5090-i5-op7','5090-i5 operator: NC10 install, then 25-b 25-a 22-a 26-abc, then...[truncated 2296 chars]",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; $p='.\\tools\\automation\\process-ideas.ps1'\n& $p add -Idea \"An operator may not mark itself DONE while its lane still has non-PASS rows: only STOPPED-CONTEXT (with a successor started first) or DONE with an explicit 'lane complete' note; lane-idle/agent-status refuse otherwise.\" -Evidence \"2026-10-15 20:28 imm26-4080-i4op7b set DONE with 19-ax, 10-a, 10-b, 08-d still open and marked nothing; the 4080-i4 lane had no operator until I noticed the DONE event and respawned imm26-4080-i4op7c (about 10 min of lane time).\" -Saving \"~10 idle lane-minutes per early DONE\" -Risk \"a legitimately finished lane needs a way to say so (the lane complete note)\" -Hooks no -Weakens no 2>&1 | Select -Last 1\n& $p add -Idea \"A GATED / 'needs a native build' claim must cite a search for the NATIVE names (event types, fields in the DLL sources), not the server's words; the setupfail ticket for...[truncated 1249 chars]",
+   "why": ""
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "cd /c/KenshiModding; (powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/selftest-all.ps1 > /c/KenshiTestRuns/selftest-all.last.txt 2>&1 &) ; python3 - <<'EOF'\np='testing/HANDOFF.md'\ns=open(p,encoding='utf-8').read()\ni=s.index(\"**COORDINATOR #8 HANDOFF\")\nif \"**#9 22:45\" in s: j=s.index(\"**#9 21:0\") if \"**#9 21:0\" in s else i\nm=(\"**COORDINATOR #9 HANDOFF (session 6d1f3011-2310-4986-85aa-5667f654842c, ~22:00 Win clock; OVERLAP handoff: this session stays TAIL for its in-session agents).** Start: `session-start.ps1 -Brief`; waker = Monitor on `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-stream.sh --as event-...[truncated 6159 chars]",
+   "why": "Quick status: I'm at 284k context, so I'm running the overlap handoff to a fresh coordinator. The agents keep running."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; tail -3 /c/KenshiTestRuns/selftest-all.last.txt | cut -c1-200; powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/handoff-ready.ps1 \"coordinator #9 overlap handoff: all 5 lanes have operators; tail 6d1f3011 owns 11 agents (5 operators, fix19, wpR1-3, pi13, pi21); FIRST read HANDOFF #9; spawn rowtools4 after fix19, deploy wpR1-3 as they report, ask Shay PI-22..24 + trip-restart + rumor-hook-in-director questions once\" 2>&1 | tail -4",
+   "why": "Quick status: I'm at 284k context, so I'm running the overlap handoff to a fresh coordinator. The agents keep running."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "& \"$env:USERPROFILE\\.claude\\hooks\\context-meter.ps1\" handoff C:\\KenshiTestRuns\\handoff.ready C:\\KenshiModding keep 2>&1 | Select-Object -Last 6",
+   "why": "Quick status: I'm at 284k context, so I'm running the overlap handoff to a fresh coordinator. The agents keep running."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding; ls .claude/context-meter.project.ps1 .claude/hooks 2>/dev/null | head -3; grep -n \"handoff\" ~/.claude/hooks/context-meter.ps1 | head -5"
+ ],
+ "narration": [
+  "Quick status: I'm at 284k context, so I'm running the overlap handoff to a fresh coordinator. The agents keep running."
+ ],
+ "event_text_chars": 883
+}

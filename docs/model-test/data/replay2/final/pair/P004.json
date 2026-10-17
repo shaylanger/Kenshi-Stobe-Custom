@@ -1,0 +1,56 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/savever.py a5f5a157aa21dff07 A3 ''",
+   "why": "Save the SUITE-A3 verifier PASS the same way round A2 was saved, before the round is collected."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "write /mnt/c/KenshiTestRuns/invest/suite/A3/quota-before.txt as '5-hour limit 6% used; Weekly all models 2% used; Weekly Fable 0% used' (the pre-round read); then get_usage (session_id self) and write /mnt/c/KenshiTestRuns/invest/suite/A3/quota-after.txt in the same one-line format; then MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/collect.py A3 SUITE-A3",
+   "why": "collect.py reads the quota files, so both must be written first, in the A2 bookkeeping order (neither peer wrote quota-before)."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiTestRuns/invest/suite/tools/state-check.sh /mnt/c/KenshiTestRuns/invest/suite/A3/state-after.txt",
+   "why": "Confirm the suite state after the A3 round, as done for A2."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "/mnt/c/KenshiTestRuns/invest/suite/PROGRESS.md: replace the line starting 'Done rounds:' with 'Done rounds: B1 (ticket SUITE-B1b), B2, B3, A1 (PASS), A2 (PASS), A3 (PASS)'",
+   "why": "Keep the suite progress line in step with the verified rounds."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md, section Right now: record SUITE-A3 PASS (Mouse has no local places to offer; the Stobe.dll in use at D:/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/Stobe.dll, 3,182,080 bytes, has no travel_destinations producer because LocalTravel.cpp never reached the build tree, so the server replaces her whole reply with the canned line; line 504 per A3, 561 per A2, resolve by grep). Fix plan: Phase 1 producer restore plus build guard, then Phase 2 walk to the chosen place. Record the SUITE-A2 server findings: bare Tengu persona seed rows at data/schema.sql 3404-3408 (Emperor persona on every NPC named Tengu) and the canned I haven't agreed to that job line replacing her whole reply; both not started. Record patch agent mouse-localtravel-p1 (status C:/KenshiTestRuns/agents/mouse-localtravel-p1.status), its expected outputs, and the open decisions for Shay. Nothing installed, nothing launched, no 5090 row, server tree and ss-merge untouched. Update the program ledger only if the check finds one.",
+   "why": "HANDOFF Right now must hold the live state after every agent report, and this report changes the state of the Mouse loop."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "name: mouse-localtravel-p1; description: '[case:patch] [ticket:SUITE-A3] restore LocalTravel producer, Phase 1 only'; brief: 'Read C:/KenshiTestRuns/invest/suite/A3/report.md, Phase 1 section only; the verifier passed its root cause. Restore the missing LocalTravel producer in the native build: /root/STOBE-src/src has no LocalTravel file, while components/STOBE/src/Context.cpp includes LocalTravel.h and writes travel_destinations near line 3620 (handle anchor near 3615). Write the change as an anchored patch script under C:/KenshiModding/pending-fixes/ (assert anchors, take a tree root argument, reproducible). Add LocalTravel.cpp to the SOURCES line of C:/StobeBuild/build_portable.bat (line 21) with a guard that fails the build when the file is missing. Compile the portable build ONLY if Get-Process -Name kenshi* returns nothing; if Kenshi is running, stop after the patch is written and checked and report compile HELD. Do NOT install anything, do not copy into D:/Steam, do not launch Kenshi, do not start the Stobe server, run no 5090 test row, and do not touch /var/www/html/StobeServer, ss-merge or any database. Report: patch script path, files changed, compile result or HELD, the grep -c -a travel_destinations count on the built DLL if built, its SHA256, and which tree is the build truth. Keep tools/automation/agent-status.ps1 mouse-localtravel-p1 current (RUNNING, then DONE or FAILED). Finish with SubagentHandback.'",
+   "why": "Phase 1 is offline code and build work only, so one patch agent is the right size; the compile is gated on Kenshi not running because Shay is on manual play on this PC."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SendMessage to Shay's relay session: SUITE-A3 verified PASS. Mouse's no-places loop is a build problem, not dialogue logic. The Stobe.dll you play (D:/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/Stobe.dll, 3,182,080 bytes) has no travel_destinations producer: LocalTravel.cpp never reached the build tree, so she sends no places, and the server throws away her reply and speaks the canned line. Separate server bug from SUITE-A2: the bare name Tengu carries the Emperor persona (data/schema.sql lines 3404-3408). Nothing is installed or launched. Decisions, asked together: (1) may I install the reviewed Stobe.dll over your Main Steam copies once it compiles and checks out? (2) The patch compile waits while Kenshi runs on this PC; tell me when you are done if you want it compiled now. (3) Method: six read-only investigation rounds (B1-B3, A1-A3, about 16 min and about 0.72 USD each) on this one bug. I propose we stop investigation rounds and go to patch, compile, offline check, then one install decision. Speed estimate: not measured yet; the patch agent's first report will set it. The server fixes for the Tengu seed and the canned fallback line wait for your OK and are not started.",
+   "why": "Shay needs the root cause, the install and compile decisions, and the method change in one message while he is on manual play."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "mouse-localtravel-p1 SubagentHandback (patch path, compile result or HELD, DLL grep count and SHA256), the savever, collect and state-check outputs, and Shay's answer on install and compile hold",
+   "why": "The next HANDOFF entry, the install question and any server patch depend on these results."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "Get-Process -Name kenshi* -ErrorAction SilentlyContinue (gates the patch compile)",
+  "Get-FileHash -Algorithm SHA256 on D:/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/Stobe.dll and D:/Steam/steamapps/common/Kenshi/mods/Stobe/Stobe.dll (expect 769859CB...), plus grep -c -a travel_destinations on both",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'ls /root/STOBE-src/src | grep -i localtravel; echo rc=$?'",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'grep -n text /var/www/html/StobeServer/lib/travel_companionship.php | head -40' (resolves the line 504 vs 561 discrepancy)",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'git -C /var/www/html/StobeServer status --short | head; git -C /var/www/html/StobeServer log --oneline -3' (read-only, before any later server patch)",
+  "ls C:/KenshiTestRuns/programs (is there a program ledger for the suite round?)",
+  "git -C C:/KenshiModding status --short testing/HANDOFF.md pending-fixes",
+  "get_usage (session_id self), read before writing A3/quota-after.txt"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent: name imm26-tailfix, description \"[case:patch] tail relay follows current coordinator\", brief: Shay ordered (relay message just now): build the fix I proposed plus a close rule. (1) tools/automation/tail-relay.ps1: when no -ToSession is given, resolve the CURRENT coordinator session (newest non-tail coordinator, never a session in tail mode; look at tail-mode.ps1 list and the coordinator heartbeat/session files; if unknown, say so) and send to it, and always also write the inbox\\coordinator file, so an old tail's reports follow the newest coordinator after a second handoff. (2) When a tail session has finished all its active sub tasks (every agent done+acked or its relay delivered), it must send the current coordinator a message that this tail is done and should be closed, so finished sessions are not left open; the coordinator then closes it via tail-close.ps1. (3) Update docs/TAIL_HANDOFF_CONTRACT.md and the tail-hooks/tail-ledger selftests, run all selftests, commit with item number and push (identity shaylanger). Do not edit any script a queued or running batch uses. Checkpoint to your status file via agent-status.ps1.",
+   "why": "Shay's last message in the conversation ordered the proposed relay-follows-current-coordinator fix plus tail-closes-after-relay rule and it was not yet acted on; the draft ignored it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next event from the restarted waker (task bwp1pu36n) and for imm26-4080-op2h's reply to the lane-idle message already sent; do not resend it",
+   "why": "The batch itself only shows the waker restart wrapper exited 0 with the new waker running; the lane-idle query was already sent."
+  }
+ ],
+ "checks": [
+  "tail -c 800 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2b1a8eca-c7aa-44ff-bda2-326523d5864e/tasks/bwp1pu36n.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 list"
+ ]
+}

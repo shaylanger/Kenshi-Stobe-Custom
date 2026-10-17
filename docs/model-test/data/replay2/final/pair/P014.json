@@ -1,0 +1,40 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "5090 lane i3 (marker 5090-imm26, reserved for lane-setup validation): no relaunch, save load or row start on it until the checks and replies below name its state",
+   "why": "The event reports kenshi=no on the 5090 while the 5090 markers are still claimed, and a relaunch while the owner may still be acting on that lane would collide."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to imm26-lane-setup: Coordinator here. The rig check reports 5090 kenshi=no while your lane-setup marker is claimed. Reply in one line with the lane and pid you last touched, whether that game was stopped or lost, and whether your live validation is still running. Do not relaunch or stop any game until I answer.",
+   "why": "The lane-setup helper is the agent whose live validation reloads a save on a 5090 lane, so it is the likeliest cause and must report before anything is touched."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to imm26-lanes-5090b: Coordinator here. Report the live state of 5090 lanes i4 and i5 (game pid, marker, backend port) and confirm they are still up. Do not stop or relaunch anything.",
+   "why": "The stall lists 5090 markers for i4 and i5, and I need them confirmed up before I treat the stall as confined to i3."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "4080: no action. Wait for the two 5090 replies and the check output, then ack the RIG STALL alert with alert-ack.ps1 (id not shown in this batch) and the named cause.",
+   "why": "The 4080 is reported BUSY, not stalled, and its last report had i3 and i4 both up, so the stall is on the 5090 side; the alert should be acked only after the cause is named, since an ack alone does not close a true condition."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background Bash task)",
+   "why": "The event-wait returned on this stall, so nothing watches the lanes until it is restarted."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls C:\\KenshiTestRuns\\inflight",
+  "sed -n 1,4p C:\\KenshiTestRuns\\agents\\imm26-lane-setup.status",
+  "sed -n 1,4p C:\\KenshiTestRuns\\agents\\imm26-lanes-5090b.status",
+  "List running Kenshi processes on the 5090 with their command-line lane marker (Get-CimInstance Win32_Process), read-only",
+  "ssh 4080 powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KAH\\ctl.ps1 status -Instance 3 (read-only)",
+  "ssh 4080 powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KAH\\ctl.ps1 status -Instance 4 (read-only)",
+  "ls C:\\KenshiTestRuns\\alerts\\open"
+ ]
+}

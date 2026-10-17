@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The Stop guard reports 7 inflight markers (newest imm26-4080-i4op8 and imm26-rowtools44) with no waker running, so the session must keep event-wait.sh armed to receive peer messages, agent results and stalls; no --batch because no batch is running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the event-wait wake-up, then act on: imm26-rowfix-reload DONE/FAILED, imm26-4080-i4op8 and imm26-4080-op2jc status changes, imm26-rowtools44 status, any inbox\\coordinator message",
+   "why": "The 4080 operators and the row-tool fixer are the work in flight, and nothing in this batch needs a new action beyond keeping the waker armed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls -la /mnt/c/KenshiTestRuns/inflight",
+  "tail -1 /c/KenshiTestRuns/agents/imm26-4080-i4op8.status"
+ ]
+}

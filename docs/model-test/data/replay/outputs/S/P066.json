@@ -1,0 +1,16 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not record an idle reason and do not start extra 5090 work. The 5090 is not idle: Shay allowed ONE 5090 lane (5090-i4) at ~22:40 and I spawned operator imm26-5090-i4-hard2b3 minutes ago. Its lane-setup, lane backend and launch have not yet taken the game lock, so the guard sees an idle 5090. Keep the waker armed (event-stream.sh --as event-wait) and wait for the operator's launch (game lock + inflight marker) or its first status update.",
+   "why": "The idle-5090 block is a transient start-up gap with a just-spawned operator on the one allowed lane; recording kenshi-ctl.ps1 idle only to quiet the hook is forbidden, and 5090-i3/i5 stay held by Shay so there is no other 5090 work to start."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b3.status",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 -NoMemory",
+  "Get-ChildItem C:\\KenshiTestRuns\\inflight"
+ ]
+}

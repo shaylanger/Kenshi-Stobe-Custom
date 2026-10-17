@@ -1,0 +1,20 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Confirmed, grep.exe not grp.exe. PID 18532 is a leftover: started 10:06 today, parent process gone, running grep -rn isPlayerCharacter --include=*.h / -l over the drive root for about 3 hours. I am checking agents/ and inflight/ to confirm no agent claims it. PIDs 23960 and 37200 are current log checks started at 13:12; leave them alone. My Stop-Process was denied by the auto-mode permission checker, so I have not retried or worked around it. To clear it, run this in the prompt: ! powershell -NoProfile -Command \"Stop-Process -Id 18532 -Force\". Tell me to retry if you add a PowerShell permission rule or confirm the kill.",
+   "why": "Shay asked a clarification about grep.exe; the answer is the stale PID 18532, and because the kill was denied, Shay has to run it or allow it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for Shay to run the Stop-Process command or tell me to retry; the waker keeps running",
+   "why": "The kill was denied once and CLAUDE.md says to stop and tell Shay rather than retry or work around a denial."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter 'ProcessId=18532' | Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine | Format-List\"",
+  "powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter 'Name=''grep.exe''' | Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine | Format-List\"",
+  "Grep pattern 18532 in C:\\KenshiTestRuns\\agents and C:\\KenshiTestRuns\\inflight to confirm no agent owns that process"
+ ]
+}

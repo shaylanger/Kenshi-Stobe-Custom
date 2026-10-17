@@ -1,0 +1,41 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "bash tools/automation/event-wait.sh   (run_in_background, in WSL; restart at once because the waker just exited after delivering this inbox event)",
+   "why": "Agents are still RUNNING (lanes-4080, lanes-5090, wpA4, wpB4, op2b, travel-investigate) so a waker must always be running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "No ack or reply to imm26-lanes-4080: its message is an interim report (lane i4 UP, DeepInfra applied to i3+i4 DBs), not a request. Wait for its final report with the isolation-check result and RAM/GPU/CPU numbers.",
+   "why": "The lane does not count as up until lane-isolation-check passes; the interim text is truncated so its isolation result and latency are unknown."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' + C:\\KenshiTestRuns\\programs\\imm26.json: record 4080 lane i4 UP (C:\\KenshiInst\\4, Kenshi pid 348, save kah-imm26-4080-i4, backend 127.0.0.1:18085, DB stobe_standalone4080_i4_test, marker inflight\\4080-imm26-i4), DeepInfra applied to i3+i4, isolation check pending, row operator for i4 not yet started",
+   "why": "The ledger and HANDOFF must be updated after every agent report so a successor can resume."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "ssh 4080 \"powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KAH\\lane-isolation-check.ps1\"  (exact path on the 4080 is unknown; the tool is tools/automation/lane-isolation-check.ps1 on this repo, so use the 4080 copy the lanes agent installed). Run for lanes i3 and i4.",
+   "why": "Shay required that no lane count as up before it passes the isolation check (own ports, DB, save, window position, no shared files)."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:run] name imm26-4080-i4op (new name, check names in agents\\ first): row operator for 4080 lane i4 only (save kah-imm26-4080-i4, backend 127.0.0.1:18085, DB stobe_standalone4080_i4_test, C:\\KenshiInst\\4). Take the next open imm26 rows not already taken by imm26-4080-op2b (rows 06-e, 08, 12, 13), listed in testing/NPC_IMMERSION_26_TESTS.md. Live DeepInfra chat model, so live-model wording rows are valid. Only start after the isolation check passes. Never touch lane i3, the live install, server or DB. Keep agents\\imm26-4080-i4op.status current via agent-status.ps1, one RESULT line per row, checkpoint every ~40k tokens.",
+   "why": "A new lane must be testing, not idling (queues never run dry); it starts only after isolation passes and does not collide with op2b's rows."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Next: imm26-lanes-5090 report (i3 DeepInfra chat check, i4/i5), then kill llama PID 74148 and its bridge on the 5090 myself once i3 passes; imm26-lanes-4080 final report (it stops the 4080 llama and reports RAM freed).",
+   "why": "The 5090 llama kill is gated on i3 passing a real chat reply, and the 4080 final numbers decide whether a third lane fits."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-lanes-4080.status",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox -Filter *lanes-4080*",
+  "ssh 4080 \"dir C:\\KAH\\inflight\""
+ ]
+}

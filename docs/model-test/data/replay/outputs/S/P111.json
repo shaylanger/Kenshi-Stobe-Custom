@@ -1,0 +1,20 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The digest waker exited 0 after delivering this wake, so it must be restarted at once or the work in flight goes unwatched."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "No coordinator action on SETUP-FAIL 20-a (lane 4080-i3). Wait for the owning tail 245d8ad7 and operator imm26-4080-i3op22 to handle it, or for a relay in inbox/coordinator.",
+   "why": "The ticket says it has the same travel_agreement defect as 19-a and 14-a, which the tail-owned operators already own. The previous 26-b ticket (a tail-owned agent's defect) was handled the same way, and I do not respawn or steer agents owned by a live tail."
+  }
+ ],
+ "checks": [
+  "Read C:/KenshiTestRuns/inbox/coordinator/20261016-131540-setupfail-20-a.msg (or its delivered/ copy) to see whether the ticket carries a ready unblock recipe or says 'unknown'",
+  "grep -rn '19-a\\|14-a' C:/KenshiModding/testing/HANDOFF.md to confirm the same travel_agreement defect already has an owner and fix",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

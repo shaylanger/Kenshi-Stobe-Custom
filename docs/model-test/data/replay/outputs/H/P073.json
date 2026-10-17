@@ -1,0 +1,28 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "grep -n -i -E 'confirm|accepted|status|PI-[0-9]+' C:/KenshiModding/docs/PROCESS_IDEAS.md",
+   "why": "Shay wrote 'lets do the confirmed PI items' but the batch does not say which items he confirmed, so the list must be read before acting."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "implement each confirmed PI item from docs/PROCESS_IDEAS.md as its own fix (one per commit, record it in the PI entry, commit and push)",
+   "why": "Shay's order is to implement the confirmed items now; a logged-only item does not count as done."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not apply any PI item that would weaken a timeout, stall, idle or dead-agent catch; send those to Shay only",
+   "why": "Standing rule: process ideas that weaken those catches go to Shay and are never applied by the coordinator."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Which PI numbers did you confirm? I am doing the confirmed ones now and will report each one as done.",
+   "why": "The batch does not name the confirmed items, so Shay is asked once, without blocking the work."
+  }
+ ],
+ "checks": [
+  "grep -n -i -E 'confirm|accepted|status|PI-[0-9]+' C:/KenshiModding/docs/PROCESS_IDEAS.md"
+ ]
+}

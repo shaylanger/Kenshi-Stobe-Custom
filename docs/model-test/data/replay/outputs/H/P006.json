@@ -1,0 +1,23 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no action on the 5090 RIG IDLE line (kenshi=no lock=free idle_reason=none)",
+   "why": "The 5090 idle is intended: Shay's standing rule 'No new 5090 sessions' (2026-10-15) holds new 5090 testing, the imm26 resume plan assigns no 5090 row, and the 4080 marker is BUSY, so this is not a stall to fix."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (Bash, run_in_background)",
+   "why": "The event wait ended on this event and must keep running while the six imm26 agents and the 4080-imm26 job are in flight."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the completion reports of imm26-wpA3, imm26-wpB3, imm26-wpC1c, imm26-wpC2c, imm26-wpD3 and imm26-N2c (status files agents\\imm26-<name>.status)",
+   "why": "These six agents are the only work in flight, and each report is acted on as it arrives."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

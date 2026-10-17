@@ -1,0 +1,38 @@
+{
+ "id": "P098",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:11:00.944Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cat /c/KenshiTestRuns/inbox/coordinator/done/*setupfail-08-d.msg | cut -c1-1800; ls /c/KenshiTestRuns/inbox/operators | grep -i -E \"sfS|sfT\"; cd /c/KenshiModding; powershell -NoProfile -File tools/automation/setupfail.ps1 list 2>&1 | grep -E \"08-d|05-cx\" | cut -c1-250",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiTestRuns; ls inbox/coordinator inbox/delivered 2>/dev/null | head; find inbox -name \"*setupfail-08-d*\" | head -2; cut -c1-1500 inbox/operators/sfS.txt | head -20; cut -c1-1200 inbox/operators/sfT.txt | head -12",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/setupfail.ps1 state 08-d ready \"recipe v2 by sfS (unblockrun_sfs.sh 08-d 4080-i4 --allow-retry ...) + server fix sfT (lane-deploy first); notes inbox/operators/sfS.txt sfT.txt\" 2>&1 | tail -2; powershell -NoProfile -File tools/automation/setupfail.ps1 state 05-cx ready \"recipe v2 by sfS: hxrun_cx2.sh 05-cx <lane> --allow-retry; note inbox/operators/sfS.txt\" 2>&1 | tail -2\ncat >> /c/KenshiTestRuns/inbox/operators/coordinator16-server-fixes.txt <<'EOF'\n08-d: do NOT rerun the old unblockrun_a.sh. Sequence on 4080-i4: lane-deploy.sh (sfT server fix in), then `KAH_PF_ISOLATION=0 bash rowtools/unblockrun_sfs.sh 08-d 4080-i4 --allow-retry \"sfS v2 + sfT\"` (see sfS.txt). 05-cx: hxrun_cx2.sh 05-cx <lane> --allow-retry (sfS.txt).\nEOF",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -10 | cut -c1-500",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The quiet-DONE waker works: the last wake carried six DONE lines and woke only because of a 08-d setup-fail. Here is where things stand:\n\n- **`sfS` (05-cx and 08-d v2 recipes):** done, and offline-verified only.\n- **08-d:** the 4080-i4 operator hit a setup-fail on the old tooling. I routed it to the v2 runner `unblockrun_sfs.sh` plus the `sfT` server fix, with a `lane-deploy.sh` first. The ticket is marked ready.\n- **05-cx:** the new runner is `hxrun_cx2.sh 05-cx <lane> --allow-retry`. There was...[truncated 121 chars]"
+ ],
+ "event_text_chars": 2102
+}

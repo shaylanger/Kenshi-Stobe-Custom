@@ -1,0 +1,43 @@
+{
+ "id": "P119",
+ "session": "3a21a7b9",
+ "ts": "2026-10-16T20:09:20.378Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "Remove-Item C:\\KenshiTestRuns\\pilot\\haiku-i4\\ACTIVE -ErrorAction SilentlyContinue; Add-Content C:\\KenshiTestRuns\\lanes.held \"5090-i4\"; powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-no-operator-5090-i4 \"Haiku pilot hk2 DONE (13 rows, agree 11/12); ACTIVE removed, 5090-i4 parked in lanes.held; SUMMARY-final.md written\"; powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-5090-i4-hk2 2>&1 | select -First 3",
+   "why": "Run the final audit for hk2 and close the pilot lane."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "sed -n 60,80p /c/KenshiTestRuns/pilot/haiku-i4/SUMMARY-final.md | cut -c1-300; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh >/dev/null 2>&1 & sleep 0",
+   "why": "Run the final audit for hk2 and close the pilot lane."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\rearm-waker.ps1 -KillOnly 2>&1 | select -Last 2",
+   "why": "Run the final audit for hk2 and close the pilot lane."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "Run the final audit for hk2 and close the pilot lane."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiTestRuns; head -c 3500 agents/out/imm26-5090-i4-hk2/out-20261016-140851.md; ls pilot/haiku-i4/ | head; cat lanes.held | tail -3",
+  "cd /c/KenshiTestRuns/pilot/haiku-i4; ls -l --time-style=+%H:%M SUMMARY.md SUMMARY-early.md; head -c 2500 SUMMARY.md",
+  "cd /c/KenshiModding; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiModding/tools/automation/pilot-audit.py imm26-5090-i4-hk2 --paired imm26-5090-i3op21,imm26-50...[truncated 124 chars]"
+ ],
+ "narration": [
+  "Run the final audit for hk2 and close the pilot lane.",
+  "The Haiku pilot (hk2) is finished. I closed it and wrote the final audit to `C:\\KenshiTestRuns\\pilot\\haiku-i4\\SUMMARY-final.md`.\n\n| | Haiku pilot (hk2) | Sonnet lanes, paired |\n|---|---|---|\n| Rows closed | 13 | n/a |\n| Rows per hour | 11.7 | 5.2 |\n| Median time per row | 2m18s | 7m29s between finished results |\n| Agreement with the checker | 11 of 12 (92%) | n/a |\n| False claims | 2 of 157 (1%) | 3 of 285 (1%) |\n| Rows with an accepted PASS or FAIL | 5 | n/a |\n\n- **Rows closed:** two PASS (02-c...[truncated 870 chars]"
+ ],
+ "event_text_chars": 1013
+}

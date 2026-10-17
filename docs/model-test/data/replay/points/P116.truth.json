@@ -1,0 +1,33 @@
+{
+ "id": "P116",
+ "session": "60ad9d7d",
+ "ts": "2026-10-16T20:04:07.166Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "sed -n 1,15p tools/automation/agent-abandon.ps1",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/agent-status.ps1 imm26-fix15bx05cx STOPPED-CONTEXT \"05-cx keep regex + 15-bx v3 scene\" \"TaskStop'd by tail 17 after 20+ min with no status\" \"uncommitted partial: rowtools hxdefs_cx3.sh hxrun_cx3.sh hx-selftest_cx3.sh hxd_winpath_selftest.sh hxdefs.sh.candidate README_TRIP.md\" \"respawn fresh as imm26-fix15bx05cx2; inspect partial files first\"; ls /c/KenshiTestRuns/respawn | grep 15bx",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/tail-wait.ps1 -Session 60ad9d7d-290e-4ca0-9909-9c33f627d722",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "I wrote a STOPPED-CONTEXT status for `imm26-fix15bx05cx`. A respawn todo now exists for the new coordinator, and the tail waiter is re-armed.\n\nThe waiter kept exiting at once because that agent had no status file. The status line records the uncommitted partial files in `rowtools/` and suggests respawning it fresh as `imm26-fix15bx05cx2`.\n\nFour agents are still running under this tail: hk2, op9p, fix20a19e and fix26f11b. I'll relay each one as it finishes."
+ ],
+ "event_text_chars": 1281
+}

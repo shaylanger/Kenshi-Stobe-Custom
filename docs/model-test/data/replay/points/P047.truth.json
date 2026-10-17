@@ -1,0 +1,28 @@
+{
+ "id": "P047",
+ "session": "6d1f3011",
+ "ts": "2026-10-16T02:02:48.099Z",
+ "class": "other",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=ad38178c9940fc1ed: Coordinator: thanks. One safety rule: do NOT run game speed 10 for minutes (the i5 operator starved Shay and reset its lane). Above speed 5 only under tools/stobe-goal-watch.sh, and check Shay/squad hunger every ~60 s. Continue 03-b then 18-a.",
+   "why": ""
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:investigate] row 19 failures\nprompt: [case:investigate] Agent name: imm26-inv19. Read-only investigation, no edits to code, no game commands. Rows 19-a / 19-a-nc2 / 19-d (trip continues after save+load, option B; memory trip-continues-after-load; WP-A trip resume deployed by imm26-wpC-trip, tests in pending-fixes/imm26-tripresume*) fail on several lanes: 5090-i3 (19-a PASS at ~19:5x, 19-a-nc2 FAIL twice 'resumed at 119.5u', 19-d FAIL then SETUP-FAIL), 4080-i3 (19-a SETUP-FAIL 19:57), 4080-i4 (19-a FAIL x3, 19:52 latest). Use C:\\KenshiTestRuns\\row-timing.log, testing/NPC_IMMERSION_26_TESTS.md rows 19-*, each lane's evidence dir (C:\\KenshiTestRuns\\imm26-5090-i3\\rows\\19-*, imm26-4080-i4, imm26-4080), lane server logs and stobe.log (grep, tail, line ranges only), and the operators' status/handoff files in C:\\KenshiTestRuns\\agents (imm26-5090-i3-hard2b, imm26-4080-i4op7b, imm26-4080-op2j). Question: for each failing row, is it a product bug (trip not resumed / wrong arrival), a test/setup problem (row script, fixture, distance, timing), or the DeepInfra 402 outage (before 20:00 Win clock = before the balance came back around 19:48)? Give the smallest fix or row change per cause with file/line evidence, and which rows are safe to rerun now. Report to C:\\KenshiTestRuns\\agents\\out\\imm26-inv19\\latest.md (save-report.ps1 if Write blocked); hand-back <= 10 lines. Status via tools/automation/agent-status.ps1 imm26-inv19. Target <= 80k tokens.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The 5090-i4 operator is working, so that lane is not stuck. Its preflight was blocked because the i3 and i4 game windows overlapped, and i5 was on the Samsung display. It moved the i4 and i5 windows, and preflight now passes. A live chat reply came back, which confirms the 402 is fixed. No 402 FAILs were marked on this lane. It's now running 03-b, with 18-a and the reruns after that.\n\nSo all five lanes have a working operator, though each is at a different stage.\n\nTwo things I did:\n- **Speed war...[truncated 517 chars]"
+ ],
+ "event_text_chars": 1210
+}

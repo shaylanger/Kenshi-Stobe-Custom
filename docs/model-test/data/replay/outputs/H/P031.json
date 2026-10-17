@@ -1,0 +1,24 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not spawn imm26-5090-i3op3b",
+   "why": "imm26-5090-i3op4 is already the live successor of imm26-5090-i3op3 on lane 5090 i3 (spawned earlier this session with the handoff brief), so a second operator would double up on the same lane; the hook did not recognise that successor."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Record imm26-5090-i3op4 as the successor of imm26-5090-i3op3 in the program ledger (tools/automation/program-ledger.ps1, under C:\\KenshiTestRuns\\programs), then re-check the Stop hook",
+   "why": "So the waker guard counts the successor and stops reporting imm26-5090-i3op3 as lost work (PI-11 successor recognition)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the read-only check of imm26-5090-i3op4 status",
+   "why": "If i3op4 is not RUNNING, the successor is not real and the respawn of imm26-5090-i3op3b must be reconsidered."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "C:\\KenshiTestRuns\\agents\\imm26-5090-i3op4.status"
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "id": "P100",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:21:15.303Z",
+ "class": "other",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...o copy at `docs/cost-audit/ledger.md`.  I made a mistake along the way: I started a waker with a"
+ },
+ "actions": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "",
+   "why": "`imm26-sfU2` finished and its scripts are pushed (commits `8c2c7911` and `f00884bc`). It tested nothing in-game.\n\n- **15-bx:** my `rl_say` theory was wrong. Cind's reply was generated but cancelled before it was spoken, and Cind was 35.6 units from the fight. The v2 scene now repeats the say once after a cancelled reply. A second cancel is a SETUP-FAIL that names the cause. Why the game cancels the reply is still unknown and needs a live look.\n- **16-bx:** the v2 runner `hxrun_v2.sh` clears the ...[truncated 201 chars]"
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "`imm26-sfU2` finished and its scripts are pushed (commits `8c2c7911` and `f00884bc`). It tested nothing in-game.\n\n- **15-bx:** my `rl_say` theory was wrong. Cind's reply was generated but cancelled before it was spoken, and Cind was 35.6 units from the fight. The v2 scene now repeats the say once after a cancelled reply. A second cancel is a SETUP-FAIL that names the cause. Why the game cancels the reply is still unknown and needs a live look.\n- **16-bx:** the v2 runner `hxrun_v2.sh` clears the ...[truncated 201 chars]"
+ ],
+ "event_text_chars": 934
+}

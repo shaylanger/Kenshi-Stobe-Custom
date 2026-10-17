@@ -1,0 +1,14 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "No new command. Wait for the next notification from agent aac49e2e4018cf088 (name imm26-sfU2), which may resume on its own background work and notify again. Its report is already delivered and acted on: the 15-bx v2 routing and the 16-bx/02-ax/02-cx v2 notes were appended to inbox/operators/coordinator16-server-fixes.txt, and the 15-bx setup-fail state was set to ready.",
+   "why": "The event is only a completion notice for sfU2 whose final report was already relayed and routed in the preceding conversation, and the agent says its result may be interim while its own background work runs."
+  }
+ ],
+ "checks": [
+  "cat /c/KenshiTestRuns/agents/imm26-sfU2.status",
+  "ls /c/KenshiTestRuns/agents/out/imm26-sfU2"
+ ]
+}

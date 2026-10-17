@@ -1,0 +1,13 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "grep.exe it is. PID 18532 is the stale one: grep -rn isPlayerCharacter --include=*.h / -l, started 10:06, parent process gone, not from a current agent. My Stop-Process on it was denied by the permission checker, so I have not retried or worked around it. PIDs 23960 and 37200 (started 13:12) are live agent log greps that finish in seconds; leave them alone. To clear 18532 yourself, run: ! powershell -NoProfile -Command 'Stop-Process -Id 18532 -Force'",
+   "why": "Shay clarified the grep.exe question; the stale process is identified, the kill was denied by the permission checker so the coordinator must not retry it, and Shay is the one who can authorise or run it."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Process -Id 18532,23960,37200 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,StartTime | Format-Table -AutoSize\""
+ ]
+}

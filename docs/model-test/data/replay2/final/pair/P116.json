@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none: the imm26-4080-i3op23 DONE relay was already sent by the bq15px3j6 tail-relay.ps1 call (report C:\\KenshiTestRuns\\agents\\out\\imm26-4080-i3op23\\out-20261016-140346.md); do not re-send",
+   "why": "The relay is already written, and a second copy would duplicate the 23-b PASS / 22-b FAIL result for the new coordinator."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "First run ls -la /c/KenshiTestRuns/tail/ | grep 60ad9d7d; if no live tail-wait is running, start exactly one: powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 60ad9d7d-290e-4ca0-9909-9c33f627d722 (run_in_background)",
+   "why": "The tail still owns imm26-5090-i4-hk2, imm26-5090-i5-op9p, imm26-fix20a19e and imm26-fix26f11b; the bq15px3j6 command may have exited with its waiter, so exactly one waiter must be alive and a second would duplicate it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "When each of imm26-5090-i4-hk2, imm26-5090-i5-op9p, imm26-fix20a19e and imm26-fix26f11b finishes: save its report to a file, run tail-relay.ps1 -Agent <name> -Kind DONE -Report <file> -Summary <text>, then deliver through inbox C:\\KenshiTestRuns\\inbox\\coordinator; silent 10 min -> SendMessage the agent, 20 min -> TaskStop it and tell the new coordinator",
+   "why": "Each result must reach the new coordinator, and the Stop hook holds the tail until its relay is delivered."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none for imm26-fix15bx05cx (no respawn, no agent-abandon); none for the 22-b reachable --gate rerun or the NC25 5090 install",
+   "why": "The STALL relay already gave the new coordinator the uncommitted rowtools/ hint; respawn, abandon, spawn and install are new-coordinator decisions, and the tail spawns and decides nothing."
+  }
+ ],
+ "checks": [
+  "ls -la /c/KenshiTestRuns/tail/ | grep 60ad9d7d",
+  "ls -la /c/KenshiTestRuns/inbox/coordinator | grep -i i3op23",
+  "for a in imm26-5090-i4-hk2 imm26-5090-i5-op9p imm26-fix20a19e imm26-fix26f11b; do head -2 /c/KenshiTestRuns/agents/$a.status; done"
+ ]
+}

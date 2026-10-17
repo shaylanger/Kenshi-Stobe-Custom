@@ -1,0 +1,20 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "FIX-server: the code for A (bare Tengu gets no unique persona, negotiation tier-5 regex) and B (refused non-travel orders keep the NPC's spoken line, B2 generic fallback 'I don't take orders from you.', known places in the travel prompt) is in both server trees: /var/www/html/StobeServer (live) and /root/stobe-work/ss-merge. The live DB step (A step 3: delete the bare-name Tengu rows from bio_unique and bio_unique_custom) was blocked by the permission checker and is NOT done; I will not retry it or route around the block. Until it is approved the live DB still holds the Tengu rows and the bio_unique regression test will fail. Backups and DB dumps: C:\\KenshiTestRuns\\invest\\fixes\\backup\\FIX-server\\. Decision needed from you: approve the DB delete and say how you want it run, or leave it. Nothing is installed to the game and no 5090 test has started.",
+   "why": "The permission checker blocked a live DB write, and CLAUDE.md says a blocked action stays blocked and must be reported to Shay."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Via wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -s: php -l on every changed PHP file in /var/www/html/StobeServer and in /root/stobe-work/ss-merge (lib/negotiation_phase1.php, lib/travel_companionship.php, lib/chat_helper_functions.php, debug/db_updates.php, tests/bio_unique_regression.php, tests/travel_order_refusal_regression.php), then the offline stobe-tests suite in both trees. Expect bio_unique_regression to fail on the live Tengu rows until the DB step is approved; do not weaken its assertions.",
+   "why": "CLAUDE.md requires php -l and offline stobe-tests to pass before the server patch is deployed or the next game batch runs, and the agent's own test results are truncated in this file."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c 'cd /var/www/html/StobeServer && git status --short && git log --oneline -3'",
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c 'for t in data/schema.sql debug/db_updates.php lib/negotiation_phase1.php lib/travel_companionship.php lib/chat_helper_functions.php tests/bio_unique_regression.php tests/travel_order_refusal_regression.php; do sha256sum /var/www/html/StobeServer/$t /root/stobe-work/ss-merge/$t; done'",
+  "Read the FIX-server agent status file (its path is not in this file) to confirm the agent is DONE and has no successor pending."
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 (tail 16 relay: wk1 DONE + waker digest candidate; exact args per testing/AGENT_PROMPTS.md overlap-handoff step), then move the handled relay file to C:/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "This is a relay from tail session 16 reporting an agent result; the new coordinator acks it and treats it as a result, not an order, and wk1 is DONE so nothing is respawned."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Leave tools/automation/event-wait.sh untouched; keep the running waker. Swap in event-wait.sh.candidate only in a waker restart window with no waker running, after the candidate's selftests (digest, batch, filter) are re-run here and pass.",
+   "why": "A mid-run edit or replacement of a script a live waker uses kills it, and the candidate has not yet been exercised live for lane-idle and health wakes."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding log --oneline -3 -- tools/automation/event-wait.sh.candidate (confirm d87eee78 and 92c2d38e are pushed)",
+  "git -C C:/KenshiModding status --short -- tools/automation/event-wait.sh tools/automation/event-wait.sh.candidate (confirm event-wait.sh is still the live version and untouched)",
+  "ls C:/KenshiTestRuns/inbox/coordinator (confirm the wk1 relay is the only new item and no other relay is pending)",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (confirm the waker is running and wk1 shows DONE)"
+ ]
+}

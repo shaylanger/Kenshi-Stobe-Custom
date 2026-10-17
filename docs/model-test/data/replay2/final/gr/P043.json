@@ -1,0 +1,15 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the background watcher bnp0vbz0u and the event-wait waker running. Wait for imm26-wpC-b5 or imm26-5090-i5-op6 to reach DONE, FAILED or STOPPED-CONTEXT, then save its report to a file, relay it with tail-relay.ps1 plus SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator, and wait for the ACK. If imm26-5090-i5-op6 is still silent at 20 min (about 19:55 local), TaskStop it and tell the new coordinator.",
+   "why": "Both agents are still RUNNING and the tail may not end until each is DONE and acknowledged; the tail spawns and decides nothing new, so no other action is due for this Stop-hook block."
+  }
+ ],
+ "checks": [
+  "PowerShell: Get-Date -f HH:mm; Get-Content C:\\KenshiTestRuns\\agents\\imm26-wpC-b5.status -TotalCount 3; Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op6.status -TotalCount 3",
+  "PowerShell: Get-Content C:\\KenshiTestRuns\\tail\\6cd72ef5-6329-47f2-9c32-981e5e40dc16.flag (confirm the tail flag still names this session and the two agents)",
+  "PowerShell: Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator | Select-Object -Last 5 Name (check for a new relay or ACK from the new coordinator)"
+ ]
+}

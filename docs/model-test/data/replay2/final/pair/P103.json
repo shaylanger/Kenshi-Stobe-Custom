@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/rearm-waker.ps1 -KillOnly",
+   "why": "Kill any stray event-wait.sh (a bare-& waker was started earlier in this session) so only one waker is re-armed next."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "Waker bvpgoc6vb completed with exit 0 while agents imm26-4080-i4op14, imm26-sfR2, imm26-pilotA and imm26-pilotC are still in flight, so exactly one waker must run again."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none (no message to imm26-pilotA, imm26-pilotC, imm26-sfR2 or imm26-4080-i4op14)",
+   "why": "This event only reports the waker ending; the agents report through their own completion notifications and must not be steered mid-run."
+  }
+ ],
+ "checks": [
+  "tail -20 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/245d8ad7-6bab-4115-8188-ea4724f6a5b6/tasks/bvpgoc6vb.output | cut -c1-300 (read which event woke the waker; act on any lane, agent or alert line before re-arming)",
+  "powershell -NoProfile -File tools/automation/agent-ids.ps1 list -Live",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh (after re-arming: exactly one line)"
+ ]
+}

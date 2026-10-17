@@ -1,0 +1,21 @@
+{
+ "id": "P066",
+ "session": "2a0cfe9b",
+ "ts": "2026-10-16T04:40:50.576Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1 idle \"5090-i4 operator imm26-5090-i4-hard2b3 just spawned (22:41), lane setup/launch in progress; 5090-i3/i5 held by Shay (one 5090 lane allowed)\"",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 625
+}

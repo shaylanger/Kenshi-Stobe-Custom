@@ -1,0 +1,23 @@
+{
+ "id": "P084",
+ "session": "ded82aa7",
+ "ts": "2026-10-16T16:21:42.455Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The 5090-i3 operator marked 26-dx and 26-e SETUP-FAIL. They need the Hunt fix (NC17) and fail the same way as 26-d. This is the fall-through rule working: it spent two attempts on 26-d, skipped the rest and moved on. The waker is running again."
+ ],
+ "event_text_chars": 752
+}

@@ -1,0 +1,36 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; never a bare &)",
+   "why": "The waker (biys0wbd3) returned this batch, so nothing watches the inbox or the lanes until it is restarted."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No reply to tail #15 for 20261016-130448-tail-imm26-5090-i3op21.msg",
+   "why": "It is a second copy of the 13:04:36 TAIL-RELAY STOPPED-CONTEXT report for imm26-5090-i3op21, already acted on (i3 game stopped, game-3.lock and inflight/5090-imm26 released, tail told); the status is unchanged."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mv -n /c/KenshiTestRuns/inbox/coordinator/20261016-130436-tail-imm26-5090-i3op21.msg /c/KenshiTestRuns/inbox/coordinator/20261016-130448-tail-imm26-5090-i3op21.msg /c/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "Handled relays move to inbox/coordinator/delivered/ so the waker stops re-reporting them."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-5090-i3op21 \"no runnable scripted row left; i3 lane stopped by coordinator 17 (game-3.lock and inflight 5090-imm26 released); successor only via lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21 once new row scripts (22-b, 25-b, 08-d rerun) exist\"",
+   "why": "The stopped agent has no work and no successor is wanted yet; dropping its marker on purpose with a reason keeps the Stop hook from blocking on it, and a fresh successor is spawned later when row scripts exist."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op9o (imm26-5090-i5-op9o) to finish its i5 row and report i5 placed in the freed i3 slot, and for new i3 row scripts (22-b, 25-b, 08-d rerun) before any i3 successor is spawned.",
+   "why": "Nothing else is runnable on the 5090-i3 lane until those events happen, and the i5 placement is already ordered through the tail."
+  }
+ ],
+ "checks": [
+  "ls /c/KenshiTestRuns/inbox/coordinator/ /c/KenshiTestRuns/inbox/coordinator/delivered/ | grep 1304",
+  "ls /c/KenshiTestRuns/game-3.lock /c/KenshiTestRuns/inflight/5090-imm26 2>&1",
+  "cat /c/KenshiTestRuns/agents/imm26-5090-i3op21.status | cut -c1-300",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

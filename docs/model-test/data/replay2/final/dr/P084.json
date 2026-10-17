@@ -1,0 +1,19 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No new routing for SETUP-FAIL 26-e (20261016-102128-setupfail-26-e.msg): it is the same 5090-i3 NC16 'no Hunt proposal after rw_spawn goats' failure as 26-d/26-dx, already handled.",
+   "why": "The coordinator already wrote 5090-i5-ready-nc17.txt (ADDENDUM: run 26-d 26-dx 26-e after 26-c once NC17 is installed and 26-a PASSes, release i3 claims) and 5090-i3-after-26d.txt (stop retrying 26-dx/26-e/26-f/24-c, mark SETUP-FAIL, release claims, take hardening/re-run rows), so the draft's ack, claim rmdir, and two inbox appends are duplicates."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker bqv6cb2gz just completed, and work is in flight (sfB, sfC, sfD, sfE2 agents and lanes), so a waker must be running again."
+  }
+ ],
+ "checks": [
+  "ls /c/KenshiTestRuns/claims/",
+  "tail -n 5 /c/KenshiTestRuns/inbox/operators/5090-i5-ready-nc17.txt"
+ ]
+}

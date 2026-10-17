@@ -1,0 +1,44 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "lane 5090-i4: no operator spawn or respawn; keep it held until Shay says otherwise",
+   "why": "Shay's standing order (no new 5090 testing sessions until he says otherwise) overrides the lane-no-operator rule, as already applied to 5090-i3 and 5090-i5."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/agent-abandon.ps1 imm26-5090-i4-hard2b2 \"Shay 2026-10-15: no new 5090 testing sessions until he says otherwise\"",
+   "why": "The STOPPED-CONTEXT 5090-i4 operator has no successor and is dropped on purpose, the same way hard2c and op9 were dropped; agent-abandon is the sanctioned closure (the exact alert id for this agent is not in the file)."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/alert-ack.ps1 lane-idle-5090-i4 \"5090 held per Shay 2026-10-15: no new 5090 testing sessions; no operator spawned\"",
+   "why": "The idle-lane alert is true by Shay's order, so it is closed with that action; it re-opens after 30 min if still true, which the idle record below prevents."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/alert-ack.ps1 \"LANE NO-OPERATOR 5090-i4\" \"5090 held per Shay 2026-10-15: no new 5090 testing sessions; no operator spawned\"",
+   "why": "Closes the no-operator alert that this batch raised, using the subject because its exact id is not in the file."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/kenshi-ctl.ps1 idle \"Shay 2026-10-15: no new 5090 testing sessions until he says otherwise\"",
+   "why": "This is a real explicit hold from Shay, not a filler reason, so the 5090 idle record is correct and lets the Stop hook pass."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "5090 lanes held per your order (no new 5090 sessions): 5090-i4 has no operator, the stopped 5090-i4 operator is dropped, and 4080-i4 and 4080-i3 operators keep running on the 4080 only.",
+   "why": "One short line keeps the relay current on lane state after the hold."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for reports from imm26-4080-i4op8, imm26-4080-op2jc, imm26-wpL2 and imm26-fix10a",
+   "why": "Only 4080 and offline work remains in flight, so nothing needs to happen on the 5090 lane until Shay lifts the hold."
+  }
+ ],
+ "checks": [
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.status",
+  "tasklist | grep -i kenshi_x64"
+ ]
+}

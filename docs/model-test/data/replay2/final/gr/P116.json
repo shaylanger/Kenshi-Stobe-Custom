@@ -1,0 +1,20 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the one background tail-wait running: powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 60ad9d7d-290e-4ca0-9909-9c33f627d722 (run_in_background); wait for the exit lines of imm26-5090-i4-hk2, imm26-5090-i5-op9p, imm26-fix20a19e and imm26-fix26f11b",
+   "why": "The i3op23 DONE relay was already sent by the preceding tail-relay.ps1 call, so this tail session has nothing new to send or decide until the four remaining tail-owned agents finish and each one's result is relayed."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No new tail-relay, SendMessage, spawn, respawn, TaskStop or fix15bx05cx recovery from this tail session",
+   "why": "The tail spawns and decides nothing; the 22-b gate rerun, the 5090 NC25 install decision and the fix15bx05cx respawn belong to the new coordinator, which already received them in the relay summaries."
+  }
+ ],
+ "checks": [
+  "ls -la /c/KenshiTestRuns/tail/ | grep 60ad9d7d",
+  "ls -la /c/KenshiTestRuns/inbox/coordinator | tail -5",
+  "cat /c/KenshiTestRuns/agents/imm26-5090-i4-hk2.status /c/KenshiTestRuns/agents/imm26-5090-i5-op9p.status /c/KenshiTestRuns/agents/imm26-fix20a19e.status /c/KenshiTestRuns/agents/imm26-fix26f11b.status | head -40"
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "IMM-08-e on 4080-i3 op20: set SETUP-FAIL (recipe, counter and fixture defect; root cause in C:/KenshiTestRuns/agents/out/imm26-sfG/latest.md). Not a FAIL and not a server defect.",
+   "why": "sfG showed no claim gate refused anything: the only Cind tick was a drawn-weapon reaction turn that bored.php never lets claim a follow-up, and the row counter blamed the server gate."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sfG2, description '[case:patch] 08-e recipe fix', fresh agent (not SendMessage to imm26-sfG). Brief: read C:/KenshiTestRuns/agents/out/imm26-sfG/latest.md and status C:/KenshiTestRuns/agents/imm26-sfG.status first. In testing/live-stobe-queue/imm26-assert/rowtools/ fix (1) rd_08e in reloaddefs_a.sh (about lines 233-262) so it re-quiets, re-sheathes and holds Cind across all 8 chunks; (2) the tick counter so it counts only 'Director bored turn claimed' lines, not react= reaction turns; (3) cind_ticks_log.txt so it logs the full URI (no 260-char cut). Add or extend a selftest. Never weaken an assertion. Offline only: no lane or game use, never Shay's live install, server or DB. Commit as shaylanger with the item number, push, keep status via agent-status.ps1, write a handoff file.",
+   "why": "The 08-e row needs a recipe that keeps Cind in the scene, and this is offline work that can run in parallel with the lanes."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Write operator note C:/KenshiTestRuns/inbox/operators/4080-i3-08e-setupfail.txt: 08-e is SETUP-FAIL (recipe defect); do not rerun 08-e until imm26-sfG2 reports DONE; take the next runnable row from the lane plan now (no idle lane).",
+   "why": "Shay's order is one attempt then SETUP-FAIL and take the next runnable row, so the 4080-i3 lane must not wait for the fix."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-sfG DONE, the 08-e root cause (recipe, counter and fixture defect, not server), successor imm26-sfG2 and the 4080-i3 move to the next row; then checkpoint the imm26 program ledger with tools/automation/program-ledger.ps1.",
+   "why": "The ledger and HANDOFF are updated after every agent report so a stop loses nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-sfG2 to report DONE or STOPPED-CONTEXT (status file C:/KenshiTestRuns/agents/imm26-sfG2.status) and for the 4080-i3 operator's next row RESULT lines; the waker stays running.",
+   "why": "The 08-e rerun is gated on the recipe fix, and nothing else in this batch needs action."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-sfG.status",
+  "sed -n 233,262p testing/live-stobe-queue/imm26-assert/rowtools/reloaddefs_a.sh",
+  "grep -n 'IMM-08-e' testing/NPC_IMMERSION_26_TESTS.md | cut -c1-120"
+ ]
+}

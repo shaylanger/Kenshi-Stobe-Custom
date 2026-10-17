@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add line '#12 NC15 BUILT (imm26-u3-nc15 DONE, commits af010bd + e8afd0f, DLL C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC15\\Stobe.dll SHA256 9EABD486FBF8F996D2153DDA5FD8FE057DBC55AF93D1DCAA433A046841CE5748, offline nc15_sidkey_tests 20/20 PASS, NOT installed). 14-c live check: ACTIVITY_CAMP_TOWNS_DIAG accepted>0 with reasons=ok_sid_keyed:N and nc15=sid_key; after that the offer still needs a hostile member Cind can see inside camp borders (ActivityRuntimeBindings.cpp:629-631). Install on 5090-i5 at the op9g boundary, then WP U3 live run.' and update the program ledger entry for U3 (build done, live validation pending) via program-ledger.ps1 if the ledger has a U3 package",
+   "why": "HANDOFF and the program ledger must be updated after every agent report so a stop at any point loses nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-5090-i5-op9g (running 26-a/22-a/26-b/26-c on NC14, lane 5090-i5) to finish or reach a clean boundary; do not stop the game, swap the DLL or message that isolated operator mid-run; keep the event-wait.sh waker running and re-arm it.",
+   "why": "NC15 is not installed on any lane and 5090-i5 is occupied by op9g, so installing now would kill its in-flight rows."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[case:generate] 5090-i5 NC15 operator for 14-c (agent name imm26-5090-i5-op9h, start only after op9g reports DONE). Brief: read agents\\imm26-5090-i5-op9g.handoff.md and pending-fixes\\npc-immersion-26\\NC15\\README.md. Steps: stop the game at a clean boundary, copy NC15 Stobe.dll (SHA256 9EABD486FBF8F996D2153DDA5FD8FE057DBC55AF93D1DCAA433A046841CE5748, verify the hash) to both Stobe.dll locations as done for NC14, relaunch, lane-setup.sh 5090 5 kah-imm26-i5 --clear-faction none, run the 14-c recipe, read ACTIVITY_CAMP_TOWNS_DIAG and report accepted>0, reasons=ok_sid_keyed:N, nc15=sid_key; then check whether the offer needs a hostile member Cind can see inside the camp borders (ActivityRuntimeBindings.cpp:629-631) and report that as a separate blocker if so. Private lane and backend only, never Shay's live install, server tree or DB. Keep agents\\imm26-5090-i5-op9h.status current every 10 min via agent-status.ps1, then run 26-c if it needs NC15.",
+   "why": "NC15 needs a fresh 5090-i5 operator for the live validation; the build, the install and the live run are separate work packages, and the operator must start only after op9g is DONE."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No ack or tail-relay needed for the NC15 hand-back: imm26-u3-nc15 is DONE and the report came from a subagent of this session, not a tail session.",
+   "why": "The report is a result only and its claims (DLL built, tests pass) are the agent's words until the live 14-c check confirms them."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "git -C C:\\KenshiModding log --oneline -3 -- pending-fixes/npc-immersion-26/NC15",
+  "powershell -NoProfile -Command \"(Get-FileHash C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC15\\Stobe.dll -Algorithm SHA256).Hash\""
+ ]
+}

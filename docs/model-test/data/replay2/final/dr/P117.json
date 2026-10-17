@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background, after reading the finished waker output for the event it woke on)",
+   "why": "The event waker exits when it has an event, so its completion means a waker line is waiting in bjikfnh8e.output; read it, act on it, and restart the waker so work in flight (imm26-fix15bx05cx2, 4080-i4 op16, tail-owned agents) stays covered."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "The event line from bjikfnh8e.output, then imm26-fix15bx05cx2 completion or STOPPED-CONTEXT, and the next event-wait waker event",
+   "why": "No action is needed beyond that line until a real result arrives; the fix15bx05cx respawn is already done and registered."
+  }
+ ],
+ "checks": [
+  "tail -c 2000 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/3a21a7b9-2954-4145-be31-079880e2e887/tasks/bjikfnh8e.output",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-fix15bx05cx2.status"
+ ]
+}

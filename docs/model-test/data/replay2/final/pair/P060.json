@@ -1,0 +1,25 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent, description '[case:patch] imm26-rowtools432 hx one-call row scripts (item 4)'. Brief: 'You are imm26-rowtools432, the fresh successor of imm26-rowtools43, which stopped at the context limit (STOPPED-CONTEXT). Your work is item 4 only: the hx one-call row scripts. Read C:/KenshiTestRuns/agents/imm26-rowtools43.handoff.md and C:/KenshiTestRuns/agents/imm26-rowtools43.status, then continue from that checkpoint in the same work dir; do not restart from zero. Report status with tools/automation/agent-status.ps1 imm26-rowtools432 RUNNING|DONE|STOPPED-CONTEXT. Checkpoint, compile-check and commit at each milestone. Do not edit any script that rowtools42 (items 5-7) or a running batch or list uses; write new files instead. Never touch the live StobeServer tree or /root/stobe-work/ss-merge; deploy only to the lane trees via compose.patch. No new 5090 testing (5090 lanes are held); 4080 rows only. Never run find /. At the context warn level, finish the edit, checkpoint and hand off as STOPPED-CONTEXT for a successor named imm26-rowtools433. Send your report through save-report.ps1, not a REPORT md file.'",
+   "why": "imm26-rowtools43 is STOPPED-CONTEXT with item 4 unfinished and no successor, so a fresh successor continues from its handoff; skip this spawn only if a checked successor (imm26-rowtools432 or imm26-rowtools43b) already runs."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "tools/automation/program-ledger.ps1 (imm26 program): record imm26-rowtools43 STOPPED-CONTEXT, successor imm26-rowtools432, item 4. Leave C:/KenshiTestRuns/inflight/imm26-rowtools43 in place until the successor status file exists.",
+   "why": "The ledger must show the successor chain after every agent report, and a stopped agent's inflight marker must stay until its successor exists."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section '## Right now': add a line that imm26-rowtools43 stopped at context on item 4 and imm26-rowtools432 was spawned as its successor; handoff at C:/KenshiTestRuns/agents/imm26-rowtools43.handoff.md.",
+   "why": "HANDOFF Right now is updated the moment an agent stops or starts, so a context loss does not lose the successor chain."
+  }
+ ],
+ "checks": [
+  "ls C:/KenshiTestRuns/agents | grep rowtools43",
+  "ls C:/KenshiTestRuns/inflight C:/KenshiTestRuns/respawn | grep rowtools4",
+  "tail -60 C:/KenshiTestRuns/agents/imm26-rowtools43.handoff.md"
+ ]
+}

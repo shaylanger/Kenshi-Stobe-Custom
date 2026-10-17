@@ -1,0 +1,26 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "event-wait exited after delivering this batch, so nothing watches the lanes until it is re-armed."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op9h (use its agent id from its spawn result; the id is not in this file): 'Coordinator: lane 5090-i5 has had no activity for 6.3 min (LANE IDLE; newest evidence imm26-5090-i5/towns200.txt). Update your status now with agent-status.ps1 and reply in one line: current step, game state (up / hung / reloading), and any blocker. Do not start another lane-setup reload until you reply.'",
+   "why": "The lane watchdog asks the coordinator to check the operator first; the operator must say whether it is working or stuck before any respawn or fix."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the one-line reply from op9h or a fresh op9h status line; then alert-ack.ps1 <id of the LANE IDLE 5090-i5 alert> '<what op9h reported>'",
+   "why": "Ack closes the alert, so it is done only after the reply; if op9h is stuck, fix the root or respawn it fresh from its handoff instead."
+  }
+ ],
+ "checks": [
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-5090-i5-op9h.status | cut -c1-260",
+  "date",
+  "ls -l --time-style=full-iso /c/KenshiTestRuns/imm26-5090-i5/towns200.txt",
+  "tasklist | grep -i kenshi"
+ ]
+}

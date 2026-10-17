@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a97e05a80e87aab69 (imm26-4080-i4op10): Coordinator #12 order, relayed by the tail: finish the current 13-ax run, COMMIT your uncommitted rowtools edits (hxdefs.sh etc.), write C:/KenshiTestRuns/agents/imm26-4080-i4op10.handoff.md, set status STOPPED-CONTEXT or DONE with agent-status.ps1, then stop. Do not start new hardening rows. Coordinator #12 spawns the 4080-i4 operator op11 for the unblock rows.",
+   "why": "The coordinator cannot reach this agent from its own session, and the order to finish 13-ax, commit, hand off and stop is a peer order that carries Shay's authority, so the tail relays it."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-ack.ps1 imm26-5090-i5-op9c",
+   "why": "The op9c relay was already delivered to the new coordinator, which has acked it on its side, so the tail closes its held relay (usage confirmed by the first check)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02 stays armed (background task bz0lf5892 still running); no new waker",
+   "why": "imm26-4080-i4op10 is the only agent this tail still owns, and its final result must be relayed when it finishes or stalls."
+  }
+ ],
+ "checks": [
+  "sed -n 1,30p /c/KenshiModding/tools/automation/tail-ack.ps1 | cut -c1-250",
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op10.status | cut -c1-260",
+  "ls -t /c/KenshiTestRuns/inbox/coordinator | head -3"
+ ]
+}

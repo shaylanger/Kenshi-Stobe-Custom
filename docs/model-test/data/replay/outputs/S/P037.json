@@ -1,0 +1,30 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on the task-notification for bonprnl0a: its output holds no EVENT line, only the line that a new background command bwp1pu36n was started, so the waker chain is alive. Do not start a second waker.",
+   "why": "The batch carries no event, so the only open work is Shay's unanswered order and the pending 4080 i3 lane-idle reply."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-tailroute, description '[case:patch] tail-relay follows current coordinator + tail close notice'. Brief: Shay's order (2026-10-15): (1) make tail-relay.ps1 reports reach the CURRENT coordinator after a second handoff while an older tail is alive. Today the direct message goes to the coordinator that opened the tail, which may itself be a tail by then, and a relay can be missed. Per the existing tail-relay.ps1 header, the relay writes inbox\\coordinator and sends to -ToSession. Resolve the target as the newest LIVE non-tail coordinator session (use tail-mode.ps1 list/status and the coordinator heartbeat) and fall back to the inbox file. A middle tail must not be the target. (2) When a tail session has finished all active sub tasks (each relay delivered, acked or 5 min old, the same rule as the Stop hook), it must send the current coordinator a message 'TAIL-DONE <session>: all agents done, please close this tail session', and the coordinator then closes it so finished sessions are not left open. Touch only tools/automation/tail-relay.ps1, tail-mode.ps1, tail-ack.ps1, tail-close.ps1 and the hook that handles tail ends if needed, plus docs/TAIL_HANDOFF_CONTRACT.md. Extend tail-hooks and tail-ledger selftests with a two-tail case (33/33 must stay green). Do not edit any script a running list or batch uses mid-run. Checkpoint and commit with identity shaylanger, one fix per commit, push. Keep C:\\KenshiTestRuns\\agents\\imm26-tailroute.status current via agent-status.ps1. Report to agents\\out\\imm26-tailroute in 8 lines or fewer.",
+   "why": "Shay ordered the fix plus the tail-closes-when-done notice, and a code change like this goes to a patch agent rather than the coordinator's own context."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SendMessage to Shay's relay session: Building both now with imm26-tailroute. (1) Tail relays will go to the newest live non-tail coordinator, with the inbox file as fallback. (2) When a tail has no active sub tasks left, it sends the current coordinator a TAIL-DONE message and the coordinator closes it. I'll report when the selftests pass and it is pushed.",
+   "why": "A short acknowledgement that the order is in progress, without asking Shay anything."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-tailroute completion notice, the imm26-4080-op2h status update after the lane-idle message sent to af494f7d420e43327, and the next waker event.",
+   "why": "Nothing else is actionable. The 4080 i3 operator was already asked for a status line, and escalation comes only if its status file stays stale."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 list",
+  "head -5 /c/KenshiTestRuns/agents/imm26-4080-op2h.status | cut -c1-300"
+ ]
+}

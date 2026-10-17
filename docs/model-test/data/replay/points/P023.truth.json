@@ -1,0 +1,26 @@
+{
+ "id": "P023",
+ "session": "5720e5b8",
+ "ts": "2026-10-15T23:21:52.406Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: do you have any suggestions about ways to reduce the number of handoffs wihtout costing us speed or "
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] row scripts go-row and preflight\nprompt: You are imm26-rowtools3. Your brief is C:\\KenshiTestRuns\\agents\\briefs\\imm26-rowtools2.md (read it and briefs\\COMMON.md and OPERATOR_COMMON.md; ignore its \"operators are running, do not touch lanes\" SAFETY note only as far as selftests on 5090 i3 are concerned: lane i3 5090 is owned by operator imm26-5090-i3op3 now, so do NOT run on any live lane; build and selftest the scripts offline/with fake lane dirs and a dry-run mode, the operators will adopt them). Extra requirements from Shay (2026-10-15): (1) go-row.sh must update the calling agent's status after each row via tools/automation/agent-status.ps1 when env KAH_AGENT_NAME is set (status `latest` = the RESULT line) so rows double as heartbeats; (2) support a batch mode `go-batch.sh <lane> ROW1 ROW2 ...` detached, printing one RESULT line per row to a results file, so an operator opens an evidence file only for a FAIL; (3) document usage in testing/AGENT_PROMPTS.md operator section? NO: put the usage in docs/COORDINATOR_IMPROVEMENTS.md items 1/2 only (docs are being edited by another package). Checkpoint (commit+push, identity shaylanger) at each milestone, status name imm26-rowtools3, target <= 120k tokens; when the first 3 rows work, message the lane operators by writing a note to C:\\KenshiTestRuns\\inbox\\<operator>\\*.msg (imm26-4080-op2g, imm26-5090-i3op3, imm26-5090-i4op3, imm26-5090-ctxop32, imm26-4080-i4op5) saying how to use go-row.sh.",
+   "why": ""
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] quiet waker and host monitor reload\nprompt: You are imm26-wakertools. Read C:\\KenshiTestRuns\\agents\\briefs\\COMMON.md. Two small coordinator-tooling improvements (Shay 2026-10-15), each with a selftest, commit+push (identity shaylanger), status name imm26-wakertools, <= 60k tokens:\n(A) QUIETER WAKER: tools/automation/event-wait.sh wakes the coordinator on every inbox/status event, each costing a coordinator turn. Before waking for an AGENT STALL / ORPHANED style event (not KILLED/DEAD/FAILED/DONE/STOPPED/questions/peer messages, which always wake), the waker (or the agent-host monitor that writes the stall messages in tools/automation/agent-host.ps1 Invoke-Monitor) must check that the agent's process is alive AND its evidence is fresh (agent-rollcall.ps1 now counts newest file under the status `outputs:` dirs in LogAgeMin, commit 6376cff); wake only if neither holds. Edit event-wait.sh NEVER in place while a waker runs: write event-wait.sh.new next to it in tools/automation and tell the coordinator (final report) to swap it at its next waker restart; same for agent-host.ps1 (the daemon dot-sources agent-rollcall at start). Selftest: extend agent-host-monitor-selftest.ps1 (currently 11/11) and add a small bash selftest for the waker filter.\n(B) RELOAD: the running agent-host daemon loaded the old agent-rollcall.ps1; provide tools/automation/agent-host-reload.ps1 that restarts ONLY the monitor loop safely (agent-host-ensure.ps1 exists: read it; hidden agents currently running must not be killed: check agent-queue\\host.state.json and whether the launchers are children of the daemon; if a restart would kill them, instead make the daemon re-dot-source agent-rollcall.ps1 each monitor tick so future edits apply live, and document that the change takes effect at the next daemon restart). Report which.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 605
+}

@@ -1,0 +1,36 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none (no new message to any agent, operator or Shay)",
+   "why": "The imm26-sfJ hand-back was already routed: the coordinator wrote inbox\\operators\\coordinator15-10e-route.txt at 11:30 with the reload-run-sfj.sh command for 20-d and 23-e, and the tool result shows commit 23ee82e9 is in git; nothing new is owed to anyone."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md, 'Right now' section: add 'sfJ DONE (a048ccb5, imm26-sfJ): recipes for 23-e (control chase 120 u/45 s, end<=70, control>=0.8x start else SETUP-FAIL) and 20-d (insistence turn so pending_change exists before save+load) in commit 23ee82e9, offline selftest 40/40, nothing run live; 20-d and 23-e now runnable via reload-run-sfj.sh <row> <lane> --allow-retry; routing note inbox\\operators\\coordinator15-10e-route.txt'",
+   "why": "CLAUDE.md requires HANDOFF 'Right now' to be updated after every agent report, and this one changes the state of two SETUP-FAIL rows."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\... program ledger update for the imm26 program: mark work package sfJ done with output 23ee82e9 and the two rows ready (program name not given in this file; take it from session-start.ps1 output, do not guess)",
+   "why": "Program ledger must reflect every agent report; the name is not in this file so it is looked up rather than invented."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; add --batch <out-dir> if a batch is running)",
+   "why": "The waker ends on an agent DONE status and must be restarted each time it wakes the coordinator; the Stop guard blocks the session while work is in flight without one."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next inbox event from the waker; no new agent is spawned for 20-d or 23-e",
+   "why": "The 20-d and 23-e rows still need a lane operator to run them live (6-7 min each via reload-run-sfj.sh); the operators pick them up from the routing note, and the coordinator does not run them itself."
+  }
+ ],
+ "checks": [
+  "head -3 /c/KenshiTestRuns/agents/imm26-sfJ.status",
+  "git -C /c/KenshiModding log -1 --oneline 23ee82e9",
+  "ls /c/KenshiTestRuns/inflight | grep -c imm26-sfJ",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

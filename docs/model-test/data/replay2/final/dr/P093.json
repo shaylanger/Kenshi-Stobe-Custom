@@ -1,0 +1,22 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Understood: read-only from now on. I will only read files to find what backup of the game exists from when the test ran, and I will not edit, write, commit, spawn, run or touch rigs. Running agents and the waker stay as they are; tell me if you also want them stopped.",
+   "why": "Shay's order allows reading files but forbids any write or modification, and it follows his question about whether a backup of the game from the test time exists."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Next instruction from Shay; no action on the event-wait waker or on running agents",
+   "why": "Nothing in this event needs a mutating action, and a read-only order does not change work already in flight."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding status --short",
+  "git -C /var/www/html/StobeServer for-each-ref refs/snapshots (via wsl.exe -d DwemerAI4Skyrim3, read-only)",
+  "git -C C:/KenshiModding for-each-ref refs/snapshots",
+  "ls C:/KenshiTestRuns/invest/fixes/backup",
+  "grep -n . C:/KenshiTestRuns/invest/suite/baseline.env"
+ ]
+}

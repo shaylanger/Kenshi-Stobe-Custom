@@ -1,0 +1,20 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Relay the full verdict of agent fix15bx05cx3 to the new coordinator with tail-relay.ps1 (inbox file C:\\KenshiTestRuns\\inbox\\coordinator\\, target efc58758-86f8-4786-a138-4e53f075016d). Message text: interim result, agent still has background work. All six defects fixed OFFLINE only, nothing run live. Selftests pass in WSL: HXCX4 43/43, UNBLOCK-C-V4 56/56. Replaying the i3 05-cx bundle through the new assert leaves only the three H roster_has_sleeper failures, which the KO fix addresses. Commit a9e06e08 pushed to main. New files under testing\\live-stobe-queue\\imm26-assert\\rowtools (README_FIX15BX05CX3.md has the exact commands). No existing script edited; hxdefs.sh.candidate untouched.",
+   "why": "The autorelay already sent this DONE at 14:58:20 with report=(none), so the new coordinator has no verdict text; the tail forwards the report content without running or spawning anything, and the exact tail-relay.ps1 arguments are not in this file, so the coordinator must use the usage line in testing/AGENT_PROMPTS.md."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the next task-notification for agent a96301375ebef4bae (fix15bx05cx3) that carries its final result; no ack, respawn or row run from the tail.",
+   "why": "This notification is interim (status completed but the agent is waiting on its own background work), so the result may still change and the tail must not mark it done or act on it."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\inbox\\coordinator\\20261016-145820-tail-imm26-fix15bx05cx3.msg -TotalCount 40",
+  "git -C C:\\KenshiModding show --stat a9e06e08",
+  "Get-Content C:\\KenshiTestRuns\\agents\\fix15bx05cx3.status"
+ ]
+}

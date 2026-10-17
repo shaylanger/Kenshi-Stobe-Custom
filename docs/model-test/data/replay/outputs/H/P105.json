@@ -1,0 +1,32 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i4-hk2, tag [case:bench][model:haiku][effort:high], created via tools/automation/lane-brief.ps1 5090-i4 -Name imm26-5090-i4-hk2 -Predecessor imm26-5090-i4-hk1. Brief: Haiku-high pilot operator for lane 5090-i4, continuing the pilot from hk1's checkpoint and status file. First, diagnose the 00-ask wait-world no-answer escalation (check the stobe.log tail for loading versus a stuck world) before retrying. Then start row 02-cx unplaced. Write each row verdict to the pilot shadow ledger and rows file named in HANDOFF, and send escalations as inbox/coordinator pilot-escalate messages. Keep the pilot ACTIVE flag in place and checkpoint the status file as you go.",
+   "why": "The lane alert says no RUNNING operator is on 5090-i4, and the Haiku pilot must keep running, so a fresh successor is spawned from the hk1 checkpoint (hk1 is no longer running, so escalation answers go to hk2, not to hk1's id)."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 add imm26-5090-i4-hk2 <id returned by the spawn>",
+   "why": "The handoff requires every new spawn to be recorded so later SendMessage and tail routing can reach it."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <NO-OPERATOR 5090-i4 alert id from C:\\KenshiTestRuns\\alerts\\open> \"respawned imm26-5090-i4-hk2 from hk1 checkpoint\"",
+   "why": "Closes the open lane alert once the successor is running; the alert id is not in this file, so it must be read from the alerts\\open folder."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-5090-i4-hk2 as the 5090-i4 pilot operator, successor of imm26-5090-i4-hk1, and keep lanes.held without 5090-i4 until the pilot ends.",
+   "why": "HANDOFF must show the live operator state right after any agent change."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "tail -5 C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hk1.status",
+  "ls C:\\KenshiTestRuns\\alerts\\open",
+  "ls C:\\KenshiTestRuns\\pilot\\haiku-i4",
+  "tail -20 C:\\KenshiTestRuns\\inbox\\coordinator\\delivered (look for the 00-ask pilot-escalate and what was answered)"
+ ]
+}

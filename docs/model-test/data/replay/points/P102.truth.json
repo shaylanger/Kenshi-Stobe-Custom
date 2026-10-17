@@ -1,0 +1,23 @@
+{
+ "id": "P102",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:27:29.179Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...o copy at `docs/cost-audit/ledger.md`.  I made a mistake along the way: I started a waker with a"
+ },
+ "actions": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "",
+   "why": "The cost audit is done, and I sent the summary to the previous coordinator session to pass on to Shay. I recounted one session independently. The totals match once you allow for the messages added since the ledger was built.\n\n- **Scope:** 1,250 transcripts from 28 Sep to 16 Oct come to $4,262 at API prices. That is not Shay's bill, and `/usage` is the quota meter.\n- **Where the cost goes:**\n  - Cache reads are 58% of the total.\n  - Cache writes are 33%.\n  - Output is 9%.\n  - Long contexts re-rea...[truncated 682 chars]"
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The cost audit is done, and I sent the summary to the previous coordinator session to pass on to Shay. I recounted one session independently. The totals match once you allow for the messages added since the ledger was built.\n\n- **Scope:** 1,250 transcripts from 28 Sep to 16 Oct come to $4,262 at API prices. That is not Shay's bill, and `/usage` is the quota meter.\n- **Where the cost goes:**\n  - Cache reads are 58% of the total.\n  - Cache writes are 33%.\n  - Output is 9%.\n  - Long contexts re-rea...[truncated 682 chars]"
+ ],
+ "event_text_chars": 383
+}

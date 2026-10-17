@@ -1,0 +1,34 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker task blxyv3bfh completed (it woke us with this batch), so no waker is running now; in-flight investigators and tail-owned operators require one."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to abf924ff257b8d3d9 (imm26-inv20a): New SETUP-FAIL 19-e (lane 4080-i4, ticket C:/KenshiTestRuns/inbox/coordinator/20261016-131605-setupfail-19-e.msg): 'no trip proposed after two asks (s1/s1b): nothing to accept'. Same family as 20-a/19-a/14-a (trip propose/accept failure). Treat it as one more same-defect row in your read-only root-cause: say whether the 19-e symptom (no propose at all) has the same root cause as 20-a (propose OK, accept failed) or a different one. Still read-only, no new spawns, same 3-row cap (20-a, 20-d, 19-e). Include 19-e in your recipe/fix proposal.",
+   "why": "19-e is a trip propose/accept defect already under investigation by imm26-inv20a, so one investigator avoids a duplicate driver; lane 4080-i4 belongs to tail-owned op14, which must not be messaged or respawned by this coordinator."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 19-e imm26-inv20a",
+   "why": "Records the investigator as owner so the 19-e ticket is no longer unowned."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "mv C:/KenshiTestRuns/inbox/coordinator/20261016-131605-setupfail-19-e.msg C:/KenshiTestRuns/inbox/coordinator/delivered/",
+   "why": "Moves the handled relay to delivered/ per the handoff rule."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Completion notifications for imm26-inv20a (abf924ff257b8d3d9) and imm26-inv01cx (a494d91bb1e09354d), and the next waker wake.",
+   "why": "Both read-only investigations are in flight and their results decide the recipes for 20-a/20-d/19-e and 01-cx."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "cut -c1-600 C:/KenshiTestRuns/inbox/coordinator/20261016-131605-setupfail-19-e.msg"
+ ]
+}

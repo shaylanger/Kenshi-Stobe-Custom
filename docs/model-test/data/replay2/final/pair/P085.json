@@ -1,0 +1,44 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:investigate] 08-e bored-tick claim gate', name imm26-sfG, subagent_type kenshi-debugger. Brief: You are imm26-sfG, offline diagnostician for NPC immersion 26 row 08-e. No game launches, no lane use; never Shay's live install, server tree or DB; work in the private compose tree only. Symptom (SETUP-FAIL from lane 4080-i3, ticket 20261016-102752-setupfail-08-e in C:/KenshiTestRuns/inbox): after the reload the topic stays open, but no bored tick claims it in 8 advance chunks although 1 tick had the NPC as speaker. BORED_EVENT_CHANCE=100 is not the cause. Read the full ticket first, then suspect the server claim gate (social attention / situated_remark cooldown). Find functions with grep on the codemaps under /root/imm26/codemap, then sed ranges only; never read files over 60 KB whole. Diagnose only, no code edits. Report: root cause with file and line evidence, the smallest fix as a patch sketch with assert anchors, and whether an offline test can prove it. Status via tools/automation/agent-status.ps1 imm26-sfG RUNNING|DONE|FAILED|STOPPED-CONTEXT; save the report with save-report.ps1 (agents/out/imm26-sfG).",
+   "why": "Odd behaviour gets an investigate case first, Shay's 10:10 order puts an agent on every SETUP-FAIL row, and sfG continues the imm26-sfX series (sfA to sfF are already used)."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "testing/NPC_IMMERSION_26_TESTS.md, TESTS table: row 08-e = SETUP-FAIL (lane 4080-i3, fix path server-fix: bored-tick claim gate), owner imm26-sfG, ticket 20261016-102752-setupfail-08-e. Mirror the owner in the imm26 program ledger.",
+   "why": "Every SETUP-FAIL needs a recorded owner and fix path so the row is not reported as unrun or lost at a handoff."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Write C:/KenshiTestRuns/inbox/operators/4080-i3-setupfail-08-e.txt: '08-e SETUP-FAIL recorded (owner imm26-sfG, server claim-gate fix in progress). Do not wait: take the next runnable row now, one attempt per row, then SETUP-FAIL. No fix is deployed to your lane tree yet; deploy only when a ready file arrives in inbox/operators.'",
+   "why": "Shay's 10:30 order says no lane idles waiting for a fix, so a stuck row goes SETUP-FAIL after one attempt and the lane takes the next runnable row."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md section 'Right now': add 'imm26-sfD2 DONE: 350fffc (10-b recipe), cde80bb (inDeal fix, staged in compose, not deployed), d70c3f1 (03-b recipe); operators told via inbox/operators/4080-deploys-before-rows.txt. 08-e SETUP-FAIL -> imm26-sfG RUNNING (diagnosis).'",
+   "why": "The coordinator updates Right now after every agent report, and sfD2 finished with the server deploys still pending on the 4080 lane trees."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "imm26 program ledger under C:/KenshiTestRuns/programs/ (exact file name not in this replay): mark sfD2 DONE, add 08-e SETUP-FAIL with owner imm26-sfG, and note that 10-b and 03-b still need a game run after the 4080 deploys.",
+   "why": "CLAUDE.md requires the program ledger to be updated after every agent report so a handoff loses nothing."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The event-wait task completed on this batch, and sfC, sfE2, sfF, hxA, hxB, the new sfG agent and the lanes are still in flight, so events must keep arriving."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "grep -n setupfail-08-e in C:/KenshiTestRuns/inbox, then read that ticket in full",
+  "cat C:/KenshiTestRuns/agents/imm26-sfD2.status",
+  "grep -n -i deploy C:/KenshiTestRuns/agents/out/imm26-sfD2/out-20261016-102640.md",
+  "Read the 4080-i3 operator status and confirm it has moved to its next runnable row",
+  "Confirm 4080-i4 and 5090-i5 recorded 'deployed ... to <tree>' before any 10-b or 03-b row runs",
+  "WSL: grep -ln bored /root/imm26/codemap/* (read-only, locates the bored-tick map)"
+ ]
+}

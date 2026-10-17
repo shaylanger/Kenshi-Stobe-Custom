@@ -1,0 +1,33 @@
+{
+ "id": "P078",
+ "session": "bea16970",
+ "ts": "2026-10-16T08:30:24.740Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:patch] activity accept route rebind\nprompt: Agent name imm26-u4b-route (work package U4b). Follow-up to imm26-u4-ground (b320c66, read agents\\out\\imm26-u4-ground\\latest.md and pending-fixes\\imm26-u4-ground\\): the ACCEPT of a native Hunt now passes the target ground() check, but operator op9i reports row 26-a (and 22-a, 26-b, 26-c) still SETUP-FAIL 'route rebind at accept needed': accept also re-resolves the persisted route candidate (exact id/label/coords from travel_destinations rows valid 300 s) and fails with 'No currently grounded route candidate' (or similar). Read the 26-a row note in C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md (grep -n 26-a, sed ranges), agents\\imm26-5090-i5-op9i.handoff.md/status if present, op9i's evidence dirs under C:\\KenshiTestRuns\\imm26-5090-i5\\ (newest 26a* runs) and the lane server log lines (ActivityChat.php now logs every rejected activity decision via stobeLogWarn: decision, reason, first 400 chars of intent). Find the exact failing check (grep -n 'grounded route' in lib/activity/*.php; sed ranges; the code under COMPOSE tree and lane trees; NEVER the live tree /var/www/html/StobeServer or Shay's DB). Design the SMALLEST safe fix: at ACCEPT for a Hunt, when the persisted route candidate is expired/changed, re-bind the route to the current native route candidate for the (re-grounded) target without loosening any other check (suitable, reachable, hostile, requester, expiry of the OFFER itself, one active record). State the design in a 5-line comment and in your report. Offline test first (fails before, passes after, plus negatives: no current route => still rejected, route for a different target => rejected), php -l, stobe-tests 'activity|imm26_w|imm26_u|imm26_fix' (known baseline fail imm26_wpB_repair). Deploy exactly like imm26-u4-ground (compose.patch regenerated APPLY-IDENTICAL, 5 lane trees, old shas verified, backups bak-pre-u4broute; backends not restarted unless the lane brief says a restart is needed for PHP). Commit+push (shaylanger2@gmail.com), write inbox\\operators\\u4b-route.txt (rerun 26-a then 22-a 26-b 26-c). Checkpoint ~40k tokens, stop at ~100k, status via agent-status.ps1. Final report <= 6 lines.",
+   "why": ""
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=a4830adc9fde67df0: Coordinator: op11, your status is from 02:13. Update it now with agent-status.ps1 and reply with one line: row in progress, results since 13-b/03-b/27-a, any blocker. Remember: commit evidence/marks after every row.",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The 26-a family is still SETUP-FAIL on 5090-i5, as the `u4-ground` agent predicted: the accept now passes the target check but fails on the saved route candidate, which needs re-binding at accept. `op9i` has moved on to 12-d, 19-e and 19-f in the meantime.\n\nI started `imm26-u4b-route`. It re-binds the route to the current native route candidate at accept, without loosening any other check. It adds a test that fails before the fix and passes after, plus negatives. It deploys like the last fix, an...[truncated 201 chars]"
+ ],
+ "event_text_chars": 786
+}

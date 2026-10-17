@@ -1,0 +1,14 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "Work is genuinely in flight (Kenshi running, 11 inflight markers, new op20 operators and sf agents just spawned) and the earlier waker b7965hfaz evidently ended or is not detected, so the Stop hook is right; restart the waker rather than stopping or deleting markers."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (WAKER STATUS line)",
+  "ls C:\\KenshiTestRuns\\inflight"
+ ]
+}

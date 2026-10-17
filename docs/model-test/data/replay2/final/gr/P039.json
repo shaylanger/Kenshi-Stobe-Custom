@@ -1,0 +1,41 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for task ae85217f23349ae6e (agent imm26-4080-i4op52) to finish its own background work; it re-notifies when done; keep lane 4080 i4 owned (no release-lane), marker 4080-imm26-i4 kept",
+   "why": "the handback is interim (status completed but the agent is still waiting on background work), so the final row results may still change."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "RESULT 08-b PASS batch4 natural bored tick speaker=Cind mode=director: situated_remark_claim 6255, social_followup row ask_count 1 not_before +24h, one Cind line to Shay on the armor topic, claim rows for the topic stayed at 1 after the next tick; Cind-in-combat control not run",
+   "why": "the agent cites concrete game-state rows (claim id, followup row, claim count) for this row, so it can be recorded now."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "RESULT 09-c PASS 19-a go-row gave ACCEPTED trip to Stumble Inn; after the preference go to Squin instead put a travel_alternatives pending_change at PROPOSED with no new ACCEPTED rows; reply refuses (We already shook on Stumble Inn). Caveat: no no-preference control.",
+   "why": "game-state rows are cited; the missing control is written into the row text so the PASS is not overstated."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "RESULT 08-a FAIL travel-consent reply suppresses the followup row (batch4, 4080 i4)",
+   "why": "the agent reports a FAIL with state evidence; record it as FAIL and do not rerun without --allow-retry '<reason>' (row guard PI-06)."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "RESULT 10-a FAIL Selika accepted the specific apology in speech but 0 apology_relief rows (batch4, 4080 i4)",
+   "why": "zero apology_relief rows is observed game state, so the FAIL is recorded; no rerun without --allow-retry '<reason>'."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "hold 06-c (PASS) and 10-b (SETUP-FAIL) until the full report file is read",
+   "why": "06-c has only the words 'go-row on i4' with no row evidence, and the 10-b reason is cut off in the handback text, so neither can be recorded yet."
+  }
+ ],
+ "checks": [
+  "Get-Content C:/KenshiTestRuns/agents/imm26-4080-i4op52.status -Tail 5",
+  "Get-ChildItem C:/KenshiTestRuns/agents/out/imm26-4080-i4op52/ | Sort-Object LastWriteTime | Select-Object -Last 3 Name,LastWriteTime",
+  "Select-String -Path C:/KenshiTestRuns/agents/out/imm26-4080-i4op52/*.md -Pattern 'RESULT (06-c|08-a|10-a|10-b)' | Select-Object -First 8",
+  "Select-String -Path C:/KenshiTestRuns/agents/out/imm26-4080-i4op52/*.md -Pattern 'excerpt=' | Select-Object -First 4"
+ ]
+}

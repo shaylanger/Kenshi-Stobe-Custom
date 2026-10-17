@@ -1,0 +1,25 @@
+{
+ "event_class": "other",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-fix-batch3: 08-b rerun on 4080 i3 (NC5 installed, commit c0f7bdd) is still FAIL. The director bored follow-up was due (Cind spoke as director bored speaker twice) but no claim was made. Reported cause (af494f7d): stobeSocialFollowupsClaim needs stobeSocialAttentionOptionalSpeechAllowed, which needs in_combat===false (lib/social_attention.php:33-38). Natural DLL bored URIs carry no attn=, Cind has no fresh native_ai snapshot, so in_combat is null and the claim is denied. NC5 proximity turn (optional=1&attn=) only scans squad members, so non-squad Cind never gets it. INVESTIGATE FIRST: confirm this in lib/social_attention.php and the bored URI builder. Preferred fix: add attn= to natural bored URIs so the in_combat===false gate stays strict; do not relax that gate for unknown attention. Patch the live tree and /root/stobe-work/ss-merge both, php -l, offline stobe-tests, then update your status file and report to the coordinator. Do not touch the 4080 lane; the 4080 i3 operator keeps running 15-a, 16-c, 03-b, 03-cx, 04-ax.",
+   "why": "imm26-fix-batch3 already owns the 08-b director-mode bored claim fix, so the new root cause goes to that agent rather than a fresh one; the operator needs no reply."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add one line under the COORDINATOR #7 entry: '08-b rerun FAIL on 4080 i3 (NC5, c0f7bdd): follow-up claim denied, in_combat null on natural bored URIs (lib/social_attention.php:33-38); fix routed to imm26-fix-batch3 (attn= on natural bored URIs preferred).'",
+   "why": "The coordinator updates HANDOFF after every agent report so the finding survives a context handoff."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-fix-batch3 status file and the 4080 i3 operator's next report (15-a, 16-c, 03-b, 03-cx, 04-ax); no action on the operator.",
+   "why": "The operator is still running rows and the fix is not yet built, so nothing else is needed now."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-fix-batch3.status",
+  "ls C:/KenshiTestRuns/inflight/ | grep -E 'imm26-fix-batch3|4080'",
+  "grep -n -E 'stobeSocialFollowupsClaim|stobeSocialAttentionOptionalSpeechAllowed|in_combat' lib/social_attention.php (in the live tree /var/www/html/StobeServer, via WSL)"
+ ]
+}

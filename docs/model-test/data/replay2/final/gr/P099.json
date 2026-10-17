@@ -1,0 +1,15 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker woke on this event and must be re-armed while work is in flight."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "tail -20 /mnt/c/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

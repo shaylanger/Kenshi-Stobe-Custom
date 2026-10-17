@@ -1,0 +1,28 @@
+{
+ "id": "P059",
+ "session": "4cdf261b",
+ "ts": "2026-10-16T03:14:13.361Z",
+ "class": "lane-alert",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "{\"task_id\": \"bax381jmb</task-id>\\n</invoke>\\n\"}",
+   "why": ""
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "{\"task_id\": \"bax381jmb\"}",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "I stopped my old full event-stream waker, since the tail only needs the wait over its own agents. The \"no operator on 5090-i4\" alert is expected: the 5090 is held by your order, so I'm not respawning anything. The tail wait is still armed, and I'm waiting on the eight remaining agents."
+ ],
+ "event_text_chars": 384
+}

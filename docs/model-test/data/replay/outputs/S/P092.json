@@ -1,0 +1,26 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': record 'imm26-sfJ DONE 23ee82e9 (pushed): recipes for 20-d and 23-e, offline selftest 40/40, NOT run live; tickets 20-d/23-e state=ready; run via rowtools/reload-run-sfj.sh <20-d|23-e> <lane> --allow-retry; routing in inbox\\operators\\coordinator15-10e-route.txt'; update the imm26 program ledger work package for sfJ to DONE (powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1, same form used for earlier agent reports; exact subcommand not in this file)",
+   "why": "The ledger and HANDOFF are updated after every agent report; sfJ's report already arrived as a message and the 11:30 routing note is already written, so only the state records remain."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "Confirm imm26-sfJ status is DONE (agent-status.ps1 wrote it) so the Stop hook and session-start no longer show it as in flight; no agent-abandon needed. If the setupfail ticket list still shows 20-d/23-e as owner imm26-sfJ, leave state=ready until an operator runs the row.",
+   "why": "A finished agent with a delivered report needs no respawn; the tickets stay ready because the rows were only selftested offline, not run in the game."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the event-wait.sh waker running (bg1e07iag); wait for the operator on 5090-i3 (imm26-5090-i3op21) or 4080-i4 (imm26-4080-i4op13) to claim and run 20-d and 23-e with reload-run-sfj.sh and report RESULT lines. Mark 20-d/23-e PASS in NPC_IMMERSION_26_TESTS.md only after a real-game RESULT PASS.",
+   "why": "The recipe fix is unproven until a lane runs it, and CLAUDE.md says a pass needs real game state, so there is nothing to mark yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list | grep -E '^(20-d|23-e) '",
+  "ls /c/KenshiTestRuns/claims | tr '\\n' ' '",
+  "head -3 /c/KenshiTestRuns/agents/imm26-sfJ.status",
+  "git -C /c/KenshiModding log --oneline -3"
+ ]
+}

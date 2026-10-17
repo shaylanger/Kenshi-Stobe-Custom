@@ -1,0 +1,63 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op9c: 'Coordinator: Shay's standing hold applies to 5090-i5: no new 5090 testing until he says otherwise. Stop at the next safe point, start no new row (26-a, 22-a, 26-b, 26-c, 10-d), do not install NC12, and run no more game actions on 5090-i5. Write your handoff to C:/KenshiTestRuns/agents/imm26-5090-i5-op9c.handoff.md, set status STOPPED-CONTEXT with latest: held by Shay, awaiting his OK. Reply in one line.'",
+   "why": "op9c was spawned at 23:05 while the standing HANDOFF hold (5090-i3/i4/i5 HELD by Shay; memory no-new-5090-sessions) was in force, so it must stop before any more 5090 testing."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "5090-i5: no new rows, no NC12 install, no new 5090 operator until Shay answers the flag below. Keep the game and lock as they are until op9c confirms its stop; then record the hold with kenshi-ctl.ps1 idle with reason 'Shay 5090 hold: awaiting OK'.",
+   "why": "Holds the 5090 lane under Shay's standing order; the idle reason is recorded only after the operator has actually stopped, not to quiet the hook."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Via the relay session (SendMessage): 'Flag: at 23:05 I spawned imm26-5090-i5-op9c on 5090-i5 while your hold on new 5090 testing (5090-i3/i4/i5 HELD) stood; that was my mistake. I have told op9c to stop at a safe point and hand off, and i5 stays held. Decision for you: (a) OK i5 for op9c to finish 26-a, 22-a, 26-b, 26-c, 10-d, then the NC12 install; or (b) keep i5 held until you return. Default if no answer: (b). NC12 (build only) continues on 4080/offline.'",
+   "why": "Only Shay can clear the 5090 hold, and the spawn went against it, so the conflict has to be reported to him."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op9: 'Coordinator: LANE IDLE 4080-i4 at 16.9 min, last status 22:54 (10-a PASS, 10-b SETUP-FAIL marked, next 03-b). Reply now with one line: current step and what you wait on. Write the same line to C:/KenshiTestRuns/agents/imm26-4080-i4op9.status via tools/automation/agent-status.ps1. If blocked, name the blocker and I will fix the root.'",
+   "why": "The 4080-i4 operator is still RUNNING but silent 16.9 min; the stall rule requires a direct message before any respawn, and 4080 is not under the 5090 hold."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 'LANE IDLE 4080-i4' '23:11 asked imm26-4080-i4op9 for status by message; stop and fresh respawn from its handoff at 23:14 if its status file still reads 22:54'",
+   "why": "The status request is the action taken; the alert re-opens after 30 min if the lane stays idle."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 'LANE IDLE 5090-i5' 'op9b stopped at its context limit 23:04; op9c spawned 23:05 against the hold, told to stop at a safe point; i5 held until Shay answers the flag'",
+   "why": "The hold is the state of the lane now, so the alert is closed with that reason; a still-true condition re-opens after 30 min."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append one checkpoint line to C:/KenshiModding/testing/HANDOFF.md: '**#11 23:11: LANE IDLE 4080-i4 (i4op9 silent since 22:54, asked for status by message) and LANE IDLE 5090-i5 alerts handled. op9c spawned 23:05 against the 5090 hold; told to stop at a safe point; i5 held; Shay flagged for (a)/(b), default (b). NC12 still building, not installed.**'",
+   "why": "The coordinator records every event in the handoff file so a restart loses nothing, and the record must not claim Shay has cleared i5."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Background Bash (run_in_background): MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker fired on these alerts and must be re-armed while imm26-nc12, op9c's stop and the 4080-i4 operator are in flight."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "Only if imm26-4080-i4op9 status still reads 22:54 at 23:14 (20 min silent): TaskStop on that agent (task id is not in this file; take it from its Agent call), then cd /c/KenshiModding/tools/automation; powershell -NoProfile -File lane-brief.ps1 4080-i4 -Out C:/KenshiTestRuns/agents/imm26-4080-i4op10.brief.md -Name imm26-4080-i4op10 -Predecessor imm26-4080-i4op9, then spawn imm26-4080-i4op10 from that brief with a [case:generate] tag.",
+   "why": "At 20 minutes of silence the stall rule requires stopping the agent and respawning a fresh successor from its checkpoint, so the 4080-i4 lane does not sit idle."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the op9c stop line and status, the imm26-4080-i4op9 reply, imm26-nc12 DONE (NC12 build only, not installed), and Shay's answer on i5.",
+   "why": "Nothing else is ready: the 5090 lane is held and the 4080 lane's next input is the operator's reply or a respawn."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i5-op9c.status | cut -c1-300",
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op9.status | cut -c1-300",
+  "head -3 /c/KenshiTestRuns/agents/imm26-nc12.status | cut -c1-300",
+  "grep -n -i '5090' /c/KenshiModding/testing/HANDOFF.md | tail -8 | cut -c1-300",
+  "date"
+ ]
+}

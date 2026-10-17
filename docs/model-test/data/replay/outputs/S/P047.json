@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i4 \"operator imm26-5090-i4-hard2b replied: preflight was blocked by i3/i4/i5 window overlap, windows moved, preflight OK, live chat works (402 fixed), 03-b running; next 18-a then reruns with --allow-retry\"",
+   "why": "The LANE IDLE 5090-i4 alert is explained and the lane is working again; the alert id is not in this file, so the subject form is used."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add one line: 5090-i4 imm26-5090-i4-hard2b unblocked (window overlap i3/i4/i5 fixed, preflight OK, 402 gone), running 03-b, next 18-a and the --allow-retry reruns",
+   "why": "HANDOFF Right now must be updated after every agent report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the operator's next row result (03-b) via the event stream waker; if 5090-i4 shows LANE IDLE again with no new row result after 10 min, respawn the operator fresh via lane-brief.ps1",
+   "why": "The operator is healthy and needs no steering; isolated lane operators get no extra coordinator input."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1 | grep i4-hard2b"
+ ]
+}

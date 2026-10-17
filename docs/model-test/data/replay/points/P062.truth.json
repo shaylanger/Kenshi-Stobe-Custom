@@ -1,0 +1,25 @@
+{
+ "id": "P062",
+ "session": "2a0cfe9b",
+ "ts": "2026-10-16T04:00:24.017Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:investigate] setup-fail tickets 13-g 14-e 08-e\nprompt: You are imm26-sfinv-13g (fresh). Investigate three NEW unowned setup-fail tickets raised by the 4080 reload-row runs (read-only diagnosis; propose the smallest fix; do not edit code, do not launch a game, no 5090 sessions (Shay hold), never find /): 13-g (4080-i4: \"cannot read the GIVE_CATS price of deal-99fa2f6efec25f5083602a42 (price.txt empty)\"), 14-e (needs=recipe), 08-e (needs=server-fix; note 08-e needs BORED_EVENT_CHANCE=100 on the lane backend per rowtools/README_RELOAD_A.md; check whether that is the cause). Start: `powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list` (read the ticket text/evidence paths), then the row evidence dirs under C:\\KenshiTestRuns\\imm26-4080-i4\\ (rows/, ax/, newest first, grep/tail only; open only the excerpt files named in the RESULT line), the row tooling in C:\\KenshiModding\\testing\\live-stobe-queue\\imm26-assert\\rowtools\\ (reloaddefs_b.sh reloadcheck_b.py README_RELOAD_B.md for 13-g/14-e; reloaddefs_a.sh README_RELOAD_A.md for 08-e) and the server code only via grep + line ranges (code maps: bash C:\\KenshiModding\\tools\\automation\\codemap.sh, maps in /root/imm26/codemap). For each ticket decide: row-tool bug / fixture or recipe gap / server bug / native, name the exact file+line and the smallest fix, and a size estimate in tokens for a fixer. Then assign each ticket you diagnosed to yourself with `setupfail.ps1 assign <row> imm26-sfinv-13g <plan_path>` and write the plans/report to C:\\KenshiTestRuns\\agents\\out\\imm26-sfinv-13g\\latest.md (save-report.ps1 if Write blocked). Keep status current: tools\\automation\\agent-status.ps1 imm26-sfinv-13g RUNNING|DONE|FAILED|STOPPED-CONTEXT. Target <= 70k tokens; final answer <= 6 lines.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding/tools/automation; powershell -NoProfile -File setupfail.ps1 list 2>&1 | grep -E \"13-g|unowned\" | cut -c1-220; head -4 /c/KenshiTestRuns/agents/imm26-4080-i4op8.status | cut -c1-300"
+ ],
+ "narration": [
+  "Three new setup-fail tickets came in from the 4080-i4 reload-row runs: 13-g, 14-e and 08-e. They were unowned and blocking rows, so I spawned one read-only investigator, `imm26-sfinv-13g`, for all three. It diagnoses only and edits nothing. It will name the cause and the smallest fix for each, with a token estimate for a fixer.\n\nRunning now: the investigator, rowtools44 and the two 4080 operators."
+ ],
+ "event_text_chars": 480
+}

@@ -1,0 +1,20 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on task-notification ad156516b336b83a9: it is the late completion notice of the old imm26-sfB, whose STOPPED-CONTEXT hand-back was already read and acted on (fresh imm26-sfB2 spawned as agent a2f174c4a489c4f06 from C:\\KenshiTestRuns\\agents\\imm26-sfB.handoff.md). Do not SendMessage the old agent and do not spawn a second successor.",
+   "why": "Duplicate notification for an agent whose respawn already exists; a second spawn would duplicate work on the same NC18 work dir."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-sfB2 completion or STOPPED-CONTEXT event from the running event-wait.sh waker; imm26-sfB2 delivers NC18 built but not installed, and the 13-c / 13-c-neg / 23-a / 19-d setup-fail tickets stay as they are until then.",
+   "why": "The only open work from this report is sfB2 finishing the NC18 build; nothing to do until it reports."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "type C:\\KenshiTestRuns\\agents\\imm26-sfB2.status",
+  "dir C:\\KenshiTestRuns\\alerts\\open"
+ ]
+}

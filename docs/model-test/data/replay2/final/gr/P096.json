@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-sfS -Kind DONE -Report C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md -Summary \"imm26-sfS DONE, commit a85c7b7a pushed. 05-cx v2 (hxrun_cx2.sh, SELFTEST HXCX2 23/23) and 08-d v2 (unblockrun_sfs.sh, SELFTEST SFS 18/18); offline only, no row run. Route 08-d to 4080-i4 with inbox\\operators\\sfS.txt (unblockrun_sfs.sh 08-d 4080-i4 --allow-retry). 05-cx stays off 5090-i3 until Shay lifts the 5090 hold.\"",
+   "why": "The tail relays each agent result to the new coordinator, and sfS finished with no ledger record, so its DONE must be relayed."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "5090-i3: do not run hxrun_cx2.sh 05-cx (a --dry check is free)",
+   "why": "Shay's standing no-new-5090-sessions hold applies, so sfS's 05-cx suggestion waits for his lift."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 48b778a7-13d7-4f96-bc6b-30dba5670ae0 (run in background)",
+   "why": "The previous tail-wait exited on the sfS event while four lane operators are still running, so the tail needs a waker."
+  }
+ ],
+ "checks": [
+  "ls -t /c/KenshiTestRuns/agents/out/imm26-sfS/ | head -2",
+  "git -C /c/KenshiModding log --oneline -1 a85c7b7a"
+ ]
+}

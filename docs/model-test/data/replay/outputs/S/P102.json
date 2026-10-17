@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on task b4rgpc75d (Restart single waker, completed). It was the previous waker; the rearm-waker.ps1 -KillOnly run just before starting bvpgoc6vb killed it, so its exit is the expected result of the restart, not a wake event with content.",
+   "why": "The completion is only the stale waker being killed; a fresh waker (bvpgoc6vb) was already started afterwards, and the last sweep found no lane or agent needing action."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\rearm-waker.ps1 -Status (or: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -fc event-wait.sh) to confirm exactly one event-wait.sh waker is running and it is bvpgoc6vb"
+ ]
+}

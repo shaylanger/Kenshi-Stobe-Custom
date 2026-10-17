@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i3-hard2b: TAIL STALL CHECK (relayed from coordinator #10 via tail 6d1f3011): you have been silent about 10 min (last status 20:24 'next 10-a', last row output 20:23). Now update C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.status with what is running and the next step. If blocked, write the blocker in the status and move on to 19-ax, 02-cx, 05-cx, 01-bx, 01-cx, 11-b in that order.",
+   "why": "Tail stall rule: an agent silent 10 min gets a message first."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to kenshimodding-76 (coordinator #10): TAIL REPLY: (1) imm26-5090-i3-hard2b has been silent since 20:24; the stall message was sent to it now; if it is still silent at 20:44 the tail will TaskStop it and tell you. (2) imm26-fix19: no status file, no out dir and no sign it is running; the tail did not start it and cannot confirm it is running. Treat it as never started; your imm26-fix19b spawn stands.",
+   "why": "The coordinator asked how the i3 stall is being handled and for any sign that fix19 is running; the tail has none, so it says so."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for a status-file update from imm26-5090-i3-hard2b; if there is still no change at 20:44 Win clock, run stop-agent on imm26-5090-i3-hard2b (TaskStop) and message the coordinator the stop notice.",
+   "why": "The tail's 20-minute stall threshold falls at 20:44, since the last status was 20:24."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.status -TotalCount 1",
+  "Get-ChildItem C:\\KenshiTestRuns\\agents\\out\\imm26-fix19 (expect no such directory)",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-fix19.status (expect no such file)"
+ ]
+}

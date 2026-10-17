@@ -1,0 +1,21 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background)",
+   "why": "The waker just woke this coordinator and must be restarted so the lanes and agents stay covered."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File tools/automation/agent-abandon.ps1 imm26-5090-i3op22 \"5090-i3 parked at #17 13:12: op21 abandoned on purpose, no runnable row; respawn only when a row script exists\"",
+   "why": "The STOPPED-CONTEXT respawn text (with its unexpanded $(printf ...) path) is not used because the 5090-i3 lane is parked by the #17 decision, and abandoning the marker stops the Stop hook from blocking on a stopped agent with no successor; if agent-ids list -Live shows a live successor of imm26-5090-i3op22, ignore instead."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -File tools/automation/agent-ids.ps1 list -Live",
+  "powershell -NoProfile -Command \"Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i3op22.status\"",
+  "powershell -NoProfile -Command \"Get-Content C:\\KenshiTestRuns\\lanes.held\""
+ ]
+}

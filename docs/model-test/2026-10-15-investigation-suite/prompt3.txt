@@ -1,0 +1,2 @@
+Can you review my recent in game chat with Mouse
+I had a conversation with Mouse and i was trying to get her to lead me somewhere but she got stuck in a loop of saying "I need to find a practical place before promising to lead us there" i want npc to be able to pick locations and travel to them /lead me. But she didn't seem to know any locations can you look into this and propose a solution that would let this happen? Do not change any code, this is a read only and then i want you to explain you solution in detail so i can implement it myself.

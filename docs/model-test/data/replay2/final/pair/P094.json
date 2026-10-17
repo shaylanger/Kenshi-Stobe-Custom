@@ -1,0 +1,30 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (never a bare & or disown)",
+   "why": "The waker exited with code 0 after one 91 s batch while op9n, op21, op13, op21, fxA, fxB, fxC, ctxaudit, sfN and sfO are still in flight, so something must stay running to wake the coordinator."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': record imm26-bundle DONE (commit 9be74b55 pushed; lane-deploy.sh, lane-deploy-4080.sh and lane-deploy-selftest.sh built and tested on temp trees and a copy of the 5090-i4 site, not run on any real lane; operators told to run inbox/operators/bundle.txt once at their next row boundary).",
+   "why": "The rule is to update HANDOFF 'Right now' after every agent report, and the bundle DONE is not in the current text yet."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "If imm26-bundle appears in a program ledger under C:/KenshiTestRuns/programs/ (the <name>.json that session-start -Brief names), set its state to DONE with the same evidence; if it is not listed there, make no ledger change.",
+   "why": "The ledger carries each agent's state after its report, but tail-ack reported imm26-bundle is in no program ledger, so the entry may not exist and must not be invented."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no tail-ack for imm26-bundle",
+   "why": "tail-ack reports imm26-bundle is in no program ledger, so there is nothing to close, and its report was already read and routed to the operators at 12:00 (routing note inbox/operators/coordinator15-10e-route.txt)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "cat C:/KenshiTestRuns/agents/imm26-bundle.status",
+  "ls C:/KenshiTestRuns/agents/out/imm26-bundle/"
+ ]
+}

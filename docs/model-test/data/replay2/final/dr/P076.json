@@ -1,0 +1,26 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:generate] imm26-4080-i4op11 4080-i4 operator'; prompt = the brief from `powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-brief.ps1 4080-i4 -Name imm26-4080-i4op11 -Predecessor imm26-4080-i4op10`, with predecessor handoff C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.handoff.md, status file C:\\KenshiTestRuns\\agents\\imm26-4080-i4op11.status, and queue: check game state on 4080-i4 first, install-harness-4080-i4.ps1 -Action Plan then -Action Apply (27-a), then KAH_PF_ISOLATION=0 bash rowtools/unblockrun_b.sh 13-c 4080-i4 --save kah-imm26-4080-i4h, then 10-e, 10-e-inproc, 27-a, 13-c-neg; each row prints one RESULT line; then the rowsC rows (15-bx 20-a 10-b via unblockdefs_c.sh) and the rowsA rows (08-e 08-d 11-b) once imm26-u-rowsA2 selftest is done",
+   "why": "The STOPPED-CONTEXT agent imm26-4080-i4op10 has no successor and the wrap-up order already planned op11 for the unblock rows on 4080-i4 (spawn only if no imm26-4080-i4op102 or imm26-4080-i4op10b is already running)."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 imm26-4080-i4op10 \"respawned as imm26-4080-i4op11 from C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.handoff.md\"",
+   "why": "Close the stopped-agent alert only after the successor is running; the alert id is not shown here so the subject is used."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md: add a '#12 01:30' line to Right now: i4op10 STOPPED-CONTEXT (wrap-up done), imm26-4080-i4op11 spawned with the unblock rows queue; waiting on tail relay of i4op10 result (tail-ack it), imm26-u-rowsA2 selftest, op9g 26-a on 5090-i5; 10-f awaits Shay",
+   "why": "HANDOFF Right now must be updated the moment an agent finishes or a new one starts."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "ls /c/KenshiTestRuns/agents | grep -E 'imm26-4080-i4op10|imm26-4080-i4op11'",
+  "sed -n 1,60p /c/KenshiTestRuns/agents/imm26-4080-i4op10.handoff.md",
+  "git -C /c/KenshiModding status --short testing/live-stobe-queue/imm26-assert/rowtools | head"
+ ]
+}

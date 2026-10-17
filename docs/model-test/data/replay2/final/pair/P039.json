@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 with the message: INTERIM result from imm26-4080-i4op52 (task ae85217f23349ae6e, lane 4080 i4, owner tail 2b1a8eca). The agent still has its own background work, so the final report follows. PASS 08-b (batch4: natural bored tick, speaker Cind, director mode, situated_remark_claim 6255, social_followup ask_count 1, not_before +24h; Cind-in-combat control not run). PASS 09-c (caveat: no no-preference control; go-row ACCEPTED Stumble Inn, travel_alternatives pending_change PROPOSED). PASS 06-c (go-row on i4). FAIL 08-a (travel-consent reply suppresses the followup row). FAIL 10-a (Selika accepted the specific apology in speech, 0 apology_relief rows). SETUP-FAIL 10-b (cause is in the full handback). NC6 3ADDE488 running on 4080 i4 (SHA verified both ends), marker 4080-imm26-i4 kept. For the new coordinator: record these as interim in testing/NPC_IMMERSION_26_TESTS.md; FAILs are not rerun without --allow-retry; 08-a may be the design conflict HANDOFF already flags, so 08-a and 10-a go to [case:investigate] first; if the 10-b cause is a missing handler or command, build it, do not report it blocked.",
+   "why": "The operator is owned by this tail session, so its results reach the new coordinator as relays; the tail records rows, spawns and edits nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the final status of agent imm26-4080-i4op52 (C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status, DONE or STOPPED-CONTEXT) and its final handback before any second relay. Send no message to the operator and no game commands to lane 4080 i4.",
+   "why": "The agent stopped with its own background work still running, so this report is interim and may still change, and an isolated arm gets no coordinator input."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No spawn, no respawn, no edit to testing/HANDOFF.md or the program ledger, no row marking, no debugger for 08-a/10-a from this tail.",
+   "why": "A tail session spawns, edits and decides nothing; the new coordinator records the rows, runs the [case:investigate] step and never respawns an agent owned by a live tail."
+  }
+ ],
+ "checks": [
+  "type C:\\KenshiTestRuns\\agents\\imm26-4080-i4op52.status",
+  "Read C:\\KenshiTestRuns\\lane-owners.json to confirm imm26-4080-i4op52 owns lane 4080 i4 under tail 2b1a8eca",
+  "Read the newest full i4op52 handback under C:\\KenshiTestRuns\\agents\\out\\imm26-4080-i4op52\\ to get the 10-b SETUP-FAIL cause before the relay text is sent, since the event text is cut off",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 current"
+ ]
+}

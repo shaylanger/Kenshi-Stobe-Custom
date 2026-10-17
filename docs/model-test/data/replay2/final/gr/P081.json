@@ -1,0 +1,32 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "row 27-a status FAIL (test/recipe defect, not a product defect); evidence C:/KenshiTestRuns/imm26-4080-i4/rows/27-a/result.txt (run 2) and C:/KenshiTestRuns/imm26-4080-i4/rows/27-a.prev (run 1); report C:/KenshiTestRuns/agents/out/imm26-inv-27a/latest.md",
+   "why": "Both chase legs failed the 35 u limit copied from row 23-e (pre 67.3 to 80.7, post 131.1 to 66.5) while the engine kept the Bodyguard contract (hours_left 24.0 to 23.1), so the reading of a pass in op11's handoff is wrong and the row cannot count as PASS until the checker is fixed and it reruns."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-27a-fix, description '[case:patch] 27-a checker stand-off limit'. Brief: first read C:/KenshiTestRuns/agents/out/imm26-inv-27a/latest.md. Patch function c_27a in C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py (about lines 255-262). The Bodyguard stand-off measured 49.3 to 67.3 u in four samples, so the 35 u limit copied from row 23-e can never pass a working bodyguard. Replace it with a check of the contract: package still Bodyguard, hours_left reduced, and the follower closes toward a stand-off band whose limit you justify from those four samples. Keep every existing assertion, including the post-load closing check b1 < b0. Do not weaken any check just to pass the current data. Write the patched file to reloadcheck_a.py.candidate and do NOT edit the live reloadcheck_a.py. Add a selftest: the recorded data (67.3 to 80.7, 131.1 to 66.5, 49.3, 50.7) must pass the new band, and a run that never closes (130 to 130) must fail. Budget 60k tokens, grep and line ranges only, never read a file over 60 KB whole. Status via tools/automation/agent-status.ps1 imm26-27a-fix. Report the candidate path and the selftest output.",
+   "why": "The fix is a test-defect correction in offline checker code, so one patch agent is the cheapest route, and the candidate-file rule keeps any queued or running row from being killed mid-run; the limit change is a checker correction that goes in the final summary to Shay."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md, section Right now: add a #13 line saying 27-a root cause is a checker defect (c_27a 35 u limit copied from 23-e), the Bodyguard contract survives save+load (hours_left 24.0 to 23.1), the row stays FAIL until the checker candidate is installed and 27-a reruns, and fixer imm26-27a-fix is spawned",
+   "why": "The HANDOFF Right now text and the program ledger must record each agent report at once so a successor does not re-derive it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:/KenshiModding; git add testing/HANDOFF.md && git commit -q -m 'HANDOFF #13: 27-a root cause is checker defect (35 u limit), contract survives load; fixer spawned' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git push -q origin HEAD",
+   "why": "Every HANDOFF edit is committed and pushed right away, per the repo rules."
+  }
+ ],
+ "checks": [
+  "grep -rln reloadcheck_a C:/KenshiModding/testing C:/KenshiTestRuns/queue",
+  "grep -n 'c_27a' -A10 C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py",
+  "tail -30 C:/KenshiTestRuns/imm26-4080-i4/rows/27-a/result.txt",
+  "cat C:/KenshiTestRuns/lanes.held",
+  "git -C C:/KenshiModding status --short testing/HANDOFF.md"
+ ]
+}

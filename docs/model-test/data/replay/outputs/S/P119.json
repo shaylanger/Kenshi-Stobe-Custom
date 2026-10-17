@@ -1,0 +1,36 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 for relay INBOX 20261016-140902-tail-imm26-5090-i4-hk2.msg (imm26-5090-i4-hk2 DONE, report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i4-hk2\\out-20261016-140851.md); exact argument syntax of tail-ack.ps1 not shown in this file, use its usage line",
+   "why": "The relay is a delivered result (not an order) for the finished hk2 operator and must be acked so the tail can close."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "Add-Content C:\\KenshiTestRuns\\lanes.held \"5090-i4\"  (only if the report check shows no unfinished rows an operator can run; its rows are the 12-d SETUP-FAIL that needs a recipe, not an operator)",
+   "why": "Same handling as 4080-i3: the previous operator finished and the remaining work needs a recipe/fixer, so a bare operator would sit idle; this also follows the hold on new 5090 sessions."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-no-operator-5090-i4 \"hk2 DONE (Haiku shadow pilot, relay acked); lane parked in lanes.held, 12-d SETUP-FAIL (dist_to_target 112.3 >= 80) needs a recipe, not an operator\"",
+   "why": "Closes the open LANE NO-OPERATOR alert after acting on it; the alert id is inferred from the lane-no-operator-<lane> pattern of the earlier alert."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': record hk2 DONE, 5090-i4 parked, 12-d needs a reachable-NPC (distance < 80) recipe, 4080-i3 parked, imm26-inv22b running, NC25 not yet on 5090 lanes",
+   "why": "Rules require the live state file to be updated after every agent report."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh  (run in background)",
+   "why": "The waker just exited and imm26-inv22b is still in flight, so a waker must be running again."
+  }
+ ],
+ "checks": [
+  "cd /c/KenshiTestRuns/agents/out/imm26-5090-i4-hk2 && head -c 3000 out-20261016-140851.md",
+  "cat /c/KenshiTestRuns/agents/imm26-5090-i4-hk2.status",
+  "cat /c/KenshiTestRuns/lanes.held",
+  "cat /c/KenshiTestRuns/alerts/open/lane-no-operator-5090-i4.json"
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-sfS -Kind DONE -Report C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md -Summary \"imm26-sfS DONE, commit a85c7b7a pushed (offline-verified only, no lane used). 05-cx v2: rowtools/hxrun_cx2.sh 05-cx <lane> --allow-retry \\\"<why>\\\" (hxdefs_cx2.sh, hxscen_cx2.py; setname+pin per spawn, conditional E check gives SETUP-FAIL not FAIL, roster sed fixed), selftest HXCX2 23/23; 05-cx H may still FAIL roster_has_sleeper. 08-d v2: rowtools/unblockrun_sfs.sh 08-d 4080-i4 --allow-retry \\\"<why>\\\" (tick sends attn in_combat false, ask check only after tick 1), selftest SFS 18/18; if 08-d still not retired the product fix is moving the retire block above the speech gates in stobeSocialFollowupsClaim (sfT already composed that). Operator note C:\\KenshiTestRuns\\inbox\\operators\\sfS.txt. Suggested lanes: 08-d on 4080-i4 now; 05-cx on 5090-i3 only after Shay lifts the 5090 hold.\"",
+   "why": "The tail owns sfS and must relay its DONE result to the current coordinator 245d8ad7 (coordinator.current) so the tail-wait stops reporting 'not relayed yet'; the tail spawns and decides nothing itself."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiTestRuns/inbox/coordinator && mkdir -p delivered && for f in *-tail-imm26-sfS.msg done/*-tail-imm26-sfS.msg; do [ -f \"$f\" ] && cp -n \"$f\" delivered/; done",
+   "why": "Same workaround as for ctxfix/fxC2/sfP/sfR: tail-mode.ps1 Get-TailRelayState only checks coordinator/ and delivered/, not done/, so a copy in delivered/ releases the tail for this agent (the proper fix in tail-mode.ps1 is left to the new coordinator and a process-idea note)."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 48b778a7-13d7-4f96-bc6b-30dba5670ae0 (Bash run_in_background)",
+   "why": "The previous tail-wait exited on sfS; restart it to keep waiting on the remaining agents (four lane operators and sfU, whose relay is already sent)."
+  }
+ ],
+ "checks": [
+  "ls -l --time-style=+%H:%M:%S /c/KenshiTestRuns/inbox/coordinator /c/KenshiTestRuns/inbox/coordinator/done /c/KenshiTestRuns/inbox/coordinator/delivered | grep sfS",
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-sfS.status | cut -c1-300"
+ ]
+}

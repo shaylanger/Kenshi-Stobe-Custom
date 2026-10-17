@@ -1,0 +1,25 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Verify C:/KenshiModding/pending-fixes/npc-immersion-26/NC10/Stobe.dll has SHA256 E1302B7777BB0DC524351B8466550758B4B29716C8CD858CA56EE08D17180651, then install it on the 5090-i5 lane tree with the same lane install step used for NC9 (lane tree only, never Shay's live install); stop on hash mismatch or if Kenshi is running on that lane.",
+   "why": "NC10 fixes the hunt ownership clause and the mine-permission check that block rows 25-b, 25-a, 22-a and 26-abc on i5, and the lane has no operator until it is installed."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i5-op7, brief file C:/KenshiTestRuns/agents/imm26-5090-i5-op7.brief.md (already registered to lane 5090-i5 with predecessor imm26-5090-i5-op6), with the lane-operator tag from model-policy.json; brief it to rerun 25-b 25-a 22-a 26-abc on the installed NC10 build, using --allow-retry only where the attempt guard allows.",
+   "why": "Only after the NC10 install is verified, so the new operator runs its rows on the new build and not the NC9 one."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': add a line that imm26-nc10 is DONE (e3ab90a, Stobe.dll SHA E1302B77...0651, in pending-fixes/npc-immersion-26/NC10), installed on 5090-i5, and imm26-5090-i5-op7 is running 25-b 25-a 22-a 26-abc; update the program ledger entry for imm26-nc10 to done and register op7 as owner.",
+   "why": "The rules require HANDOFF and the program ledger to be updated after every agent report, and the batch brought a completed agent result."
+  }
+ ],
+ "checks": [
+  "Get-FileHash C:/KenshiModding/pending-fixes/npc-immersion-26/NC10/Stobe.dll -Algorithm SHA256",
+  "git -C C:/KenshiModding log -1 --oneline e3ab90a",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 (5090-i5 lane status; confirm Kenshi is not running on it before the install)"
+ ]
+}

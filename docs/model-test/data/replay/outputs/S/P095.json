@@ -1,0 +1,30 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent imm26-sfQ: [case:investigate] 20-d no pending_change | You are imm26-sfQ, a fresh offline investigator (no lane use, no installs, no builds). Standard block C:\\KenshiModding\\testing\\AGENT_PROMPTS.md (agent-status.ps1 imm26-sfQ RUNNING|DONE...). Use codemaps (tools/automation/codemap.sh) for big files. FACT: SETUP-FAIL 20-d on lane 5090-i3 (needs: recipe): the NPC never recorded a pending plan change for the change request (no pending_change in travel_alternatives), after the 20-a first leg. Evidence C:\\KenshiTestRuns\\imm26-5090-i3\\rows\\20-d; ticket via powershell -File tools/automation/setupfail.ps1 list; sfJ built the earlier 20-d/23-e recipes (commit 23ee82e9). TASK: find from the evidence and the server/native code why no pending_change was recorded (wrong request wording, wrong trip phase, or a real product bug), then deliver either a corrected recipe script (new file, never edit scripts a running operator or queued list uses) with selftest, or a patch proposal (not built, not installed), plus a note in inbox\\operators. Report to C:\\KenshiTestRuns\\agents\\out\\imm26-sfQ via save-report.ps1.",
+   "why": "Every SETUP-FAIL ticket gets an agent at once; the earlier sfJ recipe already ran and failed, so a fresh investigator is needed, not a re-run."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 20-d imm26-sfQ",
+   "why": "Record the owner on the ticket so it shows as assigned and is not double-handled."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Note to the 5090-i3 operator (inbox\\operators): 20-d is SETUP-FAIL after one attempt, do not retry it; take the next runnable row from the lane plan (claim with mkdir C:\\KenshiTestRuns\\claims\\<row>).",
+   "why": "Standing rule: a stuck row becomes SETUP-FAIL after one attempt and the lane moves on, never idle."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The waker exited after delivering this event and must be restarted so work in flight stays covered."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "head -c 1500 C:/KenshiTestRuns/setupfail/20-d.json",
+  "tail -n 40 C:/KenshiTestRuns/imm26-5090-i3/rows/20-d/*.out"
+ ]
+}

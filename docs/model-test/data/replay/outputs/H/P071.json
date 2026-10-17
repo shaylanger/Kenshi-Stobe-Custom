@@ -1,0 +1,19 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 lane-idle-5090-i5 'idle by decision: all remaining 5090-i5 rows (26-a 26-b 26-c 22-a) need a native fix (canISeeThisGuy, ActivityRuntimeBindings.cpp:496); imm26-nc13-investigate running; idle reason recorded 60 min; game up on NC12, lock held; new operator on NC13 after the investigation'",
+   "why": "The NO-OPERATOR event is expected because the 5090-i5 lane was deliberately idled with a real reason (no runnable i5 rows on NC12) and the alert needs an explicit closure with that action."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-nc13-investigate completion notification (root cause plus smallest fix); then spawn the NC13 fixer with [case:patch] and, once it is installed, one 5090-i5 operator on rows 26-a 26-b 26-c 22-a",
+   "why": "Those rows cannot run on NC12 and the lane must not be re-staffed before the root cause is known, so nothing else runs on i5 yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "tail -n 3 /c/KenshiTestRuns/agents/imm26-nc13-investigate.status"
+ ]
+}

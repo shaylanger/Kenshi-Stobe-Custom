@@ -1,0 +1,18 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No respawn and no SendMessage to ad156516b336b83a9 or imm26-sfB; the task-notification is the old agent's finish after its CONTEXT LIMIT handoff.",
+   "why": "The successor imm26-sfB2 (agentId a2f174c4a489c4f06) was already spawned from the imm26-sfB handoff, so respawning again would duplicate work and resuming the old agent is forbidden."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the completion notification of imm26-sfB2 (agentId a2f174c4a489c4f06) and keep the event waker running.",
+   "why": "NC18 is built and handed over not installed, so the next step is the successor's DONE or STOPPED-CONTEXT report, which is the only thing that changes the batch."
+  }
+ ],
+ "checks": [
+  "Get-Content C:/KenshiTestRuns/agents/imm26-sfB2.status"
+ ]
+}

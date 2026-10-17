@@ -1,0 +1,30 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "Hold lane 5090-i4: spawn no 5090 operator and do not respawn imm26-5090-i4-hard2b2 (STOPPED-CONTEXT, no successor); leave lane-owners.json untouched and keep C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b2.handoff.md for a later resume",
+   "why": "Shay's order 'please dont start any new 5090 tesitng sessions for now. until i say otherwise' overrides the LANE NO-OPERATOR respawn rule, so the event is held rather than respawned"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i4-hard2b2 \"Shay 2026-10-15: no new 5090 testing sessions until he says otherwise\"",
+   "why": "Same closure already used for hard2c and op9; the Stop hook otherwise blocks on a STOPPED-CONTEXT agent with no successor, and the handoff file stays for the later resume"
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-no-operator-5090-i4 \"held: no new 5090 sessions until Shay says otherwise (2026-10-15); hard2b2 abandoned, handoff kept\"",
+   "why": "Closes the open 5090-i4 no-operator alert with the action taken; the id follows the lane-no-operator-5090-i3 pattern from the hook note (subject form is accepted), and the 5090-i4 lane-idle alert and agent-stopped-context-imm26-5090-i4-hard2b2 get the same ack if listed"
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add one line that 5090 lanes i3/i4/i5 are on hold per Shay (no new 5090 testing sessions), hard2c/op9/hard2b2 abandoned with handoff files kept, resume 5090 operators only when Shay says so",
+   "why": "Keeps the checkpoint accurate so a successor coordinator does not respawn the held 5090 operators"
+  }
+ ],
+ "checks": [
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.status",
+  "ls /c/KenshiTestRuns/inflight/",
+  "ls /c/KenshiTestRuns/alerts/open/ | grep -i 5090-i4"
+ ]
+}

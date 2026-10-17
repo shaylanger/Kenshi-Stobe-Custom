@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker exited after printing the sweep digest (work is in flight: op14, i3op21, i5-op9n, costaudit, sfR2), so it must be re-armed at once; the stale-process kill already ran."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-fix-19e \"status_age 520 min, no log activity, still 'reading'; orphan of an earlier coordinator; its 19-e fix is already in pending-fixes/19e-recipe and routed to the 5090-i5 operator, so no successor is needed\"",
+   "why": "A RUNNING status 520 min old with no log activity is an orphaned agent whose work is already covered, so I close its marker deliberately instead of respawning it. This runs only if the status file check confirms it is not owned by a live tail."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Leave the other rollcall lines and the four SWEEP MARKER lines alone (op14, i3op21, i5-op9n, costaudit and sfR2 all show fresh status or log ages; 4080-imm26-i4 'out dir missing' is the lane bring-up op14 is still reading its brief for).",
+   "why": "Nothing else in the digest is a stall or a failure, so no action is needed beyond the waker and the orphan cleanup."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "type C:\\KenshiTestRuns\\agents\\imm26-fix-19e.status",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

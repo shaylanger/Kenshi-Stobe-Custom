@@ -1,0 +1,18 @@
+{
+ "id": "L29",
+ "batch_id": 29,
+ "class": "waker digest",
+ "window": [
+  "2026-10-16T22:32:52.431Z",
+  "2026-10-16T22:34:35.251Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": true,
+ "real_action_count": 2,
+ "action_types": [
+  "read"
+ ]
+}

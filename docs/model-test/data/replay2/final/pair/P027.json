@@ -1,0 +1,47 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP",
+   "why": "The waker task b34x6fxwb exited (exit 0) on this wake, so nothing watches for events until it is restarted."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': 5090 i4 operator imm26-5090-i4op3 STOPPED-CONTEXT, owned by live tail 5720e5b8-42a8-4aaf-9e29-db0072586324 with no relay yet; successor imm26-5090-i4op32 pending the TAIL-RELAY; NC5 Stobe.dll swap at its next relaunch",
+   "why": "Right now must be updated after every agent event, not only at a context limit."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the TAIL-RELAY of imm26-5090-i4op3 in C:\\KenshiTestRuns\\inbox\\coordinator. Do not respawn it while the ledger shows owner tail:5720e5b8-42a8-4aaf-9e29-db0072586324. If no relay arrives within 5 min and tail-mode.ps1 list shows that tail is no longer live, spawn the successor (next item); if a LANE NO-OPERATOR alert fires for 5090 i4 while the tail is still live, check the tail status and keep waiting for its relay.",
+   "why": "A coordinator never respawns an agent owned by a live tail before its relay arrives; the 5 min window and the NO-OPERATOR alert bound the idle lane."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-5090-i4op3 (only once its TAIL-RELAY is in C:\\KenshiTestRuns\\inbox\\coordinator)",
+   "why": "Each TAIL-RELAY is acked by the new coordinator so the tail session can end once it is delivered."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name: imm26-5090-i4op32. Tag: [case:generate]. Brief: [case:generate] 5090 i4 operator imm26-5090-i4op32 | You are imm26-5090-i4op32, fresh successor of imm26-5090-i4op3 (STOPPED-CONTEXT) as the operator of lane 5090 i4 (imm26 NPC immersion program). Start by reading C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md in full, then the top section of testing/NPC_IMMERSION_26_HANDOFF.md, the OPERATOR_COMMON.md brief under pending-fixes/npc-immersion-26, docs/COORDINATOR_IMPROVEMENTS.md and testing/KNOWN_BLOCKERS.md. Keep C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.status current with agent-status.ps1 (name imm26-5090-i4op32) and write C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.handoff.md at every milestone (~40k tokens). Rules: isolated lane only (5090 i4), never Shay's live install, server or DB; swap in the NC5 Stobe.dll (SHA 25252267D3C07BE39E176685EE4CEEBF5A3933DCC12BF8B9204FB7F6B9A380B4) at its next relaunch; native and activity rows per the handoff.",
+   "why": "Spawn only after the relay is acked, or when the tail is no longer live and no relay arrived, and only if no imm26-5090-i4op3 or imm26-5090-i4op32 status is RUNNING; the relay carries the handoff."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1 route ... (move imm26-5090-i4op3 to successor imm26-5090-i4op32 and route it to the coordinator; exact arguments per the script usage header, which is not in this file)",
+   "why": "Ledger ownership moves from the tail to the new coordinator and successor only once the successor exists."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiTestRuns\\lane-owners.json: override the 5090 i4 operator to imm26-5090-i4op32 (format per tools\\automation\\lane-idle.ps1)",
+   "why": "The lane-idle check must recognise the respawned operator, as the handoff describes for respawned operators."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief | Select-String -Pattern 'i4op3|i4op32|NO SUCCESSOR|ORPHANED|OPEN ALERTS|TAIL'",
+  "powershell -NoProfile -Command \"Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator | Select-Object -Last 5\"",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 list",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1",
+  "powershell -NoProfile -Command \"Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md -TotalCount 60\""
+ ]
+}

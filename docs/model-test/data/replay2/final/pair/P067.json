@@ -1,0 +1,53 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "Stop the running imm26-5090-i5-op9b agent (TaskStop on its task id from its status file or ledger entry; if no task id is recorded, set its status to STOPPED-CONTEXT with agent-status.ps1 and say so in HANDOFF). Then: powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-5090-i5-op9b \"started 22:46 during Shay's no-new-5090-sessions hold; stopped\"",
+   "why": "op9b started a new 5090-i5 session after Shay's standing order to hold all new 5090 testing, so it has to stop, and the coordinator's own earlier bring-up of i5 was the breach."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "Stop the 5090-i5 backend and the D:/KenshiInst,5 game (game pid 48688) the same way the i3/i4 lanes were stopped: first grep -n LANE_I3_STOP C:/KenshiModding/tools/automation/lane-backend.sh to confirm the stop-flag form, then run the i5 form of lane-backend.sh stop (LANE_I5_STOP=yes if the script uses that form). Then: powershell -NoProfile -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 idle \"Shay no-new-5090 hold; i5 op9b stopped\"",
+   "why": "This stops the i5 backend and game that op9b brought up and records the idle reason so the waker stops re-alerting; the i5 stop-flag form is inferred from the documented i3 form and is confirmed by the grep first."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 lane-idle-5090-i3 \"5090-i3 held by Shay's no-new-5090 order; operator hard2c abandoned, idle is intended\"",
+   "why": "The idle alert re-opened after 30 min because the condition is still true; the lane is intentionally idle, so the ack only closes it and nothing is restarted."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-5090-i3-hard2c \"5090-i3 held by Shay's order; never ran; brief kept at agents/imm26-5090-i3-hard2c.brief.md for resume\"",
+   "why": "HANDOFF already lists hard2c as abandoned and it is still the named owner of the idle lane; drop it on purpose (only if its status file does not show a fresh RUNNING) so it stops showing as the i3 operator."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-native-25b, description starts with [case:patch] (confirm the name in model-policy.json). Brief: fix the native SETUP-FAIL 25-b; ticket C:/KenshiTestRuns/setupfail/25-b.json. Root cause from the 5090-i5 NC11 run (op9b, 22:49): stobe.log ACTIVITY_MINE_EXACT_DIAG node=2141357440 clause=no_production_building; the iron mine node (special 27, inventory present) returns NULL from Building::_NV_getProductionBuilding(), so ExactSection (ActivityPolicySupport.cpp:104-107) and MineSourcePermitted (:359-364) never succeed and the product item stays empty for every mine node. Change: accept an inventory-bearing mine node without a production building as a permitted exact-output source. Write the code, compile, build. Install to the 4080 lane only, and only between operator rows (tell imm26-4080-i4op9 through its inbox first; never mid-row). No 5090 install, no 5090 rows. Report the DLL hash and the 25-b row plan for the 4080 lane. Checkpoint in your status file. Read the source with grep -n first; do not read whole files.",
+   "why": "The 25-b native fix is root-caused and the ticket is open and unowned; waiting for the 14-c and 26-a diagnostics from the held 5090-i5 lane would wait on a hold that now stops them, and the 4080 lane can take the install."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md: append a Right now line: 5090-i5 op9b started 22:46 against the no-new-5090 hold, stopped with the i5 backend and game; 5090-i3 idle alert acked as held and hard2c abandoned; native fixer imm26-native-25b spawned for the 25-b fix (4080 install only); 14-c and 26-a diagnostics wait until Shay lifts the hold.",
+   "why": "HANDOFF must record the hold breach, the stop, and the changed 25-b plan so the next session does not follow the old batching plan."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Via relay session: the 5090-i5 op9b NC11 diagnostic run started at 22:46 against your no-new-5090-sessions order, and I started it. I stopped op9b and the i5 lane, and the 5090-i3 idle alert is acked as held (hard2c abandoned). 25-b root cause: mine nodes return no production building, so exact_output_unavailable for every node. A native fixer is building the fix for the 4080 lane only. 14-c and 26-a diagnostics wait until you lift the hold. No decision needed now.",
+   "why": "Shay must know the hold was broken by a session the coordinator started, that it was stopped, and that the 25-b plan changed."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "imm26-4080-i4op9 keeps running (10-a PASS marked; next 10-b, 03-b, then 13-g 14-e 13-f 27-a 08-e)",
+   "why": "4080 work continues under Shay's rules and nothing in this batch touches it."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -3 C:/KenshiTestRuns/agents/imm26-5090-i5-op9b.status",
+  "head -3 C:/KenshiTestRuns/agents/imm26-5090-i3-hard2c.status",
+  "grep -n LANE_I3_STOP C:/KenshiModding/tools/automation/lane-backend.sh",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "ls C:/KenshiTestRuns/alerts/open"
+ ]
+}

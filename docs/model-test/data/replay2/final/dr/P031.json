@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not spawn imm26-5090-i3op3b",
+   "why": "imm26-5090-i3op4 was already spawned as the fresh successor of imm26-5090-i3op3 earlier this session and the relay was acked, so a second operator would double up on lane 5090 i3; the hook only lacks a recorded successor."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i3op3 \"successor imm26-5090-i3op4 already running as fresh operator of lane 5090 i3 (handoff read from agents\\imm26-5090-i3op3.handoff.md); lane-owners.json updated\"",
+   "why": "This is the documented way to close a stopped agent's marker once its successor exists, which clears the Stop-hook block without a duplicate spawn."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i3op4.status"
+ ]
+}

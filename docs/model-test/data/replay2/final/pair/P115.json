@@ -1,0 +1,47 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (never a bare &)",
+   "why": "The waker exits after each event batch and work is in flight, so a new waker must run before anything else."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage by agent id, taken from powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live, to the LIVE 4080-i4 operator. imm26-4080-i4op12 is messaged only if it is listed live; if the only live 4080-i4 operator is imm26-4080-i4op14 (owned by tail 245d8ad7), message it by id and note in HANDOFF that the tail owns the answer. Text: 'Coordinator -> 4080-i4 operator: the lane has been idle 6.5 min. Reply in two lines: what you are doing now, and the next row you will run. If blocked, name the blocker and the evidence file. If no row is claimable, park the lane with the reason.'",
+   "why": "The LANE IDLE event asks for the operator's status before any fix, and op12 may be a stale predecessor, so only a live id gets the question."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Only if no 4080-i4 operator is live in agent-ids list -Live, op14 is not live, op12 did not answer within 5 min, and next-row.sh shows a claimable 4080-i4 row: powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-brief.ps1 4080-i4 -Name imm26-4080-i4op15 -Predecessor imm26-4080-i4op12, then Agent description '[case:generate] 4080-i4 operator op15' with that brief text; record the returned id with agent-ids.ps1 add imm26-4080-i4op15 <id>. Otherwise spawn nothing and park the lane with the reason.",
+   "why": "A dead operator with no successor leaves the lane idle, so a fresh successor follows the standing rule, but never for a lane a live tail still owns and never without a row to run."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record 'imm26-inv26nat DONE: requester_now_hostile is a correct native safety gate (ActivityRuntimeBindings.cpp:304, isEnemy both ways), not a native bug; 26-d, 26-dx and 26-e stay recipe/ready (Malzin + sfO Hunt inject, no re-serial); 5090-i5 op9p owns the 26-* reruns; the design question is in testing/SHAY_DECISIONS.md'.",
+   "why": "The Right now text is the canonical checkpoint and must be updated the moment an agent finishes, so the next coordinator does not re-investigate this."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: add an open question 'Keep the isEnemy gate (ActivityRuntimeBindings.cpp:304), or let NPCs with a personal grudge or captor tag start activities?' with options (keep the gate / allow grudge-or-captor NPCs), the in-game effect of each, the code consequence of each, and the default = keep the gate (the investigator's recommendation). Shay is asked once, in the next combined summary.",
+   "why": "Every open Shay question must live in SHAY_DECISIONS.md with its options, not only in a HANDOFF line, and it is not a separate message."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Run grep -rn -i 're-serial' C:/KenshiModding/testing C:/KenshiModding/docs (check below), then edit each line that says the faction re-serial clears requester_now_hostile so it says it does not: relation +50 and the re-serial both still fail.",
+   "why": "The investigator found the old note wrong, and a stale note would send the next agent down the failed recipe."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 <id of the LANE IDLE 4080-i4 alert from ls C:/KenshiTestRuns/alerts/open> 'asked 4080-i4 operator for status; respawned only if dead, silent and claimable'",
+   "why": "The alert closes once the action is taken; if the lane is still idle after 30 min it re-opens."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live",
+  "cut -c1-300 C:/KenshiTestRuns/agents/imm26-4080-i4op12.status",
+  "tail -5 C:/KenshiTestRuns/imm26-4080-i4/report.txt",
+  "ls C:/KenshiTestRuns/alerts/open",
+  "grep -rn -i 're-serial' C:/KenshiModding/testing C:/KenshiModding/docs"
+ ]
+}

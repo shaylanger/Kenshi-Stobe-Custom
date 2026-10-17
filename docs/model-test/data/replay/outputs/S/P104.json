@@ -1,0 +1,34 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a10e0b733c56138df (imm26-pilotC, still running on tools/automation/cost-audit.py): 'Shay order via peer, supersedes/extends your scope; keep working in the same file, no second agent will touch it. (1) Add --since/--until date options to cost-audit.py and run the audit for 2026-10-14 00:00 to now ONLY (ignore everything earlier: older setup, often Opus coordinator). Rebuild ledger.md, ledger.csv and the docs/cost-audit copy for that window. (2) Categories reported separately: lane operators (all imm26-*op* agents incl. -hk pilot): Sonnet-high actual cost per operator, per operator-hour, per row where rows can be counted from status-mark/mark-row calls; coordinators; investigators/fixers/recipe agents. (3) Haiku-high what-if for operators with Shay table ratio AND sensitivity cases where Haiku needs 1.5x and 2x the turns. (4) Cost split by cache read / cache write / output for operators. (5) Fix unpriced claude-fable-5-1 messages if a price is known in docs/MODEL_ROUTING.md or model-policy.json, else list them separately for the window. (6) Recheck 3-4 totals by hand from raw transcripts. (7) Final text: answer his question, would a Haiku-high lane operator change cost, and what it implies for the pilot. Update your status file as usual, checkpoint before 120k tokens.'",
+   "why": "pilotC already owns cost-audit.py edits and the lane-operator category, so extending it avoids a duplicate agent colliding on the same file."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to ac12b657f0aab5448 (imm26-pilotA): 'Shay order via peer: the pilot shadow ledger C:\\KenshiTestRuns\\pilot\\haiku-i4\\verdicts.csv must carry per row the columns: row, lane, model, start, end, wall_s, tokens, cost, operator_verdict, checker_result, agree, false_claims_n, notes. Add to the tooling: (a) cost per row/hour from cost-audit.py (pilotC adds the --since/--until window and lane-operator line) on the pilot transcript; (b) TIME: wall seconds per row, rows per hour, idle gaps, time to first row after start; (c) QUALITY: agreement with the checker RESULT line, rows completed, escalations, SETUP-FAIL diagnosis quality vs the Sonnet 5090-i3 diagnosis of the same row, handoff/report quality; (d) FALSE-INFO audit: a script/checklist that checks every claim in the pilot status lines, TESTS-style notes, relays and final report against evidence files (wrong verdicts, invented evidence paths/numbers, wrong done claims, wrong causes), counted per row and per report, same counting applied to the paired Sonnet lane. Build the side-by-side summary generator for Shay for when ~3-4 h of rows exist. Include these in your lane prep report and selftest.'",
+   "why": "Shay wants cost, time, quality and false-information audited in the pilot, and pilotA is building the shadow-ledger tooling right now."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' COORDINATOR #16 entry: append 'Shay order 12:3x via peer: cost audit REDO for 14 Oct 00:00 to now only (pilotC, --since/--until, operators as own line, Haiku what-if + 1.5x/2x sensitivity, cache split, fable pricing); pilot audits COST/TIME/QUALITY/FALSE-INFO per row into verdicts.csv (pilotA tooling); side-by-side summary to Shay after ~3-4 h of rows.'",
+   "why": "State must live in files so a handoff does not lose the new order."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to uds:\\\\.\\pipe\\LOCAL\\cc-msg-bdae596d58e6afcdfa0a54295c30a827: 'Coordinator #16: Shay cost-audit redo (14 Oct 00:00 onward) and the four-way pilot audit (cost/time/quality/false-info) are routed to pilotC (audit window and Haiku what-if with 1.5x/2x sensitivity) and pilotA (shadow ledger columns and summary tooling). Result goes to Shay when they report.'",
+   "why": "Close the loop with the relaying tail so it knows the order is acted on."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background)",
+   "why": "Two agents are in flight and the waker must be running after handling this event."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "grep -n \"since\\|until\\|fable\" C:\\KenshiModding\\tools\\automation\\cost-audit.py | head -20"
+ ]
+}

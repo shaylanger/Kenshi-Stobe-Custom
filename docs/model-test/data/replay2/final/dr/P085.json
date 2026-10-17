@@ -1,0 +1,34 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The previous waker task bcqpz59na has completed, and imm26 work is still in flight, so the waker must be restarted."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sfG, subagent_type kenshi-debugger, description '[case:investigate] SETUP-FAIL 08-e: bored tick never claims an open topic on 4080-i3'. Brief: Read the full EVENT INBOX 20261016-102752-setupfail-08-e.msg. Find the server-side claim gate that stops the bored tick from claiming an open topic after reload (social attention / situated_remark cooldown; BORED_EVENT_CHANCE is not the cause). Use the code map (grep -n funcname, then sed -n) and do not read whole large files. Propose the smallest server fix and stage it as a candidate patch under pending-fixes, with an offline test. Do not deploy to any live tree, do not launch the game, do not touch Shay's install, server or DB. Keep status current with agent-status.ps1 and save the report with save-report.ps1. If it does not reproduce offline after one attempt, report STOPPED with the evidence.",
+   "why": "08-e is a server-side claim gate failure that needs diagnosis before any fix, and the investigate case comes first for an odd behaviour."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Record in testing/HANDOFF.md 'Right now' and the imm26 program ledger: 08-e SETUP-FAIL on 4080-i3, owner imm26-sfG (server-fix investigation).",
+   "why": "The row needs a tracked ticket and owner so the next checkpoint does not lose it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cat > /c/KenshiTestRuns/inbox/operators/4080-i3-next-row.txt (text: 08-e SETUP-FAIL recorded; take the next runnable row on 4080-i3 now; the server fix for 08-e is being investigated by imm26-sfG and will be sent to you when staged)",
+   "why": "Shay's order is that a lane never sits idle on a SETUP-FAIL row, so the 4080-i3 operator must move on to the next runnable row."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "imm26-sfD2 DONE status event (350fffc, cde80bb, d70c3f1)",
+   "why": "Already handled: the 4080 deploy instructions were written to inbox\\operators\\4080-deploys-before-rows.txt in the previous turn, so there is nothing new to do."
+  }
+ ],
+ "checks": [
+  "Read the full text of EVENT INBOX 20261016-102752-setupfail-08-e.msg, since the batch shows only its first line.",
+  "Confirm the waker is running with a process check inside WSL before relying on it."
+ ]
+}

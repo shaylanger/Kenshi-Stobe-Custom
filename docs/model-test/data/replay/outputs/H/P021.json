@@ -1,0 +1,25 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Not all of them yet. From HANDOFF Right now: the travel accept bug (gates 19-c, 20, 21, 23-a, 23-c, 23-d) is still open and under investigation (report agents/out/imm26-travel-blocker), and rows 04-b, 06-d, 14-b, 18-a and 18-b are still untested on 5090 lane i5 (successor imm26-5090-ctxop32). I am checking each open FAIL against its fix and its re-queue state now and will send you the exact list: fixed and re-queued, fixed but not re-queued (I queue those now), and no fix yet (I start a fixer for each).",
+   "why": "Shay asked a direct yes/no status question, and the file shows open failures without a confirmed fix or re-queue, so the answer must say so and name the next action."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "[case:debug] one fresh agent per open FAIL row that has no fix in place, starting with the travel accept bug; brief: root cause from agents/out/imm26-travel-blocker, smallest fix, then re-queue the affected gate rows. Do not spawn for the travel bug if imm26-travel-investigate is still running; use its report first.",
+   "why": "Any failure without a fix must be fixed now, not reported as blocked, and the travel bug blocks gates 19-c through 23-d."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "queue the rows of every fixed-but-not-re-queued failure through the imm26 row runner (exact row list taken from the inventory check, not guessed)",
+   "why": "A fix that is not re-queued for testing does not count as done, and Shay asked for re-queued fixes."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "grep -n -i \"FAIL\\|fix\\|re-queue\" C:/KenshiModding/testing/HANDOFF.md | head -n 60",
+  "grep -n -i \"state\\|fail\" C:/KenshiTestRuns/programs/imm26.json | head -n 40"
+ ]
+}

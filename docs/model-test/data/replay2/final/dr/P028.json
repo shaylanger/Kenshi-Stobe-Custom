@@ -1,0 +1,34 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP (run in background)",
+   "why": "The waker exited on the LANE NO-OPERATOR event, so it must be restarted at once to keep watching the rigs."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i4op32, tag [case:generate], text: You are imm26-5090-i4op32, fresh successor of imm26-5090-i4op3 (STOPPED-CONTEXT) as the operator of lane 5090 i4 (imm26 NPC immersion program). Read C:/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md in full first, then the top section of testing/NPC_IMMERSION_26_HANDOFF.md and the operator brief files it points to. Helpers: source /c/KenshiTestRuns/imm26-5090-i4op3/h4.sh (CXN=4); reinstall script C:/KenshiTestRuns/imm26-5090-i4op3/reinstall-nc5.ps1 only if the lane is not already on NC5 SHA 25252267. Lane 5090 i4 only; never Shay live install, server tree or DB. Keep C:/KenshiTestRuns/agents/imm26-5090-i4op32.status current with tools/automation/agent-status.ps1 (name imm26-5090-i4op32) and write C:/KenshiTestRuns/agents/imm26-5090-i4op32.handoff.md at every milestone (about 40k tokens). Debug budget is ONE attempt per row; handbacks at most 8 lines. Resume the TODO rows in the predecessor handoff; mark a row PASS or FAIL only with real game-state evidence.",
+   "why": "The predecessor stopped at context limit and its handoff names imm26-5090-i4op32 as successor, so the lane needs a fresh operator now to avoid idle time."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/lane-owners.json: set the owner of lane 5090-i4 to imm26-5090-i4op32 (override file used by tools/automation/lane-idle.ps1)",
+   "why": "Without the override the idle check keeps reporting NO-OPERATOR for lane 5090-i4 even though a live operator now runs it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: record that imm26-5090-i4op32 was spawned as the successor of imm26-5090-i4op3 for lane 5090 i4, and update the program ledger imm26/live-rows routing for that lane",
+   "why": "The coordinator must update HANDOFF Right now the moment an agent starts, so a later handoff reads the correct state."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-5090-i4op32 status to show RUNNING and for the LANE NO-OPERATOR alert to clear (it closes by itself once the operator runs).",
+   "why": "Confirms the respawn took effect before the coordinator relies on the lane again."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (confirm no RUNNING successor such as imm26-5090-i4op32 or imm26-5090-i4op3b already exists and the predecessor is not owned by a live tail)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 (confirm lane 5090-i4 has no operator)"
+ ]
+}

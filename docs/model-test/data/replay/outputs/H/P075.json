@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 imm26-5090-i5-op9c (confirm the argument form from its usage line first)",
+   "why": "The op9c relay was delivered to the new coordinator, and the peer message asks the tail to ack the results it holds."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To a97e05a80e87aab69 (imm26-4080-i4op10), relayed from coordinator #12: Shay ordered every SETUP-FAIL/GATED row unblocked. Finish the current 13-ax run, COMMIT your uncommitted rowtools edits (hxdefs.sh etc.), write C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.handoff.md, set status STOPPED-CONTEXT (or DONE) with agent-status.ps1, then stop. Do not start new hardening rows. A fresh 4080-i4 operator (op11) for the unblock rows is spawned by the coordinator.",
+   "why": "The peer coordinator's instruction to the tail-owned 4080 operator is a standing order that stops hardening rows and hands off the lane for the unblock work."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Re-arm powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02 as a background task; wait for imm26-4080-i4op10 to report STOPPED-CONTEXT or DONE, then tail-relay it to coordinator bea16970-1102-47a3-b183-46101095930c",
+   "why": "The tail owns this agent until its result is relayed, so the waker must stay armed until the agent stops."
+  }
+ ],
+ "checks": [
+  "Read the first 3 lines of C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.status to confirm it is still RUNNING and not already DONE",
+  "Run tail-ack.ps1 with no arguments to print its usage line before acking"
+ ]
+}

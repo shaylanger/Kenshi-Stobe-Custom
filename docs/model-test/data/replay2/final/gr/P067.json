@@ -1,0 +1,23 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-idle-5090-i3 \"lane intentionally not running: 5090-i3/i4/i5 held by Shay's order (no new 5090 testing); operator imm26-5090-i3-hard2c abandoned\"",
+   "why": "The LANE IDLE 5090-i3 alert is the same held-lane condition already acked earlier, and the open-alert rule re-raises it, so it is closed again with the hold reason instead of restarting the lane."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "TaskStop on the agent named imm26-5090-i3-hard2c (its task id from the agent list)",
+   "why": "HANDOFF lists hard2c as abandoned and never run, yet the event shows it still RUNNING on a held 5090 lane, so it should be stopped rather than asked to resume testing; no respawn while the hold stands."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the 4080-i4 operator imm26-4080-i4op9 (10-a PASS marked, next 10-b, 03-b) and the 5090-i5 operator imm26-5090-i5-op9b 26-a diagnostic result",
+   "why": "The active lanes are the 4080-i4 and 5090-i5 operators, and the 5090-i5 26-a diag and the 25-b native fix are the work still pending."
+  }
+ ],
+ "checks": [
+  "head -3 /c/KenshiTestRuns/agents/imm26-5090-i3-hard2c.status | cut -c1-260"
+ ]
+}

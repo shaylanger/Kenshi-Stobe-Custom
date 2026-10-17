@@ -1,0 +1,43 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP (Bash, run_in_background)",
+   "why": "The waker job bdhbzjfx8 ended when it delivered this LANE NO-OPERATOR event, and the waker must be restarted each time it wakes so the lanes stay watched."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i4op32, description '[case:generate] 5090 i4 operator op32', prompt: 'You are imm26-5090-i4op32, fresh successor of imm26-5090-i4op3 (STOPPED-CONTEXT) as operator of lane 5090 i4 (imm26 NPC immersion program). Read C:/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md in full (TODO list and LESSONS), then the top section of C:/KenshiModding/testing/NPC_IMMERSION_26_HANDOFF.md, the standard block in testing/AGENT_PROMPTS.md, docs/COORDINATOR_IMPROVEMENTS.md and testing/KNOWN_BLOCKERS.md. Helpers: source /c/KenshiTestRuns/imm26-5090-i4op3/h4.sh (CXN=4). Lane i4 already runs NC5 DLL SHA 25252267 in both copies: check the key and both SHAs before the first row; reinstall only if they differ, with C:/KenshiTestRuns/imm26-5090-i4op3/reinstall-nc5.ps1 -N 4 -Save kah-imm26-i4-trip2 -Mon (the handoff value: the DISPLAY2 monitor spec as written there). Work the TODO rows from the handoff (10-d, 13-c, 12-c, 12-d, 14-b, 15-a, 16-c, 19-a, 20-a, 24-a, 24-b, then 19-c, 23-*, 22-a/b, 14-c). Row 13-b is FAIL and needs a fixer, not a rerun. Isolated lane only (5090 i4): never Shay live install, server tree or DB. One debug attempt per row; handbacks 8 lines or fewer; record every row with mk. Keep C:/KenshiTestRuns/agents/imm26-5090-i4op32.status current with agent-status.ps1 (name imm26-5090-i4op32) and checkpoint C:/KenshiTestRuns/agents/imm26-5090-i4op32.handoff.md about every 40k tokens. Keep the lane marker; do not delete the imm26-5090-i4op3 inflight marker before this successor exists.'",
+   "why": "Lane 5090 i4 has no RUNNING operator, imm26-5090-i4op3 is STOPPED-CONTEXT, and its handoff names imm26-5090-i4op32 as the fresh successor, so the lane continues from its existing setup."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/lane-owners.json: set the 5090-i4 entry to imm26-5090-i4op32, leave the other lanes unchanged",
+   "why": "lane-idle.ps1 reads this override map, so the NO-OPERATOR check keeps firing until the map names the live successor; done after the spawn so the name is RUNNING."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/program-ledger.ps1 route imm26 <lane 5090 i4 WP id> -Owner imm26-5090-i4op32",
+   "why": "The ledger must name the live owner so session-start and the supervisor do not treat the stopped operator as the owner; the WP id is not in this file and must be read from C:/KenshiTestRuns/programs/imm26.json, never guessed."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': change the 5090 i4 lane entry to operator imm26-5090-i4op32 (successor of imm26-5090-i4op3, handoff C:/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md) and the RUNNING AT HANDOFF line",
+   "why": "HANDOFF Right now is the live state file and must show the new operator as soon as it starts."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/alert-ack.ps1 <id of the 5090-i4 LANE NO-OPERATOR alert from session-start OPEN ALERTS> 'respawned imm26-5090-i4op32 from imm26-5090-i4op3 handoff; lane-owners.json updated'",
+   "why": "The alert closes only after the successor reads RUNNING; its id is not in this file and must be read from session-start output or C:/KenshiTestRuns/alerts/open."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (OPEN ALERTS id for the 5090-i4 NO-OPERATOR alert, WAKER STATUS, ORPHANED / NO SUCCESSOR lines, any RUNNING imm26-5090-i4* agent)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-mode.ps1 status (confirm imm26-5090-i4op3 is not owned by a live tail, owner_session=tail:<id>)",
+  "Test-Path C:/KenshiTestRuns/agents/imm26-5090-i4op32.status (must be absent or not RUNNING before the spawn)",
+  "Get-Content C:/KenshiTestRuns/lane-owners.json (current 5090-i4 mapping)",
+  "Get-Content C:/KenshiTestRuns/programs/imm26.json (read the WP id for lane 5090 i4)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/lane-idle.ps1 (after the lane-owners edit: NO-OPERATOR should clear)"
+ ]
+}

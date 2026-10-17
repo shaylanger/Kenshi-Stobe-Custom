@@ -1,0 +1,21 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Re-arm the tail wait as a BACKGROUND task through the PowerShell tool (not Bash, where exit 127 means the shell could not resolve the command): powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02 (run_in_background). If the check shows the script file is missing, fall back to the HANDOFF waker form: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh as a Bash run_in_background task.",
+   "why": "The tail wait died instantly with exit 127 (a launch failure, not a wake-up for a finished agent), so the tail has no live waker while imm26-5090-i5-op9c and imm26-4080-i4op10 are running and the Stop hook will block without it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the re-armed tail-wait.ps1 to complete (an owned agent finished or stalled), then relay with tail-relay.ps1 and re-arm. Spawn, edit and decide nothing else as a TAIL session.",
+   "why": "This is a tail session: its only job is to watch its 2 owned agents and relay their results to the new coordinator."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\2a0cfe9b-63fb-4663-b97a-4a00df3b4e02\\tasks\\bw7rbn83m.output -Tail 5",
+  "Test-Path C:\\KenshiModding\\tools\\automation\\tail-wait.ps1",
+  "Get-ChildItem C:\\KenshiTestRuns\\tail\\ | Select-Object Name,LastWriteTime",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op9c.status -Tail 3; Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-i4op10.status -Tail 3"
+ ]
+}

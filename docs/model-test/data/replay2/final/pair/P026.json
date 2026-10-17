@@ -1,0 +1,59 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to aa31cd5b99a665d77 (imm26-5090-i3op3): Shay asks whether all lanes are actively running tests. Reply now with one line: RUNNING <row id> on <build SHA>, or IDLE <exact reason>. If you are mid-row, keep going. If you are not on a row, start your next queued row now on the installed build (preflight.sh, then go-row.sh or go-batch.sh) and give its row id. Your queue holds 23-b: fix rowcheck c_23b first (diagnosis in C:/KenshiTestRuns/agents/out/imm26-inv-23b/latest.md), then run it. If this lane's game is down, do not launch it: reply IDLE game-down and wait for Shay's OK (no-new-5090-sessions hold). Do not interrupt a running row, do not wait for a new build, do not record an idle reason just to pass the check.",
+   "why": "This lane has the oldest status (17:41) and owns 23-b, so its running state must be confirmed directly."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to imm26-5090-i4op3 (SendMessage): Shay asks whether all lanes are actively running tests. Reply now with one line: RUNNING <row id> on <build SHA>, or IDLE <exact reason>. If you are mid-row, keep going. If you are not on a row, start your next queued row now on the installed build (preflight.sh, then go-row.sh or go-batch.sh) and give its row id. If this lane's game is down, do not launch it: reply IDLE game-down and wait for Shay's OK (no-new-5090-sessions hold). Do not interrupt a running row, do not wait for a new build, do not record an idle reason just to pass the check.",
+   "why": "This lane has no status in this window, so its running state is unknown until the operator replies."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to imm26-5090-ctxop322 (SendMessage): same text as the imm26-5090-i4op3 message.",
+   "why": "The 5090 i5 operator posted its first status at 17:47 and the earlier no-operator alert was a race, so its state needs confirming."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to imm26-4080-op2g (SendMessage): Shay asks whether all lanes are actively running tests. Reply now with one line: RUNNING <row id> on <build SHA>, or IDLE <exact reason>. If the NC3 relaunch or install is still running, name the step and when it finishes, then keep going. Otherwise start your next queued row now on the installed build and give its row id. Do not record an idle reason just to pass the check.",
+   "why": "The 4080 i3 lane was relaunching and installing NC3 at 17:36, which is not idle, but it must say whether a row is running."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to imm26-4080-i4op5 (hidden agent-host, SendMessage): Shay asks whether all lanes are actively running tests. Reply now with one line: RUNNING <row id> on <build SHA>, or IDLE <exact reason>. If you are mid-row, keep going. If you are not on a row, start your next queued row now on the installed build and give its row id. Do not record an idle reason just to pass the check. If SendMessage does not reach the hidden agent-host, put the same text as a file in C:/KenshiTestRuns/inbox/operators/ for the 4080 i4 lane.",
+   "why": "The 4080 i4 lane runs in the hidden agent-host, so SendMessage may not arrive and the inbox is the fallback."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Only if session-start.ps1 -Brief shows no waker running: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP (background)",
+   "why": "The waker wakes the coordinator on lane idle or stall, and the Stop guard relies on it while lanes are in flight."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Only for a lane whose operator session-start.ps1 -Brief shows as DEAD or stopped with no successor, and whose ledger owner is not a live tail (owner_session tail:5720e5b8-42a8-4aaf-9e29-db0072586324 means do not respawn). Description '[case:generate] <lane> operator respawn'; name <operator>2; brief: 'You are the operator for lane <lane>. Read C:/KenshiTestRuns/agents/briefs/COMMON.md and OPERATOR_COMMON.md first. Take the next queued rows for this lane from the imm26 ledger (program-ledger.ps1 show imm26) and run them on the installed build with preflight.sh, then go-row.sh or go-batch.sh. Report each row as RESULT <row> PASS or FAIL with evidence. Keep your status file current with agent-status.ps1.' Then update C:/KenshiTestRuns/lane-owners.json for that lane.",
+   "why": "A lane with no live operator cannot run rows, and the lane-owners map must point at the new operator for the idle check to work."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the five operator replies and the next event-wait.sh wake; then re-run lane-idle.ps1 and session-start.ps1 -Brief and confirm which lanes are on a row.",
+   "why": "A lane counts as running only when its operator reports a row in progress or lane-idle shows one, so the answer to Shay must come from the replies and the re-check."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SendMessage to Shay's relay session, one line per lane (5090 i3, 5090 i4, 5090 i5, 4080 i3, 4080 i4): operator, RUNNING <row id> on <build SHA> or IDLE <exact reason from the checks>, and the action taken. A lane still on an older DLL installs NC5 at its next relaunch. If a 5090 lane's game is down, report it as a decision for Shay (no-new-5090-sessions hold): nothing is launched without his OK.",
+   "why": "Shay asked directly and needs the live state from the checks, with a reason for every lane that is not running a row, sent once after the replies."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/lane-idle.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "type C:/KenshiTestRuns/lane-owners.json (lane-to-operator map, if present)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/program-ledger.ps1 show imm26",
+  "Last line of C:/KenshiTestRuns/agents/imm26-5090-i3op3.status, imm26-5090-i4op3.status, imm26-5090-ctxop322.status, imm26-4080-op2g.status and imm26-4080-i4op5.status",
+  "Newest RESULT lines in the lane evidence folders, including C:/KenshiTestRuns/imm26-4080-i4",
+  "Read-only game and lock state: powershell kenshi-ctl.ps1 status on the 5090, and the read-only status subcommand of C:/KAH/ctl.ps1 over ssh 4080"
+ ]
+}

@@ -1,0 +1,29 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 -Agent imm26-rowtools42",
+   "why": "rowtools42 handed back items 5, 6 and 7 (commits 7b3c04d, 37285bd, 4924239), so its relay is delivered and can be closed."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "edit C:/KenshiModding/testing/HANDOFF.md 'Right now': add 'rowtools42 DONE (7b3c04d, 37285bd, 4924239; setupfail-selftest 36/36, rowtools selftest 56/56). IMM-10-d now UNRUN (BASE), a GATED mark no longer closes a setupfail ticket, 10-d ticket stays open (no revert wanted). IMM-03-b row text replaced per inv-03b section 6 and ticket 03-b opened (needs=server-fix, lane 5090-i4 on the ticket; rerun goes to a 4080 lane after fix03b deploy). lane-window.ps1 now uses the live monitor layout: DISPLAY1 is the Samsung (forbidden), so 5090-i5 has no legal slot and at most i3 and i4 fit on DISPLAY2; registry untouched, no lane-window sync run (5090 hold).'",
+   "why": "CLAUDE.md requires HANDOFF 'Right now' to be updated after every agent report; the 10-d/03-b changes were already made and tracked by the agent, so no separate mark-row is needed."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Include in the next summary (not a blocking question): rowtools42 finished items 5-7. The lane layout limit is live: DISPLAY1 is the Samsung (forbidden), DISPLAY2 is the ASUS primary, so 5090-i5 has no legal window and at most two 5090 lanes (i3, i4) fit side by side. Keep the two-lane limit, or change the monitor setup? No 5090 runs until you lift the hold.",
+   "why": "Only Shay can decide the monitor layout, but the 5090 hold is in force so nothing is blocked and it goes into the single summary."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-fix10a, imm26-fix03b, imm26-rowtools44 (item 4 selftest and docs) and the 4080 operators imm26-4080-i4op8 and imm26-4080-op2jc; no 5090 launches",
+   "why": "These agents are still running and their results are the next work; 4080 and offline work continue while the 5090 stays held."
+  }
+ ],
+ "checks": [
+  "head -80 /c/KenshiTestRuns/agents/out/imm26-rowtools42/latest.md",
+  "git -C /c/KenshiModding log --oneline -5 -- testing/live-stobe-queue/imm26-assert/rowtools tools/automation/lane-window.ps1"
+ ]
+}

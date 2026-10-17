@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add a line 'COORDINATOR #15 11:30: sfJ DONE, recipes for 20-d and 23-e at commit 23ee82e9 (offline selftest 40/40, NOT run live); run via reload-run-sfj.sh; tickets set to ready (owner imm26-sfJ)'",
+   "why": "The canonical checkpoint must show the finished recipe agent so the next coordinator does not respawn it or re-route it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "imm26 program ledger (the file session-start.ps1 -Brief names for imm26): record work package sfJ as DONE with output commit 23ee82e9 and the two ready tickets 20-d and 23-e",
+   "why": "The ledger is the state file the supervisor reads, so the DONE state must be recorded there after every agent report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the live RESULT lines for 20-d and 23-e from the lane operators (5090-i3 successor imm26-5090-i3op21 or 4080-i4 imm26-4080-i4op13, per the 11:30 routing note), and treat the sfJ report as a recipe result, not a row pass.",
+   "why": "sfJ ran only the offline selftest, so neither row counts as tested until a lane runs it live and gives PASS or FAIL evidence."
+  }
+ ],
+ "checks": [
+  "git show --stat 23ee82e9",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "head -3 /c/KenshiTestRuns/agents/imm26-sfJ.status"
+ ]
+}

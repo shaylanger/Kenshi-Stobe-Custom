@@ -1,0 +1,19 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-wpC-b5 and imm26-5090-i5-op6 to report DONE/FAILED/STOPPED-CONTEXT; the event-wait watcher stays running and the tail spawns nothing new",
+   "why": "Both owned agents are still RUNNING, the stop hook says to keep waiting, and the last status writes (wpC-b5 19:39, i5-op6 19:45 Win clock) are not yet past the 10-minute silent threshold at 19:46 Win clock"
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Stall ladder for imm26-wpC-b5 (last status 19:39): at 19:49 Win clock with no status write, SendMessage it to report its latest step; at 19:59 TaskStop it and send the new coordinator a tail-relay.ps1 message saying it was stopped with its last checkpoint; same ladder for imm26-5090-i5-op6 from 19:45 (19:55 message, 20:05 TaskStop)",
+   "why": "The tail contract requires a 10-minute silence message and a 20-minute TaskStop, and these are the only actions the tail may take on its own agents"
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \\\"C:\\KenshiTestRuns\\agents\\$n.status\\\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1) }\"",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator (check for a new relay or ack before deciding anything else)"
+ ]
+}

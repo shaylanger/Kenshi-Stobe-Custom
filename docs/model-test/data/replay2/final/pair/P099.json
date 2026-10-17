@@ -1,0 +1,34 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "This batch woke the waker, so it has exited and CLAUDE.md requires re-arming it each time it wakes, or lanes go unwatched."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: \"[case:investigate] imm26-sf15bx SETUP-FAIL 15-bx root cause\". Brief: You are imm26-sf15bx. Row 15-bx on lane 5090-i3 is SETUP-FAIL: no reply of Cind within 150s in P1 (evidence C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt; ticket list via powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list). Find the root cause (reply path, Cind spawn or ready state, or runner timeout) with file and line evidence. Write a short unblock plan file with the exact fix and the row re-run command, and name its path in your report. Do not touch the row the lane 5090-i3 operator is running and do not edit any script a queued or running list uses. No install. Status via tools/automation/agent-status.ps1 imm26-sf15bx; final report via save-report.ps1 imm26-sf15bx <srcfile>, then SubagentHandback.",
+   "why": "The 15-bx setup-fail has no owner and no known cause, so it goes to an investigator now under the fix-at-root rule while the lane operator keeps its own row."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File tools/automation/agent-ids.ps1 add imm26-sf15bx <agentId returned by the Agent call>",
+   "why": "PI-36 requires recording the agent id after every spawn."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-sf15bx completion notification with the root cause and the plan file path; do not steer the lane operator meanwhile.",
+   "why": "The unblock plan does not exist yet, so the assign cannot run."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 15-bx imm26-sf15bx <plan_path given in the agent's report>",
+   "why": "Once the plan exists the ticket gets an owner and a fix path."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "tail -40 C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt"
+ ]
+}

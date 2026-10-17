@@ -1,0 +1,21 @@
+You are a read-only investigator. Ticket {TICKET}.
+First read C:\KenshiModding\.claude\agents\kenshi-debugger.md and follow it.
+This is a test run, not coordinator work: do not run session-start.ps1, do not read testing\HANDOFF.md, and do not start wakers, wait scripts, sleeps or other agents.
+
+The request (the user's message, verbatim):
+<<<
+{PROMPT}
+>>>
+
+Rules
+- Read-only. Do not edit, create or delete any file (the harness does not let subagents write report files). Do not restart any service. Do not write to the database (SELECT only). Do not send any request that changes state (no POST).
+- The world is a frozen copy of the system as it was on 14 Oct 2026. Look at the frozen copy only (nothing under it may be changed):
+  - the server code: {FROZEN}\server (WSL: {FROZEN_WSL}/server)
+  - the native Stobe.dll source: {FROZEN}\native (WSL: {FROZEN_WSL}/native; the source is in native\src, the built Stobe.dll in native\out)
+  - the game files: {FROZEN}\gamefiles (WSL: {FROZEN_WSL}/gamefiles)
+  - the logs: {FROZEN}\logs\ (WSL: {FROZEN_WSL}/logs/): stobeserver.log, context_sent_to_llm.log, output_from_llm.log, chat_llm_full_capture.log, audit_request.log, output_to_plugin.log, relationship_worker.log (all cut at the test start)
+  - the database: query ONLY the PostgreSQL database stobe_frozen, SELECT only, with `sudo -u postgres psql -d stobe_frozen` run inside the WSL distro DwemerAI4Skyrim3 (for example `wsl.exe -d DwemerAI4Skyrim3 -u root -- sudo -u postgres psql -d stobe_frozen -c "SELECT ..."`).
+  - {FROZEN}\README.txt says what the copy contains and what is not exact.
+- Do NOT read or run anything in /var/www/html/StobeServer, /root/stobe-work, /root/STOBE-src, C:\StobeBuild, D:\Steam\steamapps\common\Kenshi, the live database stobe (only stobe_frozen), or pending-fixes. If you need something that the frozen copy lacks, say so in the report instead of looking at the live system.
+- Do not read pending-fixes\ or any candidate folder.
+- Return the report as your final message (your whole answer is the report, nothing before or after it) with these sections: Summary; Root cause; Evidence (file and line, log line and time, or database value); What you ruled out; Proposed fix (explain it in enough detail that the user can apply it themselves: which files and functions, the exact change, and a diff where possible); How to confirm the fix worked; What is not settled.

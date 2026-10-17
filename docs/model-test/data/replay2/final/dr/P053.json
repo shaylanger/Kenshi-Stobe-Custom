@@ -1,0 +1,30 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3-hard2b -Report C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md -Summary 'imm26-5090-i3-hard2b STOPPED-CONTEXT 20:49: 10-a FAIL marked, context ~150k; next 19-ax 02-cx 05-cx 01-bx 01-cx 11-b; no successor yet, new coordinator respawns fresh from the handoff' 2>&1 | Select-Object -Last 1",
+   "why": "The tail relays each finished or stopped agent result to the new coordinator as a result, and the tail spawns nothing itself."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to kenshimodding-76 (relay target 4cdf261b-1f2e-44be-902c-5390ee91e111): TAIL-RELAY from tail 6d1f3011: imm26-5090-i3-hard2b is STOPPED-CONTEXT at 20:49 (handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2b.handoff.md; next 19-ax 02-cx 05-cx 01-bx 01-cx 11-b). It has no successor: respawn a FRESH agent named imm26-5090-i3-hard2b2 from that handoff, and ack with tail-ack.ps1 when read. The other four owned agents are still running.",
+   "why": "The new coordinator must learn the stop now, because a STOPPED-CONTEXT agent with no successor blocks the Stop hook and leaves 5090-i3 without an operator."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "re-arm one background wait: bash -c 'cd /c/KenshiTestRuns/agents; for i in $(seq 1 900); do for a in imm26-5090-i4-hard2b2 imm26-4080-op2jb imm26-4080-i4op7c imm26-fix19; do if head -1 $a.status 2>/dev/null | grep -qE \"\\| (DONE|FAILED|STOPPED-CONTEXT) \\|\"; then echo FINISHED $a; exit 0; fi; done; sleep 2; done; echo TIMEOUT'",
+   "why": "The earlier wait was armed on five agents, one of which has now stopped, so the single waker must cover the four still running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next FINISHED or TIMEOUT line from the re-armed background wait (imm26-5090-i4-hard2b2, imm26-4080-op2jb, imm26-4080-i4op7c, imm26-fix19), then relay that agent's report the same way",
+   "why": "The tail session may not end until each owned agent is finished and its relay is delivered, and it spawns nothing new meanwhile."
+  }
+ ],
+ "checks": [
+  "head -c 1500 C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.handoff.md",
+  "head -1 C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.status",
+  "head -1 C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.status"
+ ]
+}

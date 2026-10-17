@@ -1,0 +1,26 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiTestRuns\\lane-owners.json: set the 5090-i4 operator to imm26-5090-i4op32 (keep the other lane entries; use the format lane-idle.ps1 reads)",
+   "why": "The lane-owners override is how lane-idle.ps1 knows the operator for lane 5090-i4, so it must name the successor before the NO-OPERATOR alert can clear."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 \"LANE NO-OPERATOR 5090-i4\" \"respawned imm26-5090-i4op32 from the imm26-5090-i4op3 handoff\"",
+   "why": "The alert is closed only after the operator is spawned, and the ack records what was done so a still-true condition does not re-open it at once."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP  (run in background)",
+   "why": "The waker just woke on this event and must be restarted so the next lane, relay or stall event still wakes the coordinator."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md -TotalCount 80",
+  "Get-Content C:\\KenshiTestRuns\\lane-owners.json",
+  "Get-ChildItem C:\\KenshiTestRuns\\agents -Filter 'imm26-5090-i4op3*'"
+ ]
+}

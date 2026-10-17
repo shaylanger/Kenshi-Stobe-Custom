@@ -1,0 +1,37 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "testing/NPC_IMMERSION_26_TESTS.md row IMM-08-e: Status cell -> SETUP-FAIL. Evidence cell: 4080-i3 op20, 16:19:23 UTC, req_6ad24e8b959bd: a drawn_weapon reaction turn (speaker Cind, listener Shay, Machete, 1 m) was counted as a Cind bored tick; no bored claim and no server claim-gate refusal happened; recipe, counter and fixture defect, not a server defect. Report: C:/KenshiTestRuns/agents/out/imm26-sfG/latest.md",
+   "why": "sfG's evidence shows the FAIL wrongly blamed the server claim gate, so the row is a setup defect (SETUP-FAIL, not FAIL) until the recipe is fixed."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "git add testing/NPC_IMMERSION_26_TESTS.md && git commit -m 'TESTS: 08-e SETUP-FAIL (recipe defect: reaction turn counted as a claimed Cind tick, not a server claim-gate fault)' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git push origin HEAD",
+   "why": "one row status change is one commit, pushed right away."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "rmdir C:/KenshiTestRuns/claims/08-e (run only if the inflight check shows no lane holding 08-e)",
+   "why": "releases the stale 08-e claim so the row is runnable again once the recipe fix lands."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent subagent_type=kenshi-generator, description '[case:patch] imm26-sfI 08-e recipe fix', name imm26-sfI. Brief: Fix the 08-e recipe defect found by imm26-sfG (report C:/KenshiTestRuns/agents/out/imm26-sfG/latest.md). Root cause: rd_08e in testing/live-stobe-queue/imm26-assert/rowtools/reloaddefs_a.sh (about lines 233-262) never re-quiets, re-sheathes or holds Cind across its 8 chunks, so a stranger gets a drawn-weapon reaction turn (react=drawn_weapon) and the row's tick counter counts it as a Cind bored tick. The checker then blamed the server claim gate, which is wrong: bored.php sends reaction turns to forceDirectiveTurn and never claims them. Tasks: (1) in a NEW file, make rd_08e re-quiet strangers, re-sheathe and hold Cind per chunk, using tr_quiet (tripdefs.sh lines 28-41) as the reference; (2) the tick counter must count only claimed bored turns, never react= turns, and the cind_ticks log must not cut lines at 260 characters; (3) check whether rd_08d (4080-i4, SETUP-FAIL after 7 attempts) has the same defect and fix it the same way if it does. Rules: never edit or replace a script a queued or running batch uses (check C:/KenshiTestRuns/inflight and claims first; write new files and point the row at them); no assertion weakened; offline only: bash -n and a dry run; no game or lane use; never Shay's live install, server or DB. Status: tools/automation/agent-status.ps1 imm26-sfI RUNNING|DONE|FAILED|STOPPED-CONTEXT. Report: save-report.ps1 into agents/out/imm26-sfI. Deliver: commit as shaylanger and push; operator note C:/KenshiTestRuns/inbox/operators/08e-ready.txt with the one-call command and SETUP-FAIL guards. Do not run 08-e yourself.",
+   "why": "sfG already did the diagnosis, so this is one recipe change for one ticket, a [case:patch] job, not another investigation."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/inbox/operators/4080-i3-08e-setupfail.txt: 08-e is SETUP-FAIL (recipe defect, not a server fault; sfG report). Do not re-run 08-e on the old recipe. Take the next runnable row at your boundary. The fixed recipe comes later as inbox/operators/08e-ready.txt.",
+   "why": "the 4080-i3 lane operator must not re-run the broken row and needs the next-row instruction; the lane keeps working on 03-b meanwhile."
+  }
+ ],
+ "checks": [
+  "sed -n 1p /c/KenshiTestRuns/agents/imm26-sfG.status",
+  "ls /c/KenshiTestRuns/inflight /c/KenshiTestRuns/claims",
+  "grep -n rd_08 testing/live-stobe-queue/imm26-assert/rowtools/reloaddefs_a.sh",
+  "sed -n 28,41p testing/live-stobe-queue/imm26-assert/rowtools/tripdefs.sh",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root -- grep -n is_array /root/imm26/compose/processor/bored.php"
+ ]
+}

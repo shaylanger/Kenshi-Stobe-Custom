@@ -1,0 +1,31 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker exited with this event batch, so it must be restarted at once or nothing wakes the coordinator."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-5090-i3op22 \"5090-i3 parked by coordinator #17: no runnable row (22-b is the NC25 fix testing on 4080-i3, 25-b native, 08-d needs 23-a v2 walk); respawn only when a row script exists via lane-brief.ps1 5090-i3 -Name <next> -Predecessor imm26-5090-i3op22\"",
+   "why": "The 5090-i3 lane is parked on purpose, so the STOPPED-CONTEXT op22 gets no respawn and is dropped with its reason, which also stops the Stop hook blocking on a stopped agent with no successor."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': add one line '5090-i3 op22 STOPPED-CONTEXT (bz7imeq43), abandoned on purpose, lane stays PARKED; respawn only when a row script exists (lane-brief.ps1 5090-i3 -Name <next> -Predecessor imm26-5090-i3op22)'; record the same in the imm26 program ledger via program-ledger.ps1",
+   "why": "HANDOFF and the ledger are the state files and must be updated after every agent report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next event-wait.sh wake: a 5090-i3 row script appearing, or the 4080-i3 op23 result for 22-b on NC25 (which decides whether 5090-i3 needs a new operator)",
+   "why": "Nothing runnable exists on 5090-i3 right now, so a respawn now would only create another STOPPED-CONTEXT loop."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (confirm the NO SUCCESSOR / ORPHANED line and the open-alert id for imm26-5090-i3op22, and that no successor such as imm26-5090-i3op222 or imm26-5090-i3op22b runs)",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live (confirm no live 5090-i3 operator)",
+  "type C:/KenshiTestRuns/agents/imm26-5090-i3op22.status (last status and handoff path)",
+  "ls C:/KenshiTestRuns/inflight (confirm the 5090-i3 inflight marker is released and the i3 game is stopped)"
+ ]
+}

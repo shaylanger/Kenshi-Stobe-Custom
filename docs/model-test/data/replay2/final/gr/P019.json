@@ -1,0 +1,31 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "For each name in this list: imm26-4080-i4op imm26-4080-i4op2 imm26-4080-i4op3 imm26-4080-op2b imm26-4080-op2c imm26-4080-op2d imm26-4080-op2e imm26-5090-ctxop imm26-5090-ctxop2 imm26-5090-i3op imm26-5090-i4op imm26-compose-fix-batch2 imm26-compose-fix-batch2b imm26-install-nc-rest imm26-inv-travel imm26-inv-travel2 imm26-lanes-4080 imm26-lanes-5090 imm26-rowtools imm26-travel-investigate imm26-wpA4 imm26-wpB4: if C:\\KenshiTestRuns\\agents\\<name>.status still reads RUNNING, run touch /c/KenshiTestRuns/inflight/<name>",
+   "why": "The previous batch command deleted these inflight markers without checking their status, and a still-RUNNING agent with no marker drops out of the Stop-hook in-flight count."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background Bash task; restart it again every time it wakes the coordinator)",
+   "why": "The previous waker exited on the imm26-hidden-test2 DONE event, and live markers (4080-imm26, 5090-imm26, lanes, imm26-compose-fix-batch2c) still hold the waker guard, so a waker must run."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: add 'imm26-hidden-test2 DONE (hidden agent-host spawn proof, 6 heartbeats; report C:\\\\KenshiTestRuns\\\\agents\\\\out\\\\imm26-hidden-test2\\\\latest.md)'",
+   "why": "The rule is to update Right now the moment an agent finishes, and the hidden-spawn proof result has to be recorded where the next session reads it."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Run ListAgents first to get the current relay address (the earlier SendMessage to pipe cc-msg-eefd11dd5a71c15c8d2929253642e2f9 failed with ENOINBOX), then re-send the four answers from the last coordinator summary (item 4 is cut off in this file): (1) row 20-a deferred confirm queued to imm26-compose-fix-batch2c; (2) row 24-a recommended option (a), the NPC must name a place from the reachable list, unless Shay says otherwise; (3) row 15-a awareness filter queued to the same fixer; (4) DISPLAY1 answer as previously written.",
+   "why": "Shay has not received the answers because the send failed, and the decisions are waiting on him."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "cat C:\\KenshiTestRuns\\agents\\out\\imm26-hidden-test2\\latest.md",
+  "grep -l RUNNING C:\\KenshiTestRuns\\agents\\*.status",
+  "ls C:\\KenshiTestRuns\\inflight"
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on the sfU2 task-notification itself: it is the interim/duplicate notification for the hand-back already processed (setupfail.ps1 state 15-bx ready was run, sfU.txt routing note appended to coordinator16-server-fixes.txt, waker b2xak5lca restarted).",
+   "why": "The report was already delivered and acted on; the notification only says the agent stopped with its own background work still running, and the 15-bx ticket, operator note and waker are already in place."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the waker (event-wait.sh, background id b2xak5lca) and for a second sfU2 notification or a lane operator picking up 15-bx/16-bx v2; do not respawn sfU2 and do not SendMessage it.",
+   "why": "sfU2 reported DONE, so a later wake-up is just its background work finishing, and an agent that has reported DONE is not orphaned or STOPPED-CONTEXT."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "cat C:\\KenshiTestRuns\\agents\\imm26-sfU2.status",
+  "ls C:\\KenshiTestRuns\\inflight"
+ ]
+}

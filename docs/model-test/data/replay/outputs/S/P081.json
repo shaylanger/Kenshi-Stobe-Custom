@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:patch] imm26-fix27a: Fix the 27-a row criterion only (test/recipe defect, no product code). Read C:\\KenshiTestRuns\\agents\\out\\imm26-inv-27a\\latest.md first. In C:\\KenshiModding\\testing\\live-stobe-queue\\imm26-assert\\rowtools\\reloadcheck_a.py function c_27a (about l.255-262) the pre-load and post-load chase legs pass only if final distance <= 35 u (copied from legacy-FOLLOW row 23-e). The native Bodyguard package keeps a stand-off of about 50-67 u (4 samples: 67.3, 66.5, 49.3, 50.7), so a working bodyguard can never pass. Replace it with a principled Bodyguard criterion, not a weaker blind one: the order is present after load, the package is still Bodyguard, hours_left decreased across the load (24.0 -> ~23.1), and each leg's distance is within the measured Bodyguard stand-off band (state the band from the evidence) and non-increasing or closing versus the start distance; do NOT simply raise the number until it passes and keep the failing-check-first emit() behaviour. Also fix the pre-leg sampling in reloaddefs_a.sh rw_chase (l.72-90): d0 must be read right after the teleport, before the settle window, so the closing is measured. Do NOT edit the files in place (op12 on 4080-i4 may be running rows from this rowtools dir): write reloadcheck_a.py.candidate and reloaddefs_a.sh.candidate next to them, extend the selftest so it fails on the old 67.3->80.7 reading as a wrong-criterion case and passes on the real Bodyguard samples and still FAILS a case where the follower never closes or the order is missing, run the selftest, update agent-status.ps1 imm26-fix27a, write the handoff/outputs to C:\\KenshiTestRuns\\agents\\out\\imm26-fix27a\\latest.md via save-report.ps1, commit the candidates (shaylanger identity, one commit, push). Budget <=80k tokens, grep/line ranges only, no game launch, no lane use.",
+   "why": "The investigator proved the 27-a FAIL is a wrong 35 u threshold plus pre-leg sampling, not a product defect, so the row needs a corrected criterion and a rerun rather than a server or DLL fix."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md \"Right now\" #13 entry: add 'inv-27a DONE: 27-a FAIL = test/recipe defect (c_27a threshold 35 u vs native Bodyguard stand-off 50-67 u + pre-leg sampling); contract IS engine-saved across save+load (hours_left 24.0->23.1, package Bodyguard), no STOBE/server code needed. imm26-fix27a RUNNING (candidates only, not in place); then 27-a rerun on 4080-i4 by the next i4 operator after op12, needs install-harness-4080-i4.ps1 Apply with game stopped. op11 handoff read the post leg as a pass wrongly.' Also update program ledger C:\\KenshiTestRuns\\programs\\ entry for the 27-a package (owner imm26-fix27a, successor chain fix27a -> fix27a2). Then commit and push HANDOFF.md.",
+   "why": "Ledger and HANDOFF must be updated after every agent report so a coordinator stop loses nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the event waker (event-wait.sh, task bx9kc1i5v) running; wait for imm26-inv-03b2 and imm26-inv-14c reports, the imm26-fix27a report, and tail bea16970 relays for op9i/op12 (ack those with tail-ack.ps1).",
+   "why": "Two investigators are still running and the 4080-i4 and 5090-i5 lanes are owned by the tail session, so the coordinator must not touch them or run 27-a itself."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "grep -n \"c_27a\" C:\\KenshiModding\\testing\\live-stobe-queue\\imm26-assert\\rowtools\\reloadcheck_a.py",
+  "tail -c 3000 C:\\KenshiTestRuns\\agents\\out\\imm26-inv-27a\\latest.md"
+ ]
+}

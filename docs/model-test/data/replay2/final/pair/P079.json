@@ -1,0 +1,35 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "EVENT STATUS imm26-u4b-route DONE (ba94c6a): no new message",
+   "why": "HANDOFF was updated at 03:55 and op9i was already told to rerun 26-a, 22-a, 26-b and 26-c, so this digest needs no new message."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker fired and must be re-armed on every wake so events keep arriving while op9i and op11 are in flight."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Update the program ledger C:/KenshiTestRuns/programs/<name>.json (name from session-start.ps1 output): imm26-u4b-route DONE at ba94c6a; next step is op9i rerun of 26-a, 22-a, 26-b, 26-c on the ba94c6a build",
+   "why": "The large-programs rule requires the ledger to be updated after every agent report, and only HANDOFF was updated in the conversation."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "op9i (imm26-5090-i5-op9i) RESULT lines for 26-a, 22-a, 26-b and 26-c on the ba94c6a build",
+   "why": "The route rebind fix is deployed but has not been run in-game, so its verdict depends on the live accept."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "op11 (imm26-4080-i4op11) next status update covering 08-d rerun 2 and rows after 08-e",
+   "why": "op11 reported progress at 02:31 (08-e PASS, 08-d rerun in progress), so the only action is watching the stall watchdog."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding log -1 --stat ba94c6a",
+  "sed -n 1,3p /c/KenshiTestRuns/agents/imm26-5090-i5-op9i.status | cut -c1-300",
+  "ls /c/KenshiTestRuns/inflight/ (confirm the imm26-u4b-route marker is gone)"
+ ]
+}

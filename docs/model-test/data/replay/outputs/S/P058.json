@@ -1,0 +1,19 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 19-a imm26-rowtools4",
+   "why": "SETUP-FAIL 19-a (lane 4080-i4: no trip proposed after two asks) is a row-recipe/tooling problem, and imm26-rowtools4 is the running rows/tools fixer that owns recipe fixes; no plan_path is known so none is given."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-rowtools4 to report an unblock plan for 19-a, and for the 4080-i4 operator imm26-4080-i4op8 to rerun 19-a; the 'mv: cannot stat' line only means the inbox .msg was already moved by the event consumer, so no re-handling of the file.",
+   "why": "The row is a 4080 lane row (5090 is held by Shay's order), so the fix goes through the existing fixer and operator; no new agent or 5090 use is needed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "grep -n \"19-a\" C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md"
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i4-hk1 (use its id from `powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live`): \"Answer to your 00-ask escalation: the world IS up. stobe.log at 13:01:34 shows live combat and SOCIAL_CAPTURE events (load=3), so the wait-world 'no answer (loading?)' was a false negative. Do not retry 00-ask. Record it as an operator-side note, then start row 02-cx unplaced on lane 5090-i4. Set your status file to RUNNING and keep it current. Send any further escalation as a pilot-escalate message.\"",
+   "why": "The escalation answer is owed to the pilot operator and hk1 is the pilot operator owned by tail #16. The alert came 10 s after the escalation, so hk1 is most likely just waiting for this reply rather than dead."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Restart the waker (bash tools/automation/event-wait.sh in WSL, background) and wait for the next hk1 status or inbox event. If the LANE NO-OPERATOR alert persists past about 5 min with hk1 still not RUNNING and not resumable, spawn imm26-5090-i4-hk2 via lane-brief.ps1 5090-i4 -Name imm26-5090-i4-hk2 -Predecessor imm26-5090-i4-hk1 and record it with agent-ids.ps1 add. Do not ack the alert yet.",
+   "why": "hk1 is owned by a live tail, so the coordinator must not respawn it while it can still be resumed. The alert closes by itself once hk1 is RUNNING again, and an ack would only re-open after 30 min."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "tail -5 C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hk1.status",
+  "ls C:\\KenshiTestRuns\\alerts\\open",
+  "ls C:\\KenshiTestRuns\\pilot\\haiku-i4"
+ ]
+}

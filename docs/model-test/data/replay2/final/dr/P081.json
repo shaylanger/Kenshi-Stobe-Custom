@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, under Right now: record that imm26-inv-27a is DONE (row 27-a FAIL = test/recipe defect in c_27a of reloadcheck_a.py, threshold 35 u copied from 23-e; stand-off 49-67 u stable over 4 samples; bodyguard contract engine-saved, hours_left 24.0 -> 23.1, no product defect; op11 misread the post-load leg as PASS, it FAILED 131.1 -> 66.5); next = fixer imm26-fix27a; note for Shay's one final summary: 27-a pass rule changes from final distance <= 35 u to the bodyguard contract. Then commit and push HANDOFF.md only.",
+   "why": "The coordinator records every agent report in HANDOFF Right now at once, and the op11 PASS reading must be corrected there."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "agent name imm26-fix27a, description '[case:patch] 27-a checker threshold fix', brief: Fix only the c_27a check in testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py. Read C:/KenshiTestRuns/agents/out/imm26-inv-27a/latest.md first, then use grep -n c_27a and sed -n on the matching range only (no whole-file reads). Replace the legacy final-distance <= 35 u judgement (copied from row 23-e) with the bodyguard contract: pre-load follow closes into the native stand-off band (<= 70 u; measured 49-67 u), post-load order still present, hours_left decreases, package Bodyguard, Shay-away precondition held, post-load distance in the same band. Keep every other assertion and loosen nothing else. Add a selftest and run it offline. No game launch and no lane use. Before editing, grep -rl reloadcheck_a C:/KenshiTestRuns/queue C:/KenshiTestRuns/inbox/operators, and read the tail-owned 4080-i4 operator op12 handoff under C:/KenshiTestRuns/agents if it exists: op12 runs 08-d and 11-b, which may use reloadcheck_a.py, so if any queued or running list or live operator uses it, write the change as reloadcheck_a.py.candidate next to it and report instead of editing in place. Commit and push one fix with the item number (27-a) in the message. Status via tools/automation/agent-status.ps1 imm26-fix27a RUNNING|DONE. Report the new check lines and the selftest result.",
+   "why": "The investigator found a checker defect and no product defect, and the fixer turns the wrong threshold into the real bodyguard contract so 27-a can be rerun, without editing a script a live lane operator may be using."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-fix27a DONE status (waker bx9kc1i5v-successor stays armed), then queue the 27-a rerun for the 4080-i4 lane operator after tail op12 finishes (tail-owned, do not message it); the other investigators imm26-inv-03b2 and imm26-inv-14c are still pending.",
+   "why": "The rerun needs the fixed checker and the lane is busy with the tail's operator."
+  }
+ ],
+ "checks": [
+  "grep -n c_27a C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py",
+  "grep -rl reloadcheck_a C:/KenshiTestRuns/queue C:/KenshiTestRuns/inbox/operators",
+  "grep -n -i 'verdict|class|root' C:/KenshiTestRuns/agents/out/imm26-inv-27a/latest.md | head -20",
+  "git -C C:/KenshiModding status --short testing/live-stobe-queue/imm26-assert/rowtools/reloadcheck_a.py"
+ ]
+}

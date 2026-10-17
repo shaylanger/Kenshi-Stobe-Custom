@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-fix-batch3 (server, 08-b director-mode bored claim): the 4080 i3 operator (agent af494f7d420e43327, NC5 installed, commit c0f7bdd) reports 08-b still FAIL. Cause: stobeSocialFollowupsClaim needs stobeSocialAttentionOptionalSpeechAllowed, which needs in_combat===false (lib/social_attention.php:33-38). Natural DLL bored URIs carry no attn= and Cind has no fresh native_ai snapshot, so in_combat is null and the director bored follow-up claim is denied; NC5's proximity turn (optional=1&attn=) scans squad members only, so non-squad Cind never gets it. Fix on the server side: in director bored turns, when attention is entirely unknown (no attn= and no fresh native_ai snapshot) allow the follow-up claim, but keep the in_combat gate whenever attention data exists (known in_combat=true still denies). Do not change the DLL (an attn= addition to natural bored URIs would be a native NC change; report it to me as an option only). Patch live tree and ss-merge by anchor script (check git log/status in the live tree first), php -l, offline stobe-tests, add a test for the null-attention case, then send a checkpoint. Do not touch any lane.",
+   "why": "The root cause is the server gate and the fixer already owns the 08-b director-mode claim; the draft's preferred attn= fix is a DLL change outside a server fixer's scope, so the server-side unknown-attention allowance is the actionable fix."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "testing/NPC_IMMERSION_26_TESTS.md IMM-08-b: record FAIL on 4080 i3 NC5 rerun (commit c0f7bdd): follow-up due, Cind director bored speaker twice, no claim; cause in_combat null denies claim (lib/social_attention.php:33-38); fix with imm26-fix-batch3",
+   "why": "The status column lags operator marks and the next round needs the current cause and owner recorded."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-fix-batch3 checkpoint, then deploy to the 4080 i3 lane site and have its operator rerun 08-b after its current rows (15-a, 16-c, 03-b, 03-cx, 04-ax); the event waker keeps running",
+   "why": "A 08-b rerun is only meaningful after the claim fix, and the operator is still working its other rows."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'grep -n \"stobeSocialAttentionOptionalSpeechAllowed\\|in_combat\" /root/stobe-work/ss-merge/lib/social_attention.php | head -20'",
+  "tail -5 C:/KenshiTestRuns/agents/imm26-fix-batch3.status"
+ ]
+}

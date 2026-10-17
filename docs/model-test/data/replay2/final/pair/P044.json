@@ -1,0 +1,24 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-wpC-b5 and imm26-5090-i5-op6 to finish; keep the existing event-wait watcher running; no new spawn, no edits, no relay until a result exists",
+   "why": "The batch is only the tail Stop-hook re-block: both owned agents are still RUNNING with no result or relay yet, and the tail may not end until each is done and acknowledged."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "TaskStop imm26-wpC-b5, then tell the new coordinator via tail-relay.ps1 + SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator; only if its status file is still at 19:39 when the clock reaches 19:59",
+   "why": "The tail stall rule is 20 minutes silent after the last status write; the status request sent at about 19:45 has had no reply."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "TaskStop imm26-5090-i5-op6, then tell the new coordinator via tail-relay.ps1 + SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator; only if its status file is still at 19:45 when the clock reaches 20:05",
+   "why": "Same 20-minute stall rule; it was last updated at 19:45 while a natural-herd flag read was in progress."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \\\"C:\\KenshiTestRuns\\agents\\$n.status\\\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1) }\"",
+  "powershell -NoProfile -Command \"Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator -Filter *tail* | Sort LastWriteTime -Desc | Select -First 2 Name\""
+ ]
+}

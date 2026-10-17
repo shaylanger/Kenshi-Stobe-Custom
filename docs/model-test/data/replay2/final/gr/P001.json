@@ -1,0 +1,29 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Starting the startup-context cut now. Step 1 measures what loads at session start (CLAUDE.md, session-start.ps1 -Brief output, MEMORY.md and its linked files, hook-injected blocks); the file edits follow once the sizes are in.",
+   "why": "Shay's order is acknowledged and he can see it is under way, with no edits before the measurements."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: add one line 'Startup-context cut started 2026-10-16: measure agent startup-context-measure-1 (kenshi-reader), then cut plan'.",
+   "why": "The coordinator must record every agent start in HANDOFF Right now at once so a handoff does not lose it."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name startup-context-measure-1, description '[case:read] measure startup context', subagent_type kenshi-reader. Brief: read-only, edit nothing. Measure each source loaded at coordinator session start in C:/KenshiModding: root CLAUDE.md; the output of tools/automation/session-start.ps1 -Brief (run it once, record bytes and lines); the auto-memory MEMORY.md index and the files it links; the hook-injected blocks (context-meter, open alerts, process ideas). For each source give bytes, lines and the five largest sections with line ranges. Then list which sections repeat across sources. Save the report with save-report.ps1 (agents/out/startup-context-measure-1) and report the path. Keep the status file current with tools/automation/agent-status.ps1 startup-context-measure-1 RUNNING/DONE/FAILED. Goal: a ranked list of what can move out of startup context without losing a standing rule; do not propose rule deletions, only moves to a page the rule index names.",
+   "why": "The cut needs real byte counts before any file is edited, and a reader is the cheapest way to get them."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the startup-context-measure-1 result (its status file and report path) before planning or editing the cut; do not restart the batch-health change, it is already reverted to HEAD.",
+   "why": "Nothing in the cut can be decided until the measured sizes are in, and the revert is already done and verified clean."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding status --short -- tools/automation/batch-health.sh",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

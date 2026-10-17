@@ -1,0 +1,19 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-sfS -Kind DONE -Report C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md -Summary \"imm26-sfS DONE, commit a85c7b7a pushed (offline-verified only, no row run): 05-cx v2 = rowtools/hxrun_cx2.sh 05-cx <lane> --allow-retry (SELFTEST HXCX2 23/23; 5090-i3 run held by Shay's no-new-5090-sessions hold, --dry allowed); 08-d v2 = rowtools/unblockrun_sfs.sh 08-d 4080-i4 --allow-retry (attn in_combat false, ask check after tick 1; SELFTEST SFS 18/18). Caveats: 05-cx H may still FAIL roster_has_sleeper; if 08-d is still not retired, apply the fxC product fix (move retire block above speech gates in stobeSocialFollowupsClaim). Operator note C:\\KenshiTestRuns\\inbox\\operators\\sfS.txt. Coordinator: update HANDOFF/ledger, queue 08-d on 4080-i4 at the next boundary.\"",
+   "why": "The tail only relays agent results to the current coordinator 245d8ad7 (tail-relay.ps1, same as for sfU); sfS is DONE with no relay file yet, which is what tail-wait is waiting on."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-wait.ps1 -Session 48b778a7-13d7-4f96-bc6b-30dba5670ae0   (Bash run_in_background; restart it after the relay)",
+   "why": "The tail stays alive until its remaining agents (four lane operators) finish and every relay is delivered, so the wait is restarted."
+  }
+ ],
+ "checks": [
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-sfS.status",
+  "ls /c/KenshiTestRuns/inbox/operators/sfS.txt /c/KenshiTestRuns/agents/out/imm26-sfS/latest.md"
+ ]
+}

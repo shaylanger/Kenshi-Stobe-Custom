@@ -1,0 +1,36 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-5090-i4op3",
+   "why": "The relay is delivered and its content is already handled: fresh successor imm26-5090-i4op32 was spawned just before this batch, and the LANE NO-OPERATOR event came from the gap before that spawn."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiTestRuns\\lane-owners.json: set the 5090-i4 owner to imm26-5090-i4op32, keeping the existing file format (the format is not shown in this file, so read the current file and tools\\automation\\lane-idle.ps1 first)",
+   "why": "lane-idle.ps1 maps 5090-i4 only to imm26-5090-i4op3, so it would raise a false LANE NO-OPERATOR alert for the running successor; the relay asks for this override."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:patch] imm26-fix-native-n6 | You are imm26-fix-native-n6, a fixer for the imm26 program. Do two native fixes, nothing else. (A) ActivityPolicySupport.cpp:23 ProvenWild rejects harness-spawned and wild animals (squads such as 'wild goats', faction Wildlife) with animal_ownership_not_proven_wild. Shay's rule, 2026-10-15: animals in no real faction must pass ProvenWild, so relax the template-ref clauses. Read the memory hunt-wild-animals-pass and testing/KNOWN_BLOCKERS.md first. (B) Row 13-b: AbandonTracker GapSeconds=10 game seconds against a 2 s real scan is about 25 game seconds at speed 0.5, so farSince resets on every scan and N2_ABANDON never fires (hypothesis, N2Policy.h:172). Use real ms or widen the gap. Build a new NC DLL, run the offline checks, and leave the new SHA in the handoff. Do not install it on any lane; the coordinator schedules the swap at the next relaunch. Keep C:\\KenshiTestRuns\\agents\\imm26-fix-native-n6.status current with agent-status.ps1, and write agents\\imm26-fix-native-n6.handoff.md every 40k tokens. Use codemaps and never read files over 60 KB whole. Isolated lanes only.",
+   "why": "The relay's KEY FINDING (Hunt rows 25-a/b and 26 are SETUP-FAIL because of ProvenWild) and the 13-b FAIL both need a native fix, and Shay already ordered the ProvenWild relaxation. Check first that no existing agent owns these."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "Update the program ledger imm26/live-rows and HANDOFF 'Right now' with the lane i4 results: PASS 05-c 04-b 06-c 06-d 08-a 11-c(partial) 18-b; SETUP-FAIL 18-a 25-a 25-b 26-a/b/c (blocked on fix-native-n6); FAIL 13-b (fix-native-n6); TODO 10-d 13-c 12-c 12-d 14-b 15-a 16-c 19-a 20-a 24-a 24-b 19-c 23-* 22-a/b 14-c are handed to i4op32. Record the successor chain i4op3 -> i4op32 and the new fixer.",
+   "why": "The coordinator updates the ledger and HANDOFF after every agent report, so a stop loses nothing."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP (run in background)",
+   "why": "The waker exits on every event and must be restarted whenever work is in flight."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.status",
+  "Get-Content C:\\KenshiTestRuns\\lane-owners.json",
+  "Get-ChildItem C:\\KenshiTestRuns\\agents\\*.status | Select-String -Pattern 'ProvenWild|AbandonTracker|13-b' (confirm no running agent already owns these fixes)"
+ ]
+}

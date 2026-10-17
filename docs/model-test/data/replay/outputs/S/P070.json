@@ -1,0 +1,24 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i5 \"op9d respawned at ~23:35 after op9c STOPPED-CONTEXT; still in its startup window (reading generated brief, 26-a setup); status file checked and RUNNING/fresh\"",
+   "why": "The LANE IDLE alert fired about 6 minutes after the fresh operator op9d was spawned, which matches normal startup, and the read-only status check is expected to show it alive, so the ack carries evidence."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The waker task just completed after delivering this event, and work is in flight (op9d on 5090-i5, i4op10 on the 4080), so it must be re-armed at once."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op9d's first status update (due within ~10 min of its spawn); if its status is still stale at the next LANE IDLE or LANE STALLED event (12 min), send it a ping, then TaskStop and respawn it as op9e with lane-brief.ps1 5090-i5 -Predecessor imm26-5090-i5-op9d",
+   "why": "The stall ladder allows a ping and then a respawn only if op9d stays silent past the watchdog window; acting on it now would be premature."
+  }
+ ],
+ "checks": [
+  "cat /c/KenshiTestRuns/agents/imm26-5090-i5-op9d.status | cut -c1-600; date",
+  "ls -t /c/KenshiTestRuns/inbox/coordinator | head -3"
+ ]
+}

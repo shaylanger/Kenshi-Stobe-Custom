@@ -1,0 +1,26 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The waker exited after delivering this batch and work is still in flight (lanes, sfI/sfJ, op21), so it must be restarted at once."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding && powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/lane-brief.ps1 4080-i4 -Name imm26-4080-i4op13 -Predecessor imm26-4080-i4op12b -Out C:/KenshiTestRuns/agents/out/imm26-4080-i4op13.brief.md",
+   "why": "op12b (4080-i4 operator) hit its context limit; pre-building the successor brief now means the 4080-i4 lane loses no time once the tail's relay arrives (same pattern as op20 to op21)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the live tail ded82aa7's TAIL-RELAY of imm26-4080-i4op12b (inbox event 'tail-imm26-4080-i4op12b'); then tail-ack.ps1 -Agent imm26-4080-i4op12b and spawn a fresh [case:generate] 4080-i4 lane operator imm26-4080-i4op13 from the brief and op12b.handoff.md (no existing successor is known from this file).",
+   "why": "op12b is owned by the live tail, so the coordinator must not respawn it before the relay is delivered; the Stop-hook no-successor warning is cleared by spawning right after the relay."
+  }
+ ],
+ "checks": [
+  "tail -6 /c/KenshiTestRuns/agents/imm26-4080-i4op12b.status",
+  "ls -t /c/KenshiTestRuns/inbox/coordinator | head -3",
+  "ls /c/KenshiTestRuns/agents | grep -i imm26-4080-i4op13",
+  "ls /c/KenshiTestRuns/agents/imm26-4080-i4op12b.handoff.md"
+ ]
+}

@@ -1,0 +1,44 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background; never a bare & or disown)",
+   "why": "The waker that delivered this batch (task ba3hbxhua) has completed, so nothing watches for events until it is restarted."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/lane-brief.ps1 4080-i4 -Name imm26-4080-i4op12b2 -Predecessor imm26-4080-i4op12b -Out C:/KenshiTestRuns/agents/out/imm26-4080-i4op12b2.brief.md",
+   "why": "Builds the successor brief from the STOPPED-CONTEXT predecessor, the same way the op21 respawn was built, but only after the checks show no RUNNING imm26-4080-i4op12b2 or imm26-4080-i4op12bb exists."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-4080-i4op12b2, tag [case:generate]. Brief: [case:generate] 4080-i4 lane operator op12b2 | You are imm26-4080-i4op12b2, the 4080-i4 lane operator, a FRESH successor of imm26-4080-i4op12b (STOPPED-CONTEXT). Read your brief C:/KenshiTestRuns/agents/out/imm26-4080-i4op12b2.brief.md first (rules, helper scripts, exact agent-status commands), then C:/KenshiTestRuns/agents/imm26-4080-i4op12b.handoff.md and its status file; continue the lane from the next: line there (11-b, then the NC20 install and the 13-c, 13-c-neg, 23-a, 19-d, 08-d sequence). Shay orders: 2 lanes per rig; no lane idle waiting for a fix; a stuck row is SETUP-FAIL after ONE attempt, then the next runnable row; claims = mkdir C:/KenshiTestRuns/claims/<row>. Lane plan: C:/KenshiTestRuns/inbox/operators/lane-plan-20261016.txt; 4080 deploy notes: C:/KenshiTestRuns/inbox/operators/4080-deploys-before-rows.txt. Keep your status current with tools/automation/agent-status.ps1 imm26-4080-i4op12b2 RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:/KenshiTestRuns/agents/imm26-4080-i4op12b2.handoff.md. Never SendMessage the old agent.",
+   "why": "The 4080-i4 lane has no operator after its predecessor stopped, so a fresh successor from the handoff is the standing respawn path; spawn only if the checks show no RUNNING successor (imm26-4080-i4op12b2 or imm26-4080-i4op12bb)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the TAIL-RELAY of imm26-4080-i4op12b in C:/KenshiTestRuns/inbox/coordinator (EVENT INBOX line from the waker), then ack it.",
+   "why": "The predecessor is owned by the live tail ded82aa7, which relays its result; the relay is not in this file yet, so ack only a relay that has actually arrived."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 -Agent imm26-4080-i4op12b",
+   "why": "Closes the tail relay once it has arrived and the successor shows RUNNING, as was done for op20; an unseen relay must not be acked."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 <id from the OPEN ALERTS line for imm26-4080-i4op12b, read from the check output> 'respawned as imm26-4080-i4op12b2'",
+   "why": "Closes the stopped-agent alert with the action taken once the successor shows RUNNING; the alert id is not in this file, so it is read from the check output and not invented."
+  }
+ ],
+ "checks": [
+  "ls /c/KenshiTestRuns/agents/ | grep imm26-4080-i4op12b",
+  "tail -5 /c/KenshiTestRuns/agents/imm26-4080-i4op12b.status",
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op12b.handoff.md",
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op12b2.status 2>/dev/null; head -3 /c/KenshiTestRuns/agents/imm26-4080-i4op12bb.status 2>/dev/null",
+  "ls /c/KenshiTestRuns/alerts/open/",
+  "ls /c/KenshiTestRuns/inbox/coordinator/ | grep -i 4080-i4op12b",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief 2>&1 | grep -Ei 'NO SUCCESSOR|ORPHANED|OPEN ALERTS|WAKER'"
+ ]
+}

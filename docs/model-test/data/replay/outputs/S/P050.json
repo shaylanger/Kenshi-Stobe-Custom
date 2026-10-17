@@ -1,0 +1,13 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The previous background wait (bt9qyv1xc) already completed, so no waker is running now; the hook says to restart it every time it wakes me, and this tail session must keep one long wait for the 9 still-owned agents instead of replying per block."
+  }
+ ],
+ "checks": [
+  "pgrep -af event-wait.sh (WSL) to confirm no waker is currently running before starting a new one"
+ ]
+}

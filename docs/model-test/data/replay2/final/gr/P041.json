@@ -1,0 +1,20 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/lane-owners.json: read it first, then add imm26-5090-i3-hard2 to the 5090-i3 lane owner list and keep imm26-5090-i3-hard listed as the predecessor",
+   "why": "The relay says the lane needs a registered successor, and the spawn of imm26-5090-i3-hard2 is done, but the lane-owners mapping is not in the already-done list."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-5090-i3-hard2 to report RUNNING/DONE/STOPPED via C:/KenshiTestRuns/agents/imm26-5090-i3-hard2.status and the TAIL-RELAY inbox; do not SendMessage the stopped imm26-5090-i3-hard",
+   "why": "The tail-ack for imm26-5090-i3-hard and the fresh successor spawn already cover this relay, so nothing else is owed to it; the successor now owns the lane's remaining hardening rows."
+  }
+ ],
+ "checks": [
+  "Get-Content C:/KenshiTestRuns/lane-owners.json",
+  "Get-Item C:/KenshiTestRuns/agents/imm26-5090-i3-hard2.brief.md | Select-Object Length",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-5090-i3-hard2.status -TotalCount 3"
+ ]
+}

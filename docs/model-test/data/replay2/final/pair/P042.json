@@ -1,0 +1,42 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md: in 'Right now' add: 'imm26-batch5 DONE (f62a91b): FIX1 16-c dps_generate counts enabled fields + personality anchor v=2; FIX2 02-bx slavery request regex; FIX3 17-bx imm26IsChallenge. Patch pending-fixes/imm26-batch5/apply.py <tree-root>; test tests/imm26_batch5_regression.php 29/29 on copy; stobe-tests 107 pass + 5 known pre-existing FAILs. NOT composed, deployed or proven in game; 17-bx also needs triageB item 3 fixtures.'",
+   "why": "HANDOFF must reflect the batch5 result as soon as the agent reports, and batch5 is the input to WP-C."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "the imm26 program .json under C:/KenshiTestRuns/programs/ (file name is not in this batch; find it with session-start -Brief): batch5 package DONE, output commit f62a91b, next step = WP-C compose",
+   "why": "The program ledger is the durable state and is updated after every agent report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "do not spawn imm26-wpc until C:/KenshiTestRuns/agents/imm26-tripresume-b.status shows DONE; the input records only tripresume-a DONE and tripresume-b as still running",
+   "why": "WP-C compose must include the trip-resume WP-B tests, and the input does not show them finished."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "only after that gate passes: Agent name imm26-wpc, description '[case:patch] imm26 WP-C compose and lane deploy'. Brief: WSL work dir /root/imm26/compose (holds trip-resume WP-A server code and WP-B tests). Apply pending-fixes/imm26-fix-pq/apply.py <tree-root> and pending-fixes/imm26-batch5/apply.py <tree-root> (anchored, idempotent; run each twice, expect 'applied' then 'already applied'). php -l every touched file, then full stobe-tests; the 5 known pre-existing FAILs (chat_json_endpoint, main_ingress_http, npc_player_view, social_property, social_fights) are allowed, any other failure is a regression to fix before compose. Then mkcompose_patch.sh APPLY-IDENTICAL, commit compose.patch and push (no logs, no handoff files). Then imm26-install b4 mk.sh BEFORE deploy.sh to 5090 i3, i4, i5 and 4080 i3, i4, as parallel background jobs, only to lanes whose lock shows no operator mid-row. No DLL changes. Run no game rows and mark no rows. Do not touch Shay's live install, server tree or DB. Checkpoint the status file at each milestone; at the warn level, if more than 150k tokens of work remain, hand off as STOPPED-CONTEXT. Report via SubagentHandback.",
+   "why": "WP-C is the next unblocked package: trip-resume is in place, and fix-pq and batch5 must be composed together; compose needs a fresh patch agent."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "no LLM-dependent row (16-c, 02-bx, 17-bx, 13-ax, 10-a, 19-a series, 03-b, 18-a) is run or marked while DeepInfra returns HTTP 402 'positive balance'; waiting for Shay to add balance",
+   "why": "Every model-reply row returns 402 until the balance is restored, so reruns now give invalid results."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "the 17-bx rerun waits for the triageB item 3 fixture changes as a separate row-definition package; the 16-c lane rerun waits until the new compose is deployed to the 5090 and 4080 lanes",
+   "why": "The batch5 report says 17-bx needs fixture changes, and 16-c can only be rerun on the deployed build."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "git -C C:/KenshiModding show --stat --oneline f62a91b",
+  "powershell -NoProfile -Command \"Get-Content C:/KenshiTestRuns/agents/imm26-batch5.status\"",
+  "powershell -NoProfile -Command \"Get-Content C:/KenshiTestRuns/agents/imm26-tripresume-b.status\"",
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c \"grep -ci 'positive balance' /tmp/stobe-imm26-5090-i4/php.log\""
+ ]
+}

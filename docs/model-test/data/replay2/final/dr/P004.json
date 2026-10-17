@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/savever.py a5f5a157aa21dff07 A3 ''",
+   "why": "Save the SUITE-A3 verify verdict (PASS) the same way the A2 verdict was saved."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s <<'EOF'\nS=/mnt/c/KenshiTestRuns/invest/suite\npython3 $S/tools/collect.py A3 SUITE-A3\nbash $S/tools/state-check.sh $S/A3/state-after.txt\nsed -i 's/^Done rounds:.*/Done rounds: B1 (ticket SUITE-B1b), B2, B3, A1 (PASS), A2 (PASS), A3 (PASS)/' $S/PROGRESS.md\nEOF",
+   "why": "Close the last suite round exactly as for A2: collect cost/time/violation stats, record post-round state, update PROGRESS.md (quota-before/after files written first from get_usage, values not known here)."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SUITE-A3 done, verifier PASS (report C:\\KenshiTestRuns\\invest\\suite\\A3\\report.md). Root cause of Mouse's looping: the Stobe.dll in use has no LocalTravel producer (0 hits for travel_destinations), so her local destination list is empty and the server replaces her reply with the canned line. Proposed Phase 1 fix: add LocalTravel source to the build tree via an anchored build_portable.bat patch plus a guard, build only, no install, no game launch. Not started: it is outside the suite and the 2026-10-14 stop order says no agents or rig work until you say so. Say go and I will spawn one patch agent.",
+   "why": "The fix is a real product change beyond the investigation suite and the standing stop order forbids new agents without Shay's instruction, so ask in the summary and keep working rather than spawn."
+  }
+ ],
+ "checks": [
+  "mcp get_usage (self) to write A3/quota-before.txt and quota-after.txt",
+  "grep -c -a travel_destinations \"D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\mods\\Stobe\\Stobe.dll\""
+ ]
+}

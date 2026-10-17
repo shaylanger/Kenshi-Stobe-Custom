@@ -1,0 +1,26 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no action on the b4rgpc75d completion notice; do not launch another event-wait.sh yet",
+   "why": "b4rgpc75d is the earlier waker that rearm-waker.ps1 -KillOnly stopped before the live waker bvpgoc6vb was started, so its completion notice is expected and does not by itself mean the waker is down."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "read the digest lines in the b4rgpc75d and bvpgoc6vb output files (tail -c 1500 on each) before acting on any lane or agent event",
+   "why": "The batch carries only the completion notice, not the event that woke the waker, so the next action depends on the digest content."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "only if the process check shows zero event-wait.sh processes: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background); if the check shows more than one, first run cd /c/KenshiModding; powershell -NoProfile -File tools/automation/rearm-waker.ps1 -KillOnly, then the same command",
+   "why": "Keeps exactly one waker running under the one-waker rule and re-arms only when no live waker is left, so a restart never kills the live bvpgoc6vb."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'ps -ef | grep [e]vent-wait.sh | wc -l'",
+  "tail -c 1500 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/245d8ad7-6bab-4115-8188-ea4724f6a5b6/tasks/b4rgpc75d.output",
+  "tail -3 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/245d8ad7-6bab-4115-8188-ea4724f6a5b6/tasks/bvpgoc6vb.output",
+  "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/agent-ids.ps1 list -Live"
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "After reading the waker output, run (Bash run_in_background, no bare & or disown): powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\rearm-waker.ps1 -KillOnly; then MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker exited because it saw an event; agents imm26-4080-i4op14, imm26-sfR2, imm26-pilotA and imm26-pilotC are in flight, so a single proper waker must be running again before this turn ends (waker guard)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Act on whatever the waker output reports (LANE IDLE, AGENT STALL, DONE agent, alert). If it only reports an agent DONE or a quiet exit, wait for the pilotA and pilotC completion notifications and the operator relays.",
+   "why": "The waker's content is not in this file, so I cannot decide a specific response to it before reading the output."
+  }
+ ],
+ "checks": [
+  "tail -15 'C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\245d8ad7-6bab-4115-8188-ea4724f6a5b6\\tasks\\bvpgoc6vb.output' | cut -c1-500",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-scan.ps1"
+ ]
+}

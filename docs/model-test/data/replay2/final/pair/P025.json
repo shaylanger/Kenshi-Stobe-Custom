@@ -1,0 +1,38 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing\\HANDOFF.md 'Right now': add 'imm26-n5a DONE (N5a, row 13-b server half): commit ee28e15 on main (lib/social_interpreter.php abandonedInDanger takes evidence_id as the incident key when agreement_id is absent; 4 new checks, 19 pass); compose.patch at pending-fixes\\npc-immersion-26\\compose\\compose.patch (APPLY-IDENTICAL); deployed file by file to 5090 i3/i4/i5 and 4080 i3/i4; native untouched; 13-b rerun OPEN, not PASS; stobe-tests 6 FAILED (playthrough_rollback_lock flake plus known set; report says 7 known but names 5, reconcile against the HANDOFF list)'",
+   "why": "CLAUDE.md requires HANDOFF 'Right now' to be updated after every agent report, and the 13-b server half is now deployed."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1 (update form from its usage line; the imm26 program name is not in this batch, so look it up in C:\\KenshiTestRuns\\programs\\ first): imm26-n5a state DONE, output agents\\out\\imm26-n5a, commit ee28e15, compose.patch pending-fixes\\npc-immersion-26\\compose\\compose.patch, successor none",
+   "why": "CLAUDE.md requires the program ledger to be updated after every agent report, and a cold start reads the ledger; the update uses the script, not hand-edited JSON."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Run the playthrough_rollback_lock suite alone under the same flock stobe-tests command that agents\\out\\imm26-n5a's report names (copy it from that report; the command is not in this batch), then grep -n FAIL on that output file only",
+   "why": "The 6 FAILs are the known pre-existing set plus this flake; the flake must pass alone before the offline gate is called clear, because stobe-tests must pass before the next game batch."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Operator note via inbox\\operators to the 13-b holders on 5090 i3/i4/i5 and 4080 i3/i4, sent ONLY after the playthrough_rollback_lock rerun passes alone and no FAIL falls outside the known list: 'ee28e15 (N5a, row 13-b server half) is deployed to your lane. At your next row boundary rerun 13-b and send the RESULT line only. Do not restart the lane for this. If the coordinator sends a hold, stop at the boundary.'",
+   "why": "The server fix is live on every lane, so the 13-b rerun goes at a row boundary, but CLAUDE.md gates game batches on a clear offline stobe-tests run, so the rerun is held until the gate is clear."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the playthrough_rollback_lock result and for any new notification from imm26-n5a; if it notifies again, read it as interim and check it did not deploy twice before recording anything. imm26-n5a gets no respawn; no mark-row, 13-b stays OPEN.",
+   "why": "imm26-n5a closed with its own DONE report, its background work may notify again as interim, and 13-b cannot pass before a real in-game run."
+  }
+ ],
+ "checks": [
+  "type C:\\KenshiTestRuns\\agents\\imm26-n5a.status ; dir C:\\KenshiTestRuns\\inflight (confirm imm26-n5a reads DONE and its inflight marker is gone; read-only)",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'git -C /var/www/html/StobeServer show --stat ee28e15 | head -20; git -C /var/www/html/StobeServer status --short | head -10; git -C /var/www/html/StobeServer log -1 --oneline origin/stobe; git -C /root/stobe-work/ss-merge branch --contains ee28e15 | head -3'",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'cmp /var/www/html/StobeServer/lib/social_interpreter.php /root/stobe-work/ss-merge/lib/social_interpreter.php && echo SAME && php -l /var/www/html/StobeServer/lib/social_interpreter.php'",
+  "grep -n FAIL on the stobe-tests output file named in agents\\out\\imm26-n5a's report (not the whole log), then compare the failing suite names with the known pre-existing list in testing\\HANDOFF.md",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 check"
+ ]
+}

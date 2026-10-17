@@ -1,0 +1,27 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "DONE imm26-inv26nat: no action, its report was already routed to imm26-5090-i5-op9p and tickets 26-d/26-dx/26-e were already set to recipe/ready.",
+   "why": "The preceding conversation already handled this finding, so repeating it would duplicate work."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Coordinator -> 4080-i4 operator (SendMessage BY AGENT ID from agent-ids.ps1 list -Live; imm26-4080-i4op14 per HANDOFF, the alert names imm26-4080-i4op12): lane 4080-i4 has been idle 6.5 min. Reply in one line: the row you are on, what you are waiting for, and whether you are stuck. If you are stuck, say on what and the coordinator will fix the root.",
+   "why": "A lane idle more than 2 min while work exists needs the operator's state before any fix; the HANDOFF lists op14 (owned by tail 245d8ad7) as the live 4080-i4 operator while the alert names op12, so the live id must be read first."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait about 5 min for the reply in inbox/coordinator. If op12/op14 is silent or DONE and nothing is live on 4080-i4, then (and only then) spawn a fresh successor via lane-brief.ps1 4080-i4 -Name <next free name after the newest 4080-i4 operator> -Predecessor <that operator>, keeping the lane inflight marker. If the operator is live and owned by a live tail, do not respawn; relay the question to tail 245d8ad7 instead. Then ack the lane alert with alert-ack.ps1 and the action taken.",
+   "why": "The draft's op13 successor could collide with the op14 operator the HANDOFF lists, and agents owned by a live tail must not be respawned."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-4080-i4op12.status",
+  "cat C:/KenshiTestRuns/agents/imm26-4080-i4op14.status",
+  "tail -n 20 C:/KenshiTestRuns/imm26-4080-i4/report.txt",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live",
+  "ls C:/KenshiTestRuns/alerts/open"
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: '[case:generate] imm26-rowtools432 one-call row scripts item 4 (successor of imm26-rowtools43)'. Brief: You are imm26-rowtools432, the fresh successor of imm26-rowtools43 (STOPPED-CONTEXT). Read C:\\KenshiTestRuns\\agents\\imm26-rowtools43.handoff.md and C:\\KenshiTestRuns\\agents\\imm26-rowtools43.status first and continue 'hx one-call row scripts (item 4)' in the same work dir, from its checkpoint; do not redo finished parts. Rules: keep C:\\KenshiTestRuns\\agents\\imm26-rowtools432.status current via tools/automation/agent-status.ps1 imm26-rowtools432 RUNNING|DONE|FAILED|STOPPED-CONTEXT \"<task>\" \"<step>\" \"<outputs>\" \"<next>\"; checkpoint (regenerate patch, compile/selftest, commit, update handoff) every milestone or ~40k tokens; at the meter warn level finish the edit, checkpoint and hand off as imm26-rowtools4322. Never edit a script a queued or running batch uses (write new files / .candidate); never find /; no 5090 testing (Shay hold); 4080 and offline only. Commit identity shaylanger, push after each commit. Finish with a one-line report: files changed, selftest result, next step.",
+   "why": "The stopped agent has a handoff file and the Stop hook blocks on a STOPPED-CONTEXT agent with no successor, so a fresh successor named rowtools432 continues item 4 right away."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': append one line saying imm26-rowtools43 STOPPED-CONTEXT, successor imm26-rowtools432 spawned (item 4 hx one-call row scripts), handoff at C:\\KenshiTestRuns\\agents\\imm26-rowtools43.handoff.md; rowtools42 (items 5-7) still running; update the ledger entry if one exists",
+   "why": "State must be recorded after every agent report so a coordinator stop loses nothing."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-rowtools43",
+   "why": "Close the tail relay for this agent once the successor exists, if the agent is tail-owned; if it is owned by this coordinator the command is a no-op."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "Get-ChildItem C:\\KenshiTestRuns\\agents\\imm26-rowtools43*",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-rowtools43.status",
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-rowtools43.handoff.md -TotalCount 60"
+ ]
+}

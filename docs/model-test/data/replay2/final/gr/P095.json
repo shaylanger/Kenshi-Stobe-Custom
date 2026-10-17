@@ -1,0 +1,15 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; start only if no event-wait process is alive, check first)",
+   "why": "The waker that just fired has exited and the rule is to restart it after each wake, while agents and lanes are still in flight."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "head -c 1500 C:/KenshiTestRuns/setupfail/20-d.json",
+  "grep -n -E 'RESULT|SETUP-FAIL|pending_change' C:/KenshiTestRuns/imm26-5090-i3/rows/20-d/* | head -40"
+ ]
+}

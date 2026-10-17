@@ -1,0 +1,20 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Short answer: as far as this workspace shows, the test scripts do not read your Claude quota. Game results and RESULT lines are written by the rig scripts to the evidence files, so those should still be recorded while quota is maxed. The gap is on the Claude side: the coordinator and subagents run on your plan, and with weekly all-models at 100% they now bill as extra usage ($70.41 spent so far). Nothing in our current setup checks quota before a spawn, so that check is missing. The usage read works now: 5-hour 0%, weekly all models 100%, resets 23:00 UTC (about 34 min). Options: (a) keep working on extra usage; (b) hold new agent spawns until the reset while scripted rows and the waker keep running; (c) also keep the STOBE server off to save LLM credits. I have changed no rig, lane or agent state. Which do you want? The settings.json change (session-tool deny list) is still uncommitted; say commit or leave.",
+   "why": "Shay asked a question about quota and recording that needs an answer and a cost choice from him, asked once without blocking the work."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "No new Agent spawns and no new STOBE server start until Shay answers the quota question; scripted rows already in flight continue.",
+   "why": "Each new agent turn now bills as extra usage and the quota decision is his, while nothing else is blocked."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "Read C:\\KenshiModding\\tools\\automation\\stobe-server.sh and confirm whether the STOBE server is currently on",
+  "mcp__ccd_session_mgmt__get_usage with session_id self, to confirm the weekly reset time before any spawn"
+ ]
+}

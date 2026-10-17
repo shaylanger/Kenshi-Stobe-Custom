@@ -1,0 +1,19 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i4 \"5090 hold per Shay: no new 5090 testing until he says otherwise; 5090-i4 operator deliberately not respawned\"",
+   "why": "alert-ack.ps1 accepts a subject, so the lane name 5090-i4 closes the open NO-OPERATOR alert without needing an alert id that is not in this file; the HANDOFF already says 5090 lane alerts get alert-ack with the hold reason."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no spawn or respawn for lane 5090-i4; the lane stays held with its backend and game stopped",
+   "why": "Shay's order (no new 5090 testing sessions) overrides the event's respawn hint, and this session is a tail that spawns nothing."
+  }
+ ],
+ "checks": [
+  "ls C:/KenshiTestRuns/alerts/open",
+  "grep -l 5090-i4 C:/KenshiTestRuns/alerts/open/*.json"
+ ]
+}

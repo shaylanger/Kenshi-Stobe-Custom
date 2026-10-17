@@ -1,0 +1,19 @@
+{
+ "id": "L34",
+ "batch_id": 34,
+ "class": "waker digest",
+ "window": [
+  "2026-10-16T22:38:36.942Z",
+  "2026-10-16T22:39:19.318Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 3,
+ "action_types": [
+  "restart-waker",
+  "ack"
+ ]
+}

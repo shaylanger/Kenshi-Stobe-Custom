@@ -1,0 +1,31 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/docs/COORDINATOR_IMPROVEMENTS.md: run grep -n -i 'cheaper' first; if exactly one line matches, delete that list item ('a cheaper model for operators', the 8th of 10) and renumber the later items if they are numbered; change nothing else. If zero or several lines match, change nothing and report the problem to Shay in the message-shay step.",
+   "why": "Shay's INBOUND order 'remove this one a cheaper model for operators' names exactly this list item; the replayed text is truncated, so the grep guard keeps the edit on the right line."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git -C C:/KenshiModding add docs/COORDINATOR_IMPROVEMENTS.md && git -C C:/KenshiModding commit -m 'imm26: drop cheaper-model operator item from coordinator improvements (Shay 2026-10-16)'",
+   "why": "One doc change per commit, and only this file is staged so the unrelated uncommitted work (KENSHI_BIG_MOD_IDEAS_CONTEXT.md, untracked tools/*.py) stays out."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "git -C C:/KenshiModding push origin HEAD:main",
+   "why": "CLAUDE.md requires a push right after every commit."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Removed 'a cheaper model for operators' from docs/COORDINATOR_IMPROVEMENTS.md (commit <short sha from git log -1 --oneline>, pushed to main). The list now has nine items and the other nine are unchanged. I did not touch model-policy.json or any operator model routing; tell me if you meant the routing too.",
+   "why": "Send via SendMessage to Shay's relay session (CLAUDE.md); confirms the order and states what was not touched so he does not have to ask."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding config user.email (must be shaylanger2@gmail.com before the commit)",
+  "git -C C:/KenshiModding status --short docs/COORDINATOR_IMPROVEMENTS.md (no pre-existing uncommitted edits to this file)",
+  "grep -n -i 'cheaper' C:/KenshiModding/docs/COORDINATOR_IMPROVEMENTS.md (confirm exactly one match before the edit)",
+  "git -C C:/KenshiModding log -1 --oneline (after the commit, to get the sha for the Shay message)"
+ ]
+}

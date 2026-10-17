@@ -1,0 +1,23 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/extract.py adb8565711c29f920 /mnt/c/KenshiTestRuns/invest/suite/A3/report.md",
+   "why": "Save the A3 investigator hand-back to the round folder first, exactly as A1 and A2 were saved."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:verify] [ticket:SUITE-A3] suite round A3 verify', prompt: 'Read C:\\KenshiTestRuns\\invest\\suite\\A3\\verify-prompt.md and follow it exactly.'",
+   "why": "The suite protocol runs a verifier right after each saved investigator report (as for A2); this is read-only suite work, so the draft's generator/patch spawn is out of scope and is dropped."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the A3 verifier hand-back; then run savever.py adb8565711c29f920's verifier id A3, record quota-before/after, collect.py A3 SUITE-A3, state-check.sh, update PROGRESS.md (A3 is the last round).",
+   "why": "The remaining A3 steps depend on the verifier result."
+  }
+ ],
+ "checks": [
+  "ls C:\\KenshiTestRuns\\invest\\suite\\A3\\verify-prompt.md to confirm the verifier prompt exists before spawning"
+ ]
+}

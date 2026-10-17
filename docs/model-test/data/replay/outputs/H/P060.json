@@ -1,0 +1,30 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:patch] imm26-rowtools432: hx one-call row scripts (item 4)\", subagent_type general-purpose; prompt = fresh brief built from /c/KenshiTestRuns/agents/imm26-rowtools43.handoff.md (predecessor imm26-rowtools43, same work dir, checkpoint to agents status latest, report via tail-relay)",
+   "why": "imm26-rowtools43 went STOPPED-CONTEXT with no successor yet, and the event's respawn text asks for a fresh successor; the malformed C:$(printf...) path in the event is unusable, so the handoff path is taken from the event's own handoff file reference."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-rowtools432 RUNNING \"hx one-call row scripts (item 4)\" \"respawned from imm26-rowtools43 handoff\" \"\" \"checkpoint at each milestone\"",
+   "why": "the successor must be marked RUNNING at once so the stopped predecessor is not counted as an orphan and the inflight marker is recreated for the new agent."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Keep C:/KenshiTestRuns/respawn/imm26-rowtools43.todo in place until imm26-rowtools432 exists; then update testing/HANDOFF.md Right now and the program ledger with the successor and its checkpoint.",
+   "why": "the guard rule says a stopped agent's respawn marker must not be deleted before its successor exists, and the ledger and HANDOFF must record every agent change at once."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-rowtools432 status file to report RUNNING, then for its RESULT report; rowtools42 and the two 4080 operators keep running.",
+   "why": "no other lane or batch depends on this event, so the coordinator waits on the successor's own status and report."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "ls C:/KenshiTestRuns/agents | grep -i rowtools43",
+  "ls C:/KenshiTestRuns/inflight C:/KenshiTestRuns/respawn"
+ ]
+}

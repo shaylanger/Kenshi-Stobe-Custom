@@ -1,0 +1,56 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' and the imm26 program ledger entry for wpL2 (path as printed by session-start.ps1): mark wpL2 DONE; compose commit 30a4ec9 on /root/imm26/compose (lib/commitment_native_bridge.php helper stobeCommitmentExecutionAfterLoad, tests/imm26_wpL2_model_emitted_resume_regression.php); lane sha 388071a8 -> 9ac36d57 on 5090 i3/i4/i5 and 4080 i3/i4 (backups bak-pre-wpL2); live tree and ss-merge not touched; no game launched; 5090 rows on hold per Shay's order; 19-a landmark rerun on 4080-i4 pending; report agents/out/imm26-wpL2-deploy/latest.md; operator note inbox/operators/wpL2-deployed.txt",
+   "why": "Every agent report updates the ledger and Right now at once, so a stop loses nothing."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/row-attempts.ps1 reset 4080-i4 19-a \"wpL2 local-landmark resume fix deployed (server sha 9ac36d57, compose 30a4ec9): one landmark rerun\"",
+   "why": "Only if the checks show the last 19-a attempt on 4080-i4 was a FAIL (local_plan_expired_or_unknown); otherwise the PI-06 attempt guard blocks the rerun, and the override needs a logged reason."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Only if the checks show no 4080-i4 operator RUNNING (imm26-4080-i4op8 dead or DONE): Agent description '[case:generate] imm26-4080-i4op9', brief = fresh output of tools/automation/lane-brief.ps1 4080-i4 with this row first: 19-a LANDMARK variant (TR_S1 'Anywhere you want to go?', needs --save), expecting one post-load OWNED_TRAVEL with accepted=1 near -51316 1577 3592 and no local_plan_expired_or_unknown. No 5090 launches. Register the lane in lane-owners.json.",
+   "why": "The 4080-i4 rig needs a live operator for the landmark rerun, but a second operator on a live lane would collide, so spawn only when none is alive; op9 follows the successor naming rule."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "git -C C:/KenshiModding rm -r pending-fixes/imm26-wpL2 && git -C C:/KenshiModding commit -m \"imm26 wpL2: remove applied pending-fix scripts (server fix in 30a4ec9)\" && git -C C:/KenshiModding push",
+   "why": "CLAUDE.md says to delete pending-fixes scripts once the fix is committed in its repo (30a4ec9 is pushed and git keeps history); run only after the checks show no running job references the folder and git config user.email is shaylanger2@gmail.com."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-fix10a and to the fix17bx fixer (name as listed by session-start.ps1): 'Server commit 30a4ec9 (wpL2, lib/commitment_native_bridge.php) is on the compose main now. Before you hand over any patch, rebase it on 30a4ec9 and rerun your tests; report conflicts in your status latest. Do not edit compose itself.'",
+   "why": "Both fixers work on scratch copies cut before wpL2, so their patches would otherwise be made against a stale base."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Only if the compose check shows 30a4ec9 is not on the branch the rules name for this server (stobe): 'wpL2 commit 30a4ec9 was pushed to main from /root/imm26/compose; tell me if that branch is wrong and I will leave further pushes alone.'",
+   "why": "The server push rule names the stobe branch, so a wrong branch is a real decision for Shay."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No SendMessage to any 5090 or 4080 lane operator; the deploy agent's inbox/operators/wpL2-deployed.txt is the 4080-i4 channel.",
+   "why": "Isolated arms get no coordinator input (standing rule), and 5090 stays on hold by Shay's order."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep bash tools/automation/event-wait.sh running; wait for the 4080-i4 19-a landmark rerun result (one post-load OWNED_TRAVEL with accepted=1, no local_plan_expired_or_unknown) and the fix10a / fix17bx / reloadrows results.",
+   "why": "The deploy is finished; the next evidence comes from the 4080-i4 lane and the offline fixers, and no 5090 session is started."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-wpL2-deploy.status (expect DONE) and ls C:/KenshiTestRuns/inflight/ (expect no imm26-wpL2-deploy marker)",
+  "cat C:/KenshiTestRuns/inbox/operators/wpL2-deployed.txt (expect the 19-a landmark rerun request)",
+  "check C:/KenshiTestRuns/lane-owners.json and C:/KenshiTestRuns/agents/imm26-4080-i4op8.status: is a 4080-i4 operator RUNNING?",
+  "wsl.exe -d DwemerAI4Skyrim3 bash -lc 'cd /root/imm26/compose && git log -3 --oneline && git branch --show-current && git remote -v && git status --short | head -5' (expect 30a4ec9 on the branch the rules allow; live tree untouched)",
+  "wsl.exe -d DwemerAI4Skyrim3 bash -lc 'sha256sum /tmp/stobe-standalone4080-i4/lib/commitment_native_bridge.php' (expect 9ac36d57 prefix before the rerun; PHP opcache may lag about 1 min)",
+  "grep -n -i -E 'sha|FAIL' C:/KenshiTestRuns/agents/out/imm26-wpL2-deploy/latest.md",
+  "read the 4080-i4 attempt record for 19-a via tools/automation/row-attempts.ps1 (expect last attempt FAIL local_plan_expired_or_unknown) before the reset runs",
+  "git -C C:/KenshiModding config user.email (expect shaylanger2@gmail.com) and git -C C:/KenshiModding status --short pending-fixes/imm26-wpL2",
+  "grep -rl 'pending-fixes/imm26-wpL2' C:/KenshiTestRuns --include=*.json --include=*.sh --include=*.status (expect no hit from a running job)"
+ ]
+}

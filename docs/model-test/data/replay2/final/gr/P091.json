@@ -1,0 +1,25 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background, no batch id: none is named in this batch)",
+   "why": "The Stop hook reports 19 inflight markers (live lanes imm26-4080-i3op21 and imm26-4080-i4op13 among them) and no waker running, so the session would go quiet and miss peer messages and stalls."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief, then if imm26-4080-i3op20 still shows as STOPPED-CONTEXT with no successor: powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-4080-i3op20 \"superseded by successor imm26-4080-i3op21 (spawned 11:19 from its brief)\"",
+   "why": "The guard still names op20 (asks for imm26-4080-i3op20b) even though its successor imm26-4080-i3op21 is already running, so once the guard sees the successor the stale op20 marker should be closed, not respawned; the marker is only dropped after the successor exists."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the restarted event-wait.sh to wake on an inbox message, an agent status change (imm26-4080-i3op21 / imm26-4080-i4op13 / sfI / sfJ / sfK2), or the 10-minute backstop, then restart it",
+   "why": "Nothing else in this batch needs action; the lane operators and running agents report through the waker."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "head -3 /c/KenshiTestRuns/agents/imm26-4080-i3op21.status",
+  "ls C:\\KenshiTestRuns\\inflight C:\\KenshiTestRuns\\respawn"
+ ]
+}

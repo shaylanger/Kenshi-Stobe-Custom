@@ -1,0 +1,15 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for tail 245d8ad7 to unblock the 4080-i3 trip-setup defect (imm26-4080-i3op22 is owned by that live tail; SETUP-FAIL 20-a is evidence C:/KenshiTestRuns/imm26-4080/ and shares the travel_agreement defect with 19-a/14-a)",
+   "why": "The lane and row belong to a live tail session, so this coordinator must not spawn or steer its arm; the 20-a ticket is a known shared defect that the owning tail will handle, and the event itself is already digest-grade."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "read the 20-a ticket file under C:/KenshiTestRuns/imm26-4080/ for the full setup-fail text (grep -n travel_agreement)",
+  "confirm 4080-i3 owner in the program ledger (agent-ids.ps1 list -Live) before any action"
+ ]
+}

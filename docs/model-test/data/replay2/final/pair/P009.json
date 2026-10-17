@@ -1,0 +1,46 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add the line 'imm26-nativecomp STOPPED-CONTEXT 2026-10-15 14:44 (N1+N2 native compose onto newest components/STOBE/src; DLL not yet installed); NO SUCCESSOR: respawn FRESH as imm26-nativecomp2 from C:/KenshiTestRuns/agents/imm26-nativecomp.handoff.md; keep C:/KenshiTestRuns/inflight/imm26-nativecomp and C:/KenshiTestRuns/respawn/imm26-nativecomp.todo until the successor starts'",
+   "why": "The batch shows imm26-nativecomp moved from RUNNING to STOPPED-CONTEXT with no successor, so the handoff state must carry it or the Stop guard blocks the handoff."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git add testing/HANDOFF.md && git commit -m 'HANDOFF: imm26-nativecomp STOPPED-CONTEXT, successor imm26-nativecomp2 queued' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git push",
+   "why": "CLAUDE.md requires the handoff state committed and pushed right after the edit (precedent 8e9cf5d) so the next coordinator reads the same checkpoint."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "tools/automation/program-ledger.ps1 (read its usage line first; the exact subcommand is not in this file): record for programs/imm26.json imm26-nativecomp STOPPED-CONTEXT 14:44 with successor route imm26-nativecomp2 from agents/imm26-nativecomp.handoff.md",
+   "why": "The program ledger is the state file the supervisor reads and must be updated after every agent report."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for DONE or STOPPED-CONTEXT from imm26-wpA3, imm26-wpB3, imm26-4080-op2, claude-md-reviewer and program-ledger (all still RUNNING in this batch), with the event-wait waker running meanwhile",
+   "why": "The stop order went to all of them at the context limit and they need a clean checkpoint before the handoff opens."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "TaskStop on the task of any of imm26-wpA3, imm26-wpB3, imm26-4080-op2, claude-md-reviewer or program-ledger still RUNNING about 10 min after the stop message (look up each task id by agent name; ids are not in this file), then record STOPPED-CONTEXT with its handoff text in HANDOFF and the ledger",
+   "why": "Stragglers must not be killed silently; a recorded STOPPED-CONTEXT with a handoff file lets the next coordinator respawn them fresh."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/handoff-ready.ps1",
+   "why": "The context-meter handoff order runs handoff-ready once the agents have all stopped and the state files are committed."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No imm26-nativecomp2 spawn from this session, no SendMessage to imm26-nativecomp, no waker restart during this handoff; keep the inflight and respawn markers",
+   "why": "The context-meter order says to start nothing new, and the next coordinator spawns the fresh successor from the handoff file."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-nativecomp.status",
+  "ls C:/KenshiTestRuns/agents/imm26-nativecomp.handoff.md C:/KenshiTestRuns/inflight/imm26-nativecomp C:/KenshiTestRuns/respawn/imm26-nativecomp.todo",
+  "git -C C:/KenshiModding status --short testing/HANDOFF.md"
+ ]
+}

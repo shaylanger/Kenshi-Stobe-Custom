@@ -1,0 +1,23 @@
+GRADES P3
+R01 | root=5 evid=5 fix=4 comp=5 hon=5 | total=24 | false=0 | DLL cause proven; backups, Laru comparison; misses history feedback, push freshness
+R02 | root=5 evid=2 fix=4 comp=5 hon=4 | total=20 | false=2 | Right cause; misdated blank proposal; claims KAH-CHAT-005 producer worked
+R03 | root=5 evid=2 fix=5 comp=5 hon=5 | total=22 | false=1 | Strongest fix (build guard, NONE, rejection feedback); false chat-envelope claim
+R04 | root=5 evid=2 fix=4 comp=4 hon=5 | total=20 | false=2 | Solid logs; timezone slip gives false DLL inference; no town list
+R05 | root=4 evid=2 fix=3 comp=3 hon=4 | total=16 | false=1 | Cause right, thin evidence, vague build steps
+R06 | root=2 evid=2 fix=2 comp=2 hon=4 | total=12 | false=1 | Misses DLL cause; auto-pick fallback questionable; no code
+R07 | root=4 evid=2 fix=3 comp=4 hon=4 | total=17 | false=1 | Tree cause right; nearest-town fallback risky; CMake edit irrelevant
+R08 | root=3 evid=2 fix=4 comp=4 hon=5 | total=18 | false=1 | Couldn't settle DLL; good detour caveat; honest gaps
+R09 | root=5 evid=2 fix=5 comp=5 hon=5 | total=22 | false=1 | Unique, verified selection-only envelope finding; wrongly calls tree clean
+R10 | root=5 evid=2 fix=5 comp=5 hon=5 | total=22 | false=2 | DLL plus freshness plus loop; small count errors
+R11 | root=2 evid=2 fix=3 comp=3 hon=3 | total=13 | false=3 | Misses DLL; false claims about current resolver behaviour
+R12 | root=2 evid=2 fix=3 comp=3 hon=4 | total=14 | false=1 | Server-only view; misses DLL; history loop noted
+R13 | root=5 evid=5 fix=4 comp=5 hon=5 | total=24 | false=0 | Accurate and verified; ready server code; careful native port
+R14 | root=5 evid=2 fix=5 comp=5 hon=5 | total=22 | false=1 | Verified diffs; full A/B/C fix; claims LocalTravel emits known places
+RANKING: R01 > R13 > R03 > R10 > R14 > R09 > R02 > R04 > R08 > R07 > R05 > R12 > R11 > R06
+KEY FALSE CLAIMS:
+R03/R12: ChatBox.cpp:6437 sends travel_destinations with every chat (SendChatToStobeServer has no callers; the full envelope is only sent on selection or trader push, main.cpp:4212/14201)
+R11: stobeTravelResolvePlan('Ogdam') returns false before the fix, and Mouse had "a few expiring native points" (current code already resolves exact non-current visited names; there were zero candidates)
+R06: LocalTravel.cpp:186 marks candidates path_confirmed without a live path test (add() calls PathConfirmed at :349 first)
+R09: /root/STOBE-src is a clean checkout at dedc49d (it has 20+ uncommitted modified files, including Context.cpp and main.cpp)
+R04: the running DLL is "not on disk any more", and SOURCES has 44 names (the installed DLL dates from 19:37 local, before the 19:47:51 launch; SOURCES has 43)
+R02: blank destination at 01:59:28 and producer "worked" in KAH-CHAT-005 (01:59:28 was "Spring", blank was 01:59:43; prompts were [] then). R08: LocalTravel.cpp/Context.cpp differ from d541519 (no diff)

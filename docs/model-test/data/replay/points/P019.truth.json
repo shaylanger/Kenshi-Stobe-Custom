@@ -1,0 +1,23 @@
+{
+ "id": "P019",
+ "session": "3566926d",
+ "ts": "2026-10-15T22:49:46.247Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "mkdir -p /c/KenshiTestRuns/inbox/archive 2>/dev/null; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v -E \"SWEEP (MARKER|STATUS)\" | tail -15",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The event waker is running again in the background. The earlier one had woken on the finished test agent's DONE message, so no new work was waiting.\n\nI deleted the stale in-flight markers for the agents that were killed or abandoned. I also deleted the markers for the three agents that are still queued (`imm26-indep-enforce`, `imm26-install-nc-rest2`, `imm26-rowtools2`); spawning them recreates their markers. The rest are real work:\n- **Agents:** `imm26-compose-fix-batch2c`, `imm26-5090-ctxop3`,...[truncated 156 chars]"
+ ],
+ "event_text_chars": 730
+}

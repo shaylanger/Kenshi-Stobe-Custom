@@ -1,0 +1,35 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append to C:\\KenshiModding\\testing\\NPC_IMMERSION_26_HANDOFF.md (log tail) and HANDOFF.md 'Right now': Shay orders 2026-10-15 22:48 UTC: (1) row 20-a natural plan changes = build a deferred confirm; the NPC may still refuse a suggested destination (e.g. cannibal camp: 'No, I do not want to go there') and keeps the current destination; (2) row 24-a: Shay does not understand the question, restate it plainly; (3) row 15-a personal imperfect knowledge: filter trade-line events by NPC awareness; (4) DISPLAY1 is NOT the Samsung display; run game lanes at lower resolution to fit more per screen and cut CPU/GPU use.",
+   "why": "Shay's direct orders must be recorded in the state files the same minute so a handoff or respawned agent cannot lose them."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SendMessage to Shay relay session: (1) Yes: with the deferred confirm the NPC still decides. A suggested destination such as a cannibal camp can be refused and the NPC keeps the current destination; I am building that refuse path plus a test row. (2) Row 24-a, plain words: when an NPC picks a destination itself (not you), who decides if it goes, and do you want it to ask/tell you first? I will restate the exact decision from the design row in my next message and will not block on it; I proceed with the existing default meanwhile. (3) Will do: trade-line events are filtered by what the NPC is aware of. (4) Noted, DISPLAY1 is not the Samsung display; I will stop assuming that and re-check the monitor mapping before any launch (launches stay on DISPLAY2). I am checking how low the lane resolution can go and still pass the lane isolation check, and will report the lane count that fits.",
+   "why": "Answers Shay's question and the unclear item in one message without blocking work."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] name imm26-row20a-deferred-confirm. Brief: implement row 20-a (natural plan changes) so a travel plan swap suggested by the player becomes a deferred confirm and the NPC can refuse (for example a dangerous place such as a cannibal camp) and keeps its current destination. Read testing/NPC_IMMERSION_26_HANDOFF.md and the row 20-a entry in NPC_IMMERSION_26_TESTS.md first; use /root/imm26/codemap via codemap.sh for big files, never read a file over 60 KB whole; code only, no live test; checkpoint every ~40k tokens, update the agent status file, write a patch plus offline stobe-tests. Isolated lanes only, never Shay's live install, server or DB.",
+   "why": "Shay ordered it built, and the work package is code-only and sized for one agent."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] name imm26-row15a-awareness-filter. Brief: implement row 15-a (personal, imperfect knowledge): filter the trade-line events given to an NPC by that NPC's awareness so it only knows trades it could have witnessed or heard of. Read testing/NPC_IMMERSION_26_HANDOFF.md and the row 15-a entry in NPC_IMMERSION_26_TESTS.md; use the codemaps for large files; code and offline tests only, no live validation; checkpoint every ~40k tokens and keep the status file current.",
+   "why": "Shay ordered it, and it is independent of 20-a, so it runs in parallel."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Read-only first, then act: grep the lane resolution settings (kenshi.cfg / kcfg.ps1 gfx options, lane-isolation-check.ps1 requirement of 1920x1080) and the lane monitor mapping. If a lower resolution passes the isolation check, apply it on the idle lanes with C:\\KAH\\kcfg.ps1 on the 4080 and the 5090 kcfg equivalent, then add the lower-resolution rule to the lane runbook. Do not touch lanes currently running rows; apply it at their next relaunch.",
+   "why": "Lower resolution cuts CPU and GPU per game and may allow more lanes, which fits the standing speed-up order; the exact check scripts are not fully known here."
+  }
+ ],
+ "checks": [
+  "grep -n -i '24-a\\|20-a\\|15-a' C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md | head -20",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "grep -n -i '1920\\|resolution\\|Full Screen' C:\\KenshiModding\\tools\\automation\\lane-isolation-check.ps1 | head"
+ ]
+}

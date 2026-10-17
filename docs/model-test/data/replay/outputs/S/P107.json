@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No spawn, no respawn, no SendMessage: tail-wait.ps1 (session 48b778a7-13d7-4f96-bc6b-30dba5670ae0) exited 0, meaning every agent the tail owns is DONE/STOPPED-CONTEXT and its relay is delivered (op21 relay was just sent to coordinator 60ad9d7d-290e-4ca0-9909-9c33f627d722). A tail spawns/edits/decides nothing; the idle 5090-i3 lane and op22 successor decisions belong to the new coordinator.",
+   "why": "The wait completing is the signal that the tail has nothing left to relay, not a new work item."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Write C:\\KenshiTestRuns\\process-ideas\\review-48b778a7-13d7-4f96-bc6b-30dba5670ae0-tail.json (the tail closing review required by CLAUDE.md): review the conversation since the handoff; <=3 new PI entries each with a concrete example, e.g. duplicate task-notifications for an already-relayed hand-back (sfN 14-d repeat) wake the tail; ideas that would weaken a stall/idle/dead-agent catch go to Shay only. Exact JSON schema is not in this file, so follow the format documented in testing/AGENT_PROMPTS.md.",
+   "why": "tail-close.ps1 refuses to close without this review file."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-close.ps1 (session 48b778a7-13d7-4f96-bc6b-30dba5670ae0; exact arguments not in this file, check its usage/-? first)",
+   "why": "All tail agents are finished and relays delivered, so the tail session should close and end, which the Stop hook allows."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -? (usage only) and head -c 600 of C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\48b778a7-13d7-4f96-bc6b-30dba5670ae0\\tasks\\bvvvs3lly.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (TAIL lines: confirm no agent still owned by this tail and no unacked relay)",
+  "ls C:\\KenshiTestRuns\\inbox\\coordinator (confirm the op21 relay file 20261016-130448-tail-imm26-5090-i3op21.msg is present or moved to delivered)"
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-no-operator-5090-i5 \"no operator on purpose: op9d DONE (STOPPED-CONTEXT, report delivered); every remaining i5 row (26-a 26-b 26-c 22-a) is SETUP-FAIL needs native; imm26-nc13-investigate (a72d7afc149d84b9e) is running on canISeeThisGuy; idle reason recorded 60 min; respawn an i5 operator after the NC13 DLL is built and installed\"",
+   "why": "LANE NO-OPERATOR fired seconds after I recorded the idle reason; spawning another operator now would only burn 120k tokens re-running rows that cannot pass without a native fix, and the real alert id is not in the file so the subject form is used (check the open list first)."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "SELFTEST-ALL 34 pass / 0 fail / 1 skip (rowtools slow selftest skipped by design)",
+   "why": "Selftests are green, nothing to act on."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-nc13-investigate (a72d7afc149d84b9e) hand-back, and imm26-4080-i4op10 results / status updates; waker bash event-wait.sh stays armed (re-arm after each wake)",
+   "why": "Next real work is the NC13 fixer spawn after the root-cause report; i4op10 on the 4080 continues unchanged."
+  }
+ ],
+ "checks": [
+  "ls C:/KenshiTestRuns/alerts/open/",
+  "head -3 C:/KenshiTestRuns/agents/imm26-nc13-investigate.status",
+  "head -3 C:/KenshiTestRuns/agents/imm26-4080-i4op10.status",
+  "cat C:/KenshiTestRuns/lanes.held"
+ ]
+}

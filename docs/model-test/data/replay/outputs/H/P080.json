@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not run pkill -f 'event-wait.sh$' again; it would kill the live waker bp0tqjyzv.",
+   "why": "The failed task bve0k8qy8 (exit 15 = SIGTERM) was most likely killed by the coordinator's own pkill at the bp0tqjyzv re-arm step, not by a real waker fault, and bp0tqjyzv is the replacement waker."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background true; only if the check below shows no event-wait process)",
+   "why": "Keep exactly one waker armed while the in-flight work (imm26-u5-nc16, imm26-u6-fix08d, imm26-inv-11b, op12, the 4080-i4 and 5090-i5 lanes) is still running, and never start it with a bare &."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'pgrep -af event-wait.sh || echo none'",
+  "Read the tail of C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\bea16970-1102-47a3-b183-46101095930c\\tasks\\bp0tqjyzv.output to confirm the replacement waker is alive"
+ ]
+}

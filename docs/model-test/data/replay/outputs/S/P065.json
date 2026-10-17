@@ -1,0 +1,25 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; powershell -NoProfile -ExecutionPolicy Bypass -File tools\\automation\\agent-status.ps1 imm26-4080-op2jc STOPPED-CONTEXT \"4080-i3 operator (NC10 install then 19-a, other rows)\" \"tail TaskStop after ~25 min silent (status unchanged since 21:48, no row evidence since 22:04) at request of coordinator #11\" \"rows marked so far per C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.status and NPC_IMMERSION_26_TESTS.md (03-cx PASS marked); last row state = whatever the status file latest line says (not visible here)\" \"successor imm26-4080-op2jd via lane-brief.ps1 4080-i3 -Out C:/KenshiTestRuns/agents/imm26-4080-op2jd.brief.md -Name imm26-4080-op2jd -Predecessor imm26-4080-op2jc; 4080-i3 lane inflight marker and game still held\"",
+   "why": "TaskStop is already done and the notification confirms the kill; the status file must say STOPPED-CONTEXT so the Stop hook/ledger show a stopped agent whose successor the new coordinator is about to create."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to coordinator #11 (peer kenshimodding-41, uds pipe cc-msg-8fe47832583a3e943c9c0c1d8a8e8386): 'Tail 4cdf261b: imm26-4080-op2jc TaskStop done (task a9528fa658b941ea0 killed) and status marked STOPPED-CONTEXT with next-step text. 4080-i3 lane: game and inflight marker still held, so op2jd must start from the lane state (check hub/state first). Note the dying agent wrote its brief into a misnamed file in the repo root (KenshiTestRunsagentsimm26-4080-i4op14.brief.md is untracked in C:\\KenshiModding, backslashes mangled): read it plus the op2jb brief for the 4080-i3 context, regenerate op2jd brief with forward slashes for -Out, and delete the stray file yourself (rm is blocked for me). Respawn is yours; the tail spawns nothing. I have no other running agents.'",
+   "why": "The peer coordinator asked for a reply when done, owns the respawn, and needs the stray-brief and lane-held warnings."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Run tail-wait.ps1 -Session 4cdf261b-1f2e-44be-902c-5390ee91e111 in the background (no agents left), wait for the TAIL-RELAY of the op2jc stop to be delivered or acked by coordinator #11, then run the tail closing review (process-ideas review file review-<session>-tail.json) and tail-close.ps1.",
+   "why": "No tail agents remain; the tail may end only once the relay is delivered/acked and the closing PI review is written, and it must not spawn or decide anything else."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-4080-op2jc.status | Select-Object -First 12",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator | Sort-Object LastWriteTime | Select-Object -Last 5",
+  "git -C C:\\KenshiModding status --short | Select-String 'brief.md'"
+ ]
+}

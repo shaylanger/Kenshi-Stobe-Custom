@@ -1,0 +1,36 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md: Right now + TESTS table: 24-c = PARTIAL (recipe committed b38bd383, RESULT rows print SEEDED; stays PARTIAL until the native+server region_name fix pending-fixes/imm26-sfE2-region-name and Shay's current-town guard decision); 26-f = recipe READY (lane 4080-i3, needs NC20 on that lane and SCENE-OK). imm26-sfE3 DONE, report agents/out/imm26-sfE3/out-20261016-104754.md",
+   "why": "The TESTS table still says UNRUN for 24-c and 26-f, which was already a TODO, and the relay changes both rows' state."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "write C:/KenshiTestRuns/inbox/operators/4080-i3-ready-26f.txt with: 26-f RECIPE READY (imm26-sfE3 DONE, commit b38bd383). Sheet: C:/KenshiTestRuns/inbox/operators/sfE-26f.txt. At the next row boundary install NC20 (SHA 7A5AF9EA..., note C:/KenshiTestRuns/inbox/operators/sfH-nc20.txt) on 4080-i3, because the row needs NC17 or its superset on the lane. Do not run 26-f until the scene reports SCENE-OK (Cind sees at least 3 of the 4 bandits). Claim it first with mkdir C:/KenshiTestRuns/claims/26-f. Dry run first: bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfe.sh 26-f 4080-i3 --save <S> --dry, then the same command without --dry. 24-c stays PARTIAL: do not run it.",
+   "why": "The 4080-i3 operator holds the 26-f ticket lane and needs the recipe, the NC20 install and the scene gate that the relay describes."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "name: imm26-sfE4; description: [case:patch] imm26 sfE selftest CRLF fix; subagent: kenshi-generator; brief: Make testing/live-stobe-queue/imm26-assert/rowtools/reload-sfe-selftest.sh pass 46/46 under WSL (DwemerAI4Skyrim3) as well as Git Bash. The 6 WSL failures are CLI checks that read the CRLF working tree (see C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md). Fix how those checks read the files; do not change expected values or weaken any assertion. Do not edit reload-run-sfe.sh or reloaddefs_sfe.sh (operators run them). Verify both shells print SELFTEST SFE ALL PASS 46/46. Commit as shaylanger, push, then tools/automation/agent-status.ps1 imm26-sfE4 DONE with outputs. Read the sfE3 report first and use grep, not whole-file reads.",
+   "why": "The sfE3 report names the CRLF WSL failures as the next speed-up, and a WSL-clean selftest lets the check run in one shell instead of about 8 minutes detached in Git Bash."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "run in background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker wakes the coordinator on each event and must be restarted each time it wakes."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no message to Shay for this batch",
+   "why": "sfE3 raises no new decision: the region_name fix and the current-town guard are already open for Shay in HANDOFF."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding show --stat b38bd383 | head -20",
+  "grep -n RESULT C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md | head -20",
+  "ls C:/KenshiTestRuns/claims/26-f C:/KenshiTestRuns/claims/24-c",
+  "tail -5 C:/KenshiTestRuns/inbox/operators/sfE-26f.txt"
+ ]
+}

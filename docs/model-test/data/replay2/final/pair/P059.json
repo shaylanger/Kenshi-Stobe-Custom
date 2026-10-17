@@ -1,0 +1,19 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 \"LANE NO-OPERATOR 5090-i4\" \"Shay hold: no new 5090 testing until he says otherwise (memory no-new-5090-sessions); 5090-i4 stays stopped, no operator spawned\"",
+   "why": "The open lane alert must be closed with the hold reason so the Stop hook stops blocking; the alert id is not in this batch, so the subject is used."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not spawn or respawn any imm26-5090-i4 operator; lane 5090-i4 stays stopped and imm26-5090-i4-hard2b2.handoff.md stays unused until Shay lifts the hold",
+   "why": "Shay's standing order says no new 5090 testing sessions, and the handoff records the 5090 lanes as held, so the event's respawn instruction is overridden."
+  }
+ ],
+ "checks": [
+  "dir C:\\KenshiTestRuns\\alerts\\open",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker that delivered this batch has exited, and lanes plus the sfC, sfE2, sfF, hxA and hxB fix agents are still in flight, so a waker must run again."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-sfG, description '[case:investigate] 08-e bored-tick topic claim root cause', subagent_type kenshi-debugger. Brief: You are agent imm26-sfG, offline root-cause work only: no game launch, no lane use, never Shay's live install, server tree or DB. Goal: find why SETUP-FAIL row 08-e never gets its topic claimed. Evidence (event msg 20261016-102752-setupfail-08-e.msg): the topic stays open after the reload, no bored tick claims it in 8 advance chunks, although 1 tick had the NPC as speaker. Leads named there: the server-side claim gate (social attention / situated_remark cooldown); BORED_EVENT_CHANCE=100 is not the cause. Read the row script under testing/live-stobe-queue/imm26-assert/rowtools/ first. Use codemap.sh maps and grep -n for the claim and cooldown functions, then sed -n for only those ranges. Report the exact gate with file, function and line, and the smallest fix as an anchor-based patch script in pending-fixes/. Build and test it offline on a copy only (php -l, offline stobe-tests). Do not deploy to any lane tree or to the live tree, and do not message any lane operator. Write status with agent-status.ps1 imm26-sfG RUNNING/DONE and save the report with save-report.ps1 (agents/out/imm26-sfG).",
+   "why": "Shay's order is an agent on every SETUP-FAIL row, and the operator has already used its one attempt, so the root cause must be diagnosed before any fix is built."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Write inbox/operators/4080-i3-setupfail-08-e.txt: 08-e is SETUP-FAIL after one attempt (topic not claimed by any bored tick, server claim gate under investigation by imm26-sfG). Do not wait for the fix: take the next runnable row now. When a server fix is delivered, deploy it to your own lane root /tmp/stobe-standalone4080 at a row boundary (opcache about 1 min), record 'deployed <what>' in your status, then re-run 08-e once.",
+   "why": "The 4080-i3 operator must know 08-e is parked so the lane never sits idle, per the 'SETUP-FAIL after one attempt, take the next runnable row' order."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' and the imm26 program ledger under C:/KenshiTestRuns/programs/: record imm26-sfD2 DONE (10-b recipe 350fffc with unblockdefs_e.sh and unblockcheck_e.py, 30/30 offline; inDeal terminal-deal fix cde80bb, staged in compose only and deployed via inbox/operators/4080-deploys-before-rows.txt; 03-b d2 recipe d70c3f1, 24/24 offline; both recipes built and not run in-game); 08-e SETUP-FAIL -> imm26-sfG; waker restarted.",
+   "why": "The rules require the ledger and HANDOFF to be updated after every agent report, not only at the context limit."
+  }
+ ],
+ "checks": [
+  "find C:/KenshiTestRuns -name '20261016-102752-setupfail-08-e.msg'",
+  "tail -n 40 C:/KenshiTestRuns/agents/imm26-sfD2.status",
+  "grep -n '08-e' C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/*.sh"
+ ]
+}

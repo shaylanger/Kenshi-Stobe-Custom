@@ -1,0 +1,21 @@
+{
+ "id": "P042",
+ "session": "6cd72ef5",
+ "ts": "2026-10-16T01:39:19.485Z",
+ "class": "relay",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:patch] WP-C batch5 compose + deploy lanes\nprompt: You are agent imm26-wpC-b5. Status via tools/automation/agent-status.ps1 imm26-wpC-b5 RUNNING|DONE|FAILED|STOPPED-CONTEXT \"<task>\" \"<step>\" \"<outputs>\" \"<next>\" (standard block testing/AGENT_PROMPTS.md ~122). Budget <=100k tokens. Compose/patch/deploy phase ONLY, no live game rows. Repeat EXACTLY what agent imm26-wpC-trip did for trip-resume (read its report C:\\KenshiTestRuns\\agents\\out\\imm26-wpC-trip\\latest.md and its scripts under C:\\KenshiTestRuns\\imm26-install\\wpc for the recipe) but for the batch5 patch: pending-fixes/imm26-batch5/apply.py (anchored, idempotent; installs tests/imm26_batch5_regression.php; fixes 16-c dps_generate + anchor traits, 02-bx slavery regex, 17-bx imm26IsChallenge). STEPS: (1) apply it to /root/imm26/compose; (2) php -l changed files; (3) full stobe-tests, compare to the known pre-existing set (chat_json_endpoint, main_ingress_http, npc_player_view 68/2, social_property, social_fights: 5 FAIL, 7 known); anything new = stop and report; (4) regenerate compose.patch with pending-fixes/npc-immersion-26/compose/mkcompose_patch.sh, verify APPLY-IDENTICAL, commit compose.patch + test (git identity shaylanger repo-local; one commit; push); (5) deploy the changed files lane by lane to the five lane sites (5090 i3/i4/i5, 4080 i3/i4) with backups, verify sha/lint, never Shay's live server tree or DB; note lane backends were just restarted by imm26-laneenv with lane-neg-env.sh (do not undo it; if the deploy needs a php -S restart use `restart-web <lane>` from lane-backend.sh / stobe-lane-backend.sh); (6) write C:\\KenshiTestRuns\\agents\\out\\imm26-wpC-b5\\latest.md (<=12 lines) plus operator note C:\\KenshiTestRuns\\inbox\\operators\\batch5-deployed.txt saying rows 16-c, 02-bx, 17-bx (after fixture changes by imm26-rowfix) may be rerun with --allow-retry after opcache (~1 min). Handback <=6 lines.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 3328
+}

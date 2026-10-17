@@ -1,0 +1,32 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background; check first that no other event-wait.sh is running, and never start a second one)",
+   "why": "The waker task br6081oo8 completed on this wake, so nothing watches the lanes until it is restarted, and the handoff rule is one waker only."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "tail-ack.ps1 for relay 20261016-133455-tail-imm26-4080-i3op22.msg (use the script's usage line for arguments)",
+   "why": "The relay is a tail result addressed to this coordinator (routing_note 60ad9d7d), so it is acknowledged as a result, not as an order."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "move C:/KenshiTestRuns/inbox/coordinator/20261016-133455-tail-imm26-4080-i3op22.msg to C:/KenshiTestRuns/inbox/coordinator/delivered/ (file path inferred from the INBOX name in the event; confirm with the ls check)",
+   "why": "The handoff rule says handled relays move to inbox/coordinator/delivered/, so the waker stops re-announcing it."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:generate] 4080-i3 operator op23'; name imm26-4080-i3op23; brief: 'You are lane operator imm26-4080-i3op23 for the 4080-i3 lane (successor of imm26-4080-i3op22, DONE; its final report came back via TAIL-RELAY). First generate and read your brief with: powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-brief.ps1 4080-i3 -Name imm26-4080-i3op23 -Predecessor imm26-4080-i3op22 . Then read the predecessor report C:/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md and handoff C:/KenshiTestRuns/agents/imm26-4080-i3op22.handoff.md. Claim only rows the predecessor left open: 03-b (sfZ unblockrun_sfz.sh), 01-cx rerun, 01-bx and 10-b re-judge with the v2 checkers (sfY). Do NOT run 15-bx, 05-cx or 16-bx (recipe rows owned by imm26-inv15bx; 16-bx is model variance). Use the 4080 rig only (ssh 4080, C:/KAH/ctl.ps1, lock owner rig4080). One RESULT line per row. Update agent-status after each row. If no runnable row is left, park with a handoff and a next: line.'",
+   "why": "The 4080-i3 lane has no RUNNING operator (NO-OPERATOR alert), and the lane must not sit idle while open rows exist; a fresh successor is the standard respawn, and the predecessor is DONE, so no live tail's agent is respawned."
+  }
+ ],
+ "checks": [
+  "sed -n 1,40p C:/KenshiTestRuns/agents/out/imm26-4080-i3op22/latest.md | cut -c1-400",
+  "ls C:/KenshiTestRuns/inbox/coordinator C:/KenshiTestRuns/inbox/coordinator/delivered | tail -20",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief | grep -n -i '4080-i3'",
+  "pgrep -fc event-wait.sh (WSL) to confirm exactly one waker before the restart"
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP   (run as a BACKGROUND Bash job)",
+   "why": "The waker just exited after delivering this one event; work is in flight (5 operators, nc6, fix-batch3), so a new waker must run before the turn ends."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the TAIL-RELAY of imm26-5090-i3op3 (STOPPED-CONTEXT) from the tail session kenshimodding-48; do not spawn a successor yet.",
+   "why": "The handoff says imm26-5090-i3op3 is owned by the live tail, and the rules forbid the new coordinator from respawning an agent owned by a live tail; the tail relays the handback and I then ack with tail-ack.ps1 and respawn imm26-5090-i3op32 from agents\\imm26-5090-i3op3.handoff.md."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not run alert-ack or agent-abandon for imm26-5090-i3op3 and do not edit lane-owners.json for 5090-i3 yet.",
+   "why": "The stopped agent must keep its inflight/respawn marker until its successor exists, and the lane-owners mapping should change only when the successor is spawned (the successor's name is not yet known to be i3op32)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief   (look at TAIL / OWNED-BY-LIVE-TAIL lines and the imm26-5090-i3op3 ledger owner_session, confirm the tail is alive)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ls C:\\KenshiTestRuns\\inbox\\coordinator\\ | grep i3op3"
+ ]
+}

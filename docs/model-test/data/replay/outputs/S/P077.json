@@ -1,0 +1,31 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a7d4321aad521e476 (imm26-5090-i5-op9h): Coordinator: op9h, the lane watchdog shows 5090-i5 with no new activity for 6 min. The newest file is imm26-5090-i5\\towns200.txt, and your status has said 'started, NC15 install + 14-c' since 01:37. Update it now with agent-status.ps1 and reply with one line: the step you are on (NC15 install, relaunch, or 14-c live run), whether the game is up, and any blocker. Do not run git commit -am.",
+   "why": "A LANE IDLE alert says to ask the operator first; op9h is fresh and its newest evidence file suggests 14-c work is in progress, so it should be pinged and not respawned or TaskStopped yet."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i5 \"pinged op9h at ~01:50; newest evidence towns200.txt shows 14-c work in progress after NC15 install; will TaskStop and respawn if no reply within 10 min\"",
+   "why": "The ack only closes the alert for now and records the action taken; the alert re-opens after 30 min if the condition is still true. The subject '5090-i5' is used because the alert id is not in this file."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Re-arm the waker as a background task: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run_in_background, never a bare &). Wait for the op9h reply or status update.",
+   "why": "The task-notification for the earlier waker has completed, so the waker must be re-armed. Without a reply from op9h the lane stays open, so no other action yet."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "imm26-4080-i4op11 needs no action.",
+   "why": "Its status was refreshed at 01:49 after the ping (13-b attempt 4 running, tripdefs.sh fixed), so its stall is resolved."
+  }
+ ],
+ "checks": [
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-5090-i5-op9h.status | cut -c1-400",
+  "ls -la --time-style=full-iso /c/KenshiTestRuns/imm26-5090-i5/ | tail -8",
+  "tail -c 600 /c/KenshiTestRuns/imm26-5090-i5/towns200.txt",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

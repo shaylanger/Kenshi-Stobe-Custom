@@ -1,0 +1,13 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Yes, I meant grep.exe (Git for Windows). The stale one is PID 18532: grep -rn isPlayerCharacter --include=*.h / -l, a recursive whole-root search started 10:06 today, parent process gone, not used by any agent. The two greps started at 13:12 (SAY [Malz and FAIL|SELFTEST) are live agent log checks; leave them alone. My Stop-Process attempt was denied by the permission checker, so I have not retried it. To clear it, run in the prompt: ! powershell -NoProfile -Command \"Stop-Process -Id 18532 -Force\"  Or give me an explicit go-ahead and I will try once more.",
+   "why": "Shay clarified the process name, so the coordinator answers the open question with the exact PID and the one command he can run, without retrying the denied kill or working around the permission check."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Process -Id 18532 | Select-Object Id,StartTime\""
+ ]
+}

@@ -1,0 +1,37 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i3-hard2b: TAIL STALL CHECK from tail 6d1f3011 for coordinator #10. Your status file last reads RUNNING 2026-10-15 20:24 (next 10-a) and there has been no row output since 20:23. Update your status now with C:/KenshiModding/tools/automation/agent-status.ps1 imm26-5090-i3-hard2b RUNNING with the task, step, outputs and next. If you are blocked, name the blocker in that status and move on in this order: 19-ax, 02-cx, 05-cx, 01-bx, 01-cx, 11-b. Reply to the tail in one line. If you are still silent at 20:44 the tail stops you and tells the coordinator.",
+   "why": "The stall rule (silent about 10 min gets a message first) applies, and the coordinator asked for exactly this message."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-fix19 \"never started (no status file, no out dir); superseded by imm26-fix19b spawned by coordinator #10\" -- run only if the checks show no imm26-fix19 status file and no agents/out/imm26-fix19 directory",
+   "why": "The tail's Stop hook blocks on the unacknowledged fix19 entry, and coordinator #10 itself assumed fix19 never started and spawned fix19b, so dropping it on purpose with a reason is the closure, but only once the read-only checks confirm no work exists."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to kenshimodding-76 (coordinator #10): TAIL 6d1f3011: stall message sent to imm26-5090-i3-hard2b (last status 20:24 RUNNING, next 10-a, no row output since 20:23). If it is still silent at 20:44 the tail will TaskStop it and tell you; the tail will not respawn it. imm26-fix19: the tail checked its status file and out dir; if neither exists it was dropped with agent-abandon as never started, superseded by fix19b. If either shows live output, the tail reports exactly what the files show instead. The tail spawns nothing; fix19b is yours.",
+   "why": "The coordinator asked for the operator stall status and whether fix19 is really running, and the tail can only answer from its own files."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the tail waker (bash tools/automation/event-wait.sh in the background) armed; relay any new imm26-5090-i3-hard2b status or row output to the coordinator inbox with tail-relay.ps1 as it arrives.",
+   "why": "The operator's reply or continued silence decides the next step, and the tail spawns nothing."
+  },
+  {
+   "type": "stop-agent",
+   "exact_command_or_message": "At 20:44 Win clock, if imm26-5090-i3-hard2b still has no status or row output newer than 20:24: TaskStop imm26-5090-i3-hard2b, then SendMessage kenshimodding-76 that it was stopped. Otherwise do nothing.",
+   "why": "The tail's 20-minute stall rule sets this TaskStop time, and the tail does not stop the agent before then."
+  }
+ ],
+ "checks": [
+  "head -1 C:/KenshiTestRuns/agents/imm26-5090-i3-hard2b.status",
+  "ls C:/KenshiTestRuns/alerts/open/",
+  "head -1 C:/KenshiTestRuns/agents/imm26-fix19.status 2>&1",
+  "ls C:/KenshiTestRuns/agents/out/imm26-fix19 2>&1",
+  "ls C:/KenshiTestRuns/inbox/coordinator"
+ ]
+}

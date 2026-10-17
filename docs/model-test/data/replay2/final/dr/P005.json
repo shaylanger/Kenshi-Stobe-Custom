@@ -1,0 +1,30 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "FIX-server is done in both trees (live /var/www/html/StobeServer and merge /root/stobe-work/ss-merge). The live DB step (delete the bare 'Tengu' bio_unique and bio_unique_custom rows) was blocked and is NOT done. Dumps: C:\\KenshiTestRuns\\invest\\fixes\\backup\\FIX-server\\bio_unique_tengu_rows.csv. Ask Shay for the go-ahead to run that DB delete.",
+   "why": "The live DB write was blocked, and the live DB is Shay's, so the coordinator must not run it without his decision."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "php -l on lib/travel_companionship.php, lib/chat_helper_functions.php, lib/negotiation_phase1.php, debug/db_updates.php, tests/bio_unique_regression.php and tests/travel_order_refusal_regression.php in both /var/www/html/StobeServer and /root/stobe-work/ss-merge",
+   "why": "Server rule: php -l must pass on every changed PHP file in both trees before the offline tests."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "offline stobe-tests, including tests/bio_unique_regression.php and tests/travel_order_refusal_regression.php, run against the merge tree (the report notes one test that already failed before this change; compare against that baseline)",
+   "why": "The offline stobe-tests must pass before the next game batch; the two new or changed tests cover issues A and B."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the php -l and offline test results, then commit and push",
+   "why": "Commit to shaylanger/StobeServer (push origin HEAD:stobe) only after the checks pass, with the issue numbers A and B and the identity shaylanger <shaylanger2@gmail.com>; the DLL candidate and the voice change stay uninstalled until Shay reviews."
+  }
+ ],
+ "checks": [
+  "git -C /var/www/html/StobeServer status --short",
+  "git -C /var/www/html/StobeServer log --oneline -3",
+  "diff -q /var/www/html/StobeServer/lib/travel_companionship.php /root/stobe-work/ss-merge/lib/travel_companionship.php"
+ ]
+}

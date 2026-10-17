@@ -1,0 +1,35 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "grep -n -E 'PI-(2[6-9]|3[0-2])' C:/KenshiModding/docs/PROCESS_IDEAS.md",
+   "why": "Read the current status of PI-26 to PI-32 first; the replay file does not say which entries Shay meant by confirmed."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/AGENT_PROMPTS.md: in the standard block add the rule that row-tool operator agents take at most 4 rows each and lane briefs are sized to that; then in C:/KenshiModding/docs/PROCESS_IDEAS.md mark PI-30 applied with the date.",
+   "why": "PI-30 is a process rule that weakens no timeout, stall, idle or dead-agent catch, so Shay's go-ahead covers it."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "cd /c/KenshiModding && git config user.email && git add testing/AGENT_PROMPTS.md docs/PROCESS_IDEAS.md && git commit -m 'process ideas: PI-30 row-tool operators take at most 4 rows (Shay confirmed)' -m 'Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>' && git push origin HEAD",
+   "why": "One process change per commit, pushed right after; only the two named doc files are staged, so the unrelated modified files stay out."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Done: PI-30 applied and pushed. Asked together, once, for your call: (a) PI-29 (meter should call tail-close.ps1 at the tail limit) lives in your global ~/.claude/hooks/context-meter.ps1, outside the Kenshi tree, so I have not touched it; make it yourself or say go. (b) PI-31 (no AGENT ORPHANED for in-session agents) and PI-32 (auto idle reason when spawning an operator) would each weaken a dead-agent or idle catch, so they are not applied until you say yes in writing. (c) PI-26 stays declined. If you meant other entries by confirmed, give me the numbers.",
+   "why": "Shay asked for the confirmed PI items but the handoff does not list which are confirmed; the ones that touch catches or global config need his explicit answer."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "PI-26 hook version",
+   "why": "Shay declined it earlier, so nothing is applied."
+  }
+ ],
+ "checks": [
+  "grep -n -E 'PI-(2[6-9]|3[0-2])' C:/KenshiModding/docs/PROCESS_IDEAS.md",
+  "git -C /c/KenshiModding status --short testing/AGENT_PROMPTS.md docs/PROCESS_IDEAS.md",
+  "git -C /c/KenshiModding config user.email"
+ ]
+}

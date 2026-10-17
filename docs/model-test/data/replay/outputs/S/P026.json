@@ -1,0 +1,30 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 (per-lane idle/no-operator check) and agent-rollcall.ps1; read the newest status lines of imm26-5090-i3op3, imm26-5090-i4op3, imm26-5090-ctxop322, imm26-4080-op2g, imm26-4080-i4op5 to see which lanes are mid-row and which are idle",
+   "why": "Shay asked a status question, so the answer must come from live lane evidence, not from the 17:47 snapshot in context."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To each lane operator whose lane the check shows idle or between rows (imm26-5090-i3op3, imm26-5090-i4op3, imm26-5090-ctxop322, imm26-4080-op2g, imm26-4080-i4op5; only the idle ones): Coordinator: Shay asked for every lane to be running tests now. Reply in 2 lines with why your lane is not running a row (relaunch, NC5 install, rowcheck fix, waiting on a fix), then start the next queued row from the reruns list (agents\\out\\imm26-compose-fix-batch2d\\ rerun list, 23-b recipe in agents\\out\\imm26-inv-23b\\latest.md) on the installed build. Do not wait for NC5; swap it in at your next relaunch.",
+   "why": "Idle lanes must be put back on rows immediately and the cause recorded, per the no-idle-rig rule and Shay's order."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Per-lane status (from live check): 5090 i3 imm26-5090-i3op3 = <running/idle + reason>; 5090 i4 imm26-5090-i4op3 = <...>; 5090 i5 imm26-5090-ctxop322 = <...>; 4080 i3 imm26-4080-op2g = <...>; 4080 i4 imm26-4080-i4op5 = <...>. Any lane not running a row is the reason shown, and I have told its operator to start the next queued row now. Known earlier causes: 4080 i3 relaunching onto NC5 with the fixed ini, 5090 i5 operator was just respawned, 23-b blocked on a row-check fix (the 23-b diagnosis found no gate bug).",
+   "why": "Shay asked why lanes are not testing, so he gets a direct answer through his relay session once the checks fill in the per-lane facts; the lane states are unknown until the checks run."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Confirm the event-wait.sh waker is running in the background; if it is not, restart it: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP",
+   "why": "Work is in flight, so a waker must always be running and the last one just exited."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1"
+ ]
+}

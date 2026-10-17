@@ -1,0 +1,20 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Starting the startup-context cut now. batch-health.sh is back at HEAD (3912495) with no --until-event references, so the coordinator 2-minute wait stays as it is. I will report the startup context size before and after the cut.",
+   "why": "Shay asked for the cut, and the relay session should hear that it has started and that the reverted file is clean."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:patch] startup-context cut\", subagent_type kenshi-generator, name startup-context-cut. Brief: Reduce the coordinator startup context in C:\\KenshiModding without losing any rule. Step 1: measure the current size of CLAUDE.md and of the output of session-start.ps1 -Brief and write the numbers into the report. Step 2: move the long sections of CLAUDE.md that are only needed for a specific task into docs/claude-md-archive/ pages, verbatim, and leave a one-line pointer in CLAUDE.md for each. Update docs/claude-md-archive/RULE_CHECKLIST.md with the new locations. Step 3: keep these lines in CLAUDE.md unchanged: the 2-minute waker rule, the waker guard, the Stop/PreToolUse hook rules, the overlap handoff and tail rules, the never-block-on-questions rule, the commit identity rule and the peer-message rule. Do not edit tools/automation/batch-health.sh, rig-health.sh, .claude/settings.json or any script a queued or running list uses. Do not commit. Leave the diff in the working tree and list every file you touched with its before and after size. Report with save-report.ps1 under agents/out/startup-context-cut.",
+   "why": "The cut is a text move in CLAUDE.md and the archive, which one generator agent can do in one pass, and the coordinator then reviews the diff."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding status --short -- tools/automation/batch-health.sh",
+  "git -C C:/KenshiModding log -1 --format=%h -- tools/automation/batch-health.sh",
+  "wc -c C:/KenshiModding/CLAUDE.md C:/KenshiModding/docs/claude-md-archive/RULE_CHECKLIST.md"
+ ]
+}

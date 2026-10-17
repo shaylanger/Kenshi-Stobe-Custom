@@ -1,0 +1,13 @@
+{
+  "name": "example suite",
+  "models": ["sonnet", "opus"],
+  "efforts": ["high", "xhigh"],
+  "prompts": ["prompt1.txt"],
+  "rubric": "rubric.md",
+  "template": "task.tmpl",
+  "judges": [
+    { "model": "sonnet", "effort": "high" },
+    { "model": "opus", "effort": "high" }
+  ],
+  "extra_reports": {}
+}

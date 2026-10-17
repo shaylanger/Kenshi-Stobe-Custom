@@ -1,0 +1,35 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "dry run then detached run-batch.sh for rows 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a 24-b plus travel rows over 80u, as two parallel jobs (5090 lanes i3/i4/i5 and 4080 lanes i3/i4)",
+   "why": "imm26-compose-fix-batch2d reported batch2 fixes (20-a,15-a,far-NPC,14-a,19-a,24-a,24-b) deployed to all 5 lane sites and asked for exactly these reruns; 4080 and 5090 run in parallel per the parallel-rigs rule."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "touch C:/KenshiTestRuns/inflight/<rerun-batch-name> (name not in this file)",
+   "why": "A batch is in flight, so the inflight marker must exist for the waker and Stop guard."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP (background Bash task)",
+   "why": "The event-wait task that just delivered the batch2d DONE event has exited, and the rerun batch and the remaining agents need a live waker."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md: add a #7 line under Right now: batch2d DONE, batch2 fixes deployed to 5 lane sites, reruns queued (rows listed above), 13-d RETURN_ITEM still open",
+   "why": "The coordinator updates Right now after every agent report, and this one changes the state."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-compose-fix-batch2e, tag [case:patch]: 13-d RETURN_ITEM fix in negotiation_engine.php around line 1005 (baseline item not in batch2d); brief from C:/KenshiTestRuns/agents/briefs/ plus COMMON.md, write its own status file",
+   "why": "batch2d finished without the 13-d item, and the earlier note said it needs batch2d or a batch2e, so a fresh batch2e agent takes it."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "type C:\\KenshiTestRuns\\agents\\imm26-compose-fix-batch2d.status",
+  "ls C:/KenshiTestRuns/inbox/coordinator"
+ ]
+}

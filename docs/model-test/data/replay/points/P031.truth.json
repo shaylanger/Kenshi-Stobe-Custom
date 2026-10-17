@@ -1,0 +1,23 @@
+{
+ "id": "P031",
+ "session": "2b1a8eca",
+ "ts": "2026-10-16T00:04:34.469Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: can you also remveo all the PI items as you do them so we dont have stale items in the list"
+ },
+ "actions": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i3op4.status -TotalCount 3; powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i3op3 \"superseded by running successor imm26-5090-i3op4 (non-suffix name; PI-11)\"",
+   "why": "The hook is blocking on a successor it doesn't recognise, because I named it `i3op4` instead of `i3op3b`. This is the PI-11 case. The successor exists, so I'll check that its status file is live and then abandon the old marker."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "The hook is blocking on a successor it doesn't recognise, because I named it `i3op4` instead of `i3op3b`. This is the PI-11 case. The successor exists, so I'll check that its status file is live and then abandon the old marker."
+ ],
+ "event_text_chars": 1075
+}

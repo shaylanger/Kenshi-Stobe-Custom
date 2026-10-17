@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (run in background; the event lines are in C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/277ebe12-067a-4b4a-b63d-8c4b6c5f3aa2/tasks/bzbwr5kui.output)",
+   "why": "The event-wait waker exited (exit 0), so nothing watches the in-flight work (claude-md-trim and related agents) until it is restarted; the batch carries no event text, so the lines are read first from its output file and acted on if they name an agent or alert."
+  }
+ ],
+ "checks": [
+  "tail -5 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/277ebe12-067a-4b4a-b63d-8c4b6c5f3aa2/tasks/bzbwr5kui.output\" | cut -c1-500"
+ ]
+}

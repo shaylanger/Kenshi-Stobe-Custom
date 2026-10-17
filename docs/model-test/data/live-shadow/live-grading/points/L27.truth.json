@@ -1,0 +1,22 @@
+{
+ "id": "L27",
+ "batch_id": 27,
+ "class": "stop-hook feedback",
+ "window": [
+  "2026-10-16T22:31:08.367Z",
+  "2026-10-16T22:32:02.141Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 8,
+ "action_types": [
+  "read",
+  "message-agent",
+  "restart-waker",
+  "read",
+  "run"
+ ]
+}

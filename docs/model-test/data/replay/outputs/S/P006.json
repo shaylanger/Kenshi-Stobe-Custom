@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "RIG IDLE kenshi=no lock=free idle_reason=none 4080=BUSY_marker=4080-imm26: no action on the 5090 and no idle reason recorded.",
+   "why": "The 5090 is deliberately empty because the imm26 order at this time is 4080 only, with no new 5090 sessions. The six agents are still generating patches, so no test batch is ready."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (run in background)",
+   "why": "The waker has just exited. Six agents (imm26-wpA3, wpB3, wpC1c, wpC2c, wpD3, N2c) are still in flight, so a waker must keep running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the status files and reports of imm26-wpA3, wpB3, wpC1c, wpC2c, wpD3 and N2c. Then run the server-patch composer in /root/imm26/compose and the native N1+N2 composer.",
+   "why": "The 4080 rows need those patches built, composed and installed first, and none of them has reported yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ssh 4080 powershell -NoProfile -Command \"Get-Process kenshi_x64 | Select-Object Id,StartTime\"",
+  "ls C:/KenshiTestRuns/inflight"
+ ]
+}

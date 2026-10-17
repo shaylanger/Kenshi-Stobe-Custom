@@ -1,0 +1,14 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no command; imm26-sfU2 report (commits 8c2c7911, f00884bc) was already delivered as a message from aac49e2e4018cf088 and acted on: setupfail state 15-bx ready and the coordinator16-server-fixes.txt operator note were written",
+   "why": "This task-notification is interim: the agent is only waiting on its own background work, its result was already received, and no lane or rig action follows from it."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-sfU2.status",
+  "ls C:/KenshiTestRuns/agents/out/imm26-sfU2"
+ ]
+}

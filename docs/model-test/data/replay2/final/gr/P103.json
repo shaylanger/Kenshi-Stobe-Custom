@@ -1,0 +1,15 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash tool with run_in_background=true: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The single waker just restarted (task bvpgoc6vb) has exited with code 0, while imm26-pilotA, imm26-pilotC, imm26-4080-i4op14, imm26-sfR2 and the lane operators are still in flight, so one detached waker must be armed again; the notification itself carries no wake reason, so the wake reason is checked first."
+  }
+ ],
+ "checks": [
+  "tail -30 \"C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\245d8ad7-6bab-4115-8188-ea4724f6a5b6\\tasks\\bvpgoc6vb.output\" | cut -c1-300",
+  "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/agent-ids.ps1 list -Live",
+  "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/rearm-waker.ps1 -KillOnly 2>&1 | tail -1"
+ ]
+}

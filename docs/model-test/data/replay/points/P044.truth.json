@@ -1,0 +1,23 @@
+{
+ "id": "P044",
+ "session": "6cd72ef5",
+ "ts": "2026-10-16T01:45:46.140Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $i=Get-Item \"C:\\KenshiTestRuns\\agents\\$n.status\"; $i.LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $i.FullName -TotalCount 1); Get-Content $i.FullName -TotalCount 3 | Select -Skip 2 | % {$_.Substring(0,[Math]::Min(220,$_.Length))} }",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "Both agents are still running, and nothing has changed since the last check. I'm still the tail and still waiting."
+ ],
+ "event_text_chars": 1369
+}

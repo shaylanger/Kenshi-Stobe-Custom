@@ -1,0 +1,230 @@
+{
+ "L01": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-01",
+  "batch_id": 1
+ },
+ "L02": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-01",
+  "batch_id": 2
+ },
+ "L03": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-01",
+  "batch_id": 3
+ },
+ "L04": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-01",
+  "batch_id": 4
+ },
+ "L05": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-01",
+  "batch_id": 5
+ },
+ "L06": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-01",
+  "batch_id": 6
+ },
+ "L07": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-01",
+  "batch_id": 7
+ },
+ "L08": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-01",
+  "batch_id": 8
+ },
+ "L09": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-02",
+  "batch_id": 9
+ },
+ "L10": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-02",
+  "batch_id": 10
+ },
+ "L11": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-02",
+  "batch_id": 11
+ },
+ "L12": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-02",
+  "batch_id": 12
+ },
+ "L13": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-02",
+  "batch_id": 13
+ },
+ "L14": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-02",
+  "batch_id": 14
+ },
+ "L15": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-02",
+  "batch_id": 15
+ },
+ "L16": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-02",
+  "batch_id": 16
+ },
+ "L17": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-03",
+  "batch_id": 17
+ },
+ "L18": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-03",
+  "batch_id": 18
+ },
+ "L19": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-03",
+  "batch_id": 19
+ },
+ "L20": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-03",
+  "batch_id": 20
+ },
+ "L21": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-03",
+  "batch_id": 21
+ },
+ "L22": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-03",
+  "batch_id": 22
+ },
+ "L23": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-03",
+  "batch_id": 23
+ },
+ "L24": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-03",
+  "batch_id": 24
+ },
+ "L25": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-04",
+  "batch_id": 25
+ },
+ "L26": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-04",
+  "batch_id": 26
+ },
+ "L27": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-04",
+  "batch_id": 27
+ },
+ "L28": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-04",
+  "batch_id": 28
+ },
+ "L29": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-04",
+  "batch_id": 29
+ },
+ "L30": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-04",
+  "batch_id": 30
+ },
+ "L31": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-04",
+  "batch_id": 31
+ },
+ "L32": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-04",
+  "batch_id": 32
+ },
+ "L33": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-05",
+  "batch_id": 33
+ },
+ "L34": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-05",
+  "batch_id": 34
+ },
+ "L35": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-05",
+  "batch_id": 35
+ },
+ "L36": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-05",
+  "batch_id": 36
+ },
+ "L37": {
+  "A": "H",
+  "B": "S",
+  "chunk": "chunk-05",
+  "batch_id": 37
+ },
+ "L38": {
+  "A": "S",
+  "B": "H",
+  "chunk": "chunk-05",
+  "batch_id": 38
+ }
+}

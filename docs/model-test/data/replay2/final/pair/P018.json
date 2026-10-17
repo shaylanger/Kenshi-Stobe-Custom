@@ -1,0 +1,45 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "tools/automation/program-ledger.ps1 (subcommand as documented in testing/AGENT_PROMPTS.md) for program imm26: add WP imm26-15a-debug (investigate, owner imm26-15a-debug) and WP imm26-20a-gen (code, owner imm26-20a-gen); then update HANDOFF Right now with Shay's four points",
+   "why": "State lives in files, so each agent's start is in the ledger before it runs; the lower-resolution question is not a work package yet, so it is not added."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-15a-debug, subagent_type kenshi-debugger, description '[case:investigate] imm26 row 15-a trade-line leak (personal, imperfect knowledge)'. Brief: 'Shay reports the trade-line leak for row 15-a (Personal, imperfect knowledge): NPCs who were not part of or present at a trade react to it or repeat it. Find the emitter and the consumer of the trade event (grep the trade-line code, then codemap sed ranges; never read a file over 60 KB whole). Report the root cause with file and line, the smallest fix (awareness filter: only NPCs who witnessed the trade or were told), and the exact repro steps a test must replay. Do not edit code. Report with save-report.ps1 (agents/out/imm26-15a-debug), then agent-status.ps1 DONE.'",
+   "why": "A bug or odd behaviour goes to investigate first; the awareness filter is built after the root cause is known, and the fix counts only when a test replays Shay's exact steps."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-20a-gen, subagent_type kenshi-generator, description '[case:generate] imm26 row 20-a deferred destination confirm (code only)'. Brief: 'Build the deferred destination confirm for row 20-a (Natural plan changes). A destination the player suggests becomes a pending proposal; the NPC weighs it against his own preferences and can refuse in character (cannibal-camp example: No, current destination kept); if accepted the new plan starts. The pending proposal must survive save/load. Read FIRST: agents/out/imm26-travel-blocker, testing/NPC_IMMERSION_26_TESTS.md row 20-a, the top section of testing/NPC_IMMERSION_26_HANDOFF.md. The travel accept fix belongs to imm26-travel-investigate: do not edit that path; if it is not in the patch yet, code the proposal layer only and report the seam. Use the codemap (grep -n, then sed -n ranges). Code only: compile-check, no install, no live game run, no test rows. Checkpoint per the standard block in testing/AGENT_PROMPTS.md, save patch and NOTES in the work dir, save-report.ps1 (agents/out/imm26-20a-gen), then agent-status.ps1 DONE.'",
+   "why": "Shay ordered the build now and his note confirms the NPC keeps the veto; it is one code package, the row test goes to a lane operator later, and it stays off the travel accept path that imm26-travel-investigate owns."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: add two open entries. (a) Row 24-a: after reading its row text, the question restated in plain words, its answer options and my recommendation; nothing starts on it. (b) Lower windowed resolution for lanes: options keep 1600x900 / lower on one 4080 lane first / lower on all lanes; in-game effect: screenshot and UI coordinates of rows that assume 1600x900; code consequence: kenshi-ctl launch size and lane kenshi.cfg; default: no change until Shay answers (proposed: 4080 single-lane measurement only, no 5090 change).",
+   "why": "Shay's open questions must live in the repo before any handoff, and neither question is answered yet."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Shay: (1) Row 20-a: yes, the NPC still decides. A place he dislikes (your cannibal-camp example) gets a No in character and the current destination stays. Building the deferred confirm now as code; the row test follows once the code lands. (2) Row 24-a: I am reading the row text now and will send you the question in plain words with its answer options and my recommendation as a follow-up; nothing starts on it until you answer. (3) Row 15-a: a bug goes to investigation first, so a debugger agent is tracing the trade-line emitter and consumer. I need your exact repro: which trade, who was present, what you saw, who spoke, and the order of your steps; a fix counts only when a test replays them. (4) DISPLAY1 is not the Samsung display, noted; I am confirming the monitor map read-only and nothing launches until that check is done. Lower resolution: a smaller window fits more lanes per screen, but rows and screenshots assume 1600x900, so coordinates can move. Proposal: one 4080 lane at a lower size, measuring CPU/GPU use and lanes per screen, nothing else changed. No new 5090 session starts. Do you want that measurement? I will not run it until you say yes.",
+   "why": "Shay needs one short answer to each of his four points; the lower-resolution change is a question, so it waits for his yes, and the row 15-a fix needs his exact steps."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-15a-debug and imm26-20a-gen save-report files and DONE/FAILED status, and for Shay's answers on 24-a and the lower-res measurement; keep the event waker running. Send the row 24-a plain-words question as a follow-up message after the row read check.",
+   "why": "Nothing else can move until the agents report and Shay answers; the 24-a question must come from the row text, not from memory."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorID (decode ManufacturerName; SAM = Samsung; map to the DISPLAY index used by kenshi-ctl)",
+  "grep -n -i -E \"DISPLAY1|DISPLAY2|samsung\" C:/KenshiModding/tools/automation/kenshi-ctl.ps1",
+  "grep -n -A8 \"20-a\" C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md",
+  "grep -n -A8 \"15-a\" C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md",
+  "grep -n -A8 \"24-a\" C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md",
+  "read C:/KenshiTestRuns/agents/out/imm26-travel-blocker (if present) before the row 20-a code touches the travel path",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "ssh 4080 read-only grep of kenshi.cfg in C:/KenshiInst for Screen Width, Screen Height, Full Screen (current lane size)"
+ ]
+}

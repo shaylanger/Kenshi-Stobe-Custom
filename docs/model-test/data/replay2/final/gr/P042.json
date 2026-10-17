@@ -1,0 +1,37 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add 'imm26-batch5 DONE f62a91b: pending-fixes/imm26-batch5/apply.py <tree-root> = FIX1 16-c (dps counts enabled fields only, anchor v=2), FIX2 02-bx (slavery request regex), FIX3 17-bx (challenge match); tests/imm26_batch5_regression.php 29/29; stobe-tests 107 pass, 5 pre-existing fails only. NOT composed, deployed or in-game. 17-bx fixture part (triageB item 3) still open. 02-bx and 17-bx need DeepInfra balance (402).'",
+   "why": "The handoff must reflect the batch5 report at once, since the next coordinator reads only Right now."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "update the imm26 program ledger entry for imm26-batch5 to DONE (use tools/automation/program-ledger.ps1; check its usage first, do not guess arguments)",
+   "why": "The ledger is updated after every agent report, not only at handoff."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-17bx-fixture, description starting '[case:patch]'. Brief: apply the 17-bx fixture changes (triageB item 3, as cited in the batch5 report; locate the triageB file by grep under C:/KenshiModding/testing) to the test-row files only. Offline only: no game launch, no LLM call, no deploy, no live-tree edit, no commit. Syntax-check any PHP touched. Keep C:/KenshiTestRuns/agents/imm26-17bx-fixture.status current via agent-status.ps1 and deliver the report via save-report.ps1.",
+   "why": "batch5 left the 17-bx fixture work open and it can be done offline now, before the 402 clears."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-tripresume-a and imm26-tripresume-b to report DONE, then run WP-C once: php -l, full stobe-tests, mkcompose_patch.sh APPLY-IDENTICAL with pending-fixes/imm26-batch5/apply.py and pending-fixes/imm26-fix-pq/apply.py applied to the compose, commit compose.patch, imm26-install b4 mk.sh before deploy.sh to 5090 i3/i4/i5 and 4080 i3/i4. After deploy, rerun 16-c on a lane (no LLM needed); rerun 02-bx and 17-bx only after the 402 clears, with --allow-retry.",
+   "why": "batch5 and fix-pq belong in the same compose as trip resume, so only one install cycle is spent."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "keep pending-fixes/imm26-batch5 in place until the WP-C commit lands, then delete the folder",
+   "why": "apply.py is still needed for the compose; the delete rule applies once the fix is committed in its repo."
+  }
+ ],
+ "checks": [
+  "type C:/KenshiTestRuns/agents/imm26-batch5.status",
+  "git -C C:/KenshiModding show --stat f62a91b",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "type C:/KenshiTestRuns/agents/imm26-tripresume-a.status",
+  "type C:/KenshiTestRuns/agents/imm26-tripresume-b.status"
+ ]
+}

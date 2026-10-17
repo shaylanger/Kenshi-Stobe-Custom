@@ -1,0 +1,32 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md, section Right now: add a line 'SHAY SPEED/TOKEN ORDER (event 2026-10-15 21:16 UTC): (4)+(5) -> imm26-tokens-waker; (3) -> imm26-lane-setup; (1) row operators on new lanes after lane-isolation-check PASS; (2) travel accept fix after C:\\KenshiTestRuns\\agents\\out\\imm26-travel-blocker exists.'",
+   "why": "The handoff file is the resumable checkpoint and must record the order and its wait conditions before the agents start."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "name imm26-tokens-waker; description '[case:generate] imm26 speed/token items 4+5'; brief: 'Your name is imm26-tokens-waker. Shay's order (from the handoff suggestions, 2026-10-15): (4) C:\\KenshiModding\\tools\\automation\\event-wait.sh must not return on every STATUS/HEALTH-OK event, only on action events (batch done, alert, lane idle or stuck, agent stopped or done, Kenshi exit); keep the HEALTH STALL and LANE STUCK wakeups. (5) session-start.ps1 -Brief must be about 10x smaller than the full form (one line per running agent, no status-file dumps). Steps: (a) run git -C C:\\KenshiModding diff -- tools/automation/event-wait.sh first and keep any uncommitted edit already there; (b) grep the param block of session-start.ps1 to see whether -Brief exists and what it prints; (c) write both changes; (d) selftest both and show a before/after size for -Brief; (e) one commit per item with the item number, then push; (f) agent-status.ps1 imm26-tokens-waker RUNNING/DONE at each step. Do not restart the waker (the coordinator does that), do not touch a running batch or list script, and do not touch the work of imm26-indep-spawn or imm26-indep-hooks. Report: files changed, commit ids, the two size numbers, and one selftest line each.'",
+   "why": "Items 4 and 5 are tooling edits that need no rig time, so one agent can build them while the rigs keep running."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for lane-isolation-check PASS on 5090 i4/i5 and 4080 i4 (read the last lines of C:\\KenshiTestRuns\\agents\\imm26-lanes-5090.status and C:\\KenshiTestRuns\\agents\\imm26-lanes-4080.status); then spawn row operators '[case:generate] imm26 row operator on lane <lane>' for those lanes, one agent per lane",
+   "why": "Item 1 says start the operators as soon as isolation passes, and the handoff says the isolation checks are still pending."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for C:\\KenshiTestRuns\\agents\\out\\imm26-travel-blocker (report of imm26-travel-investigate); then spawn fixer '[case:patch] imm26 travel accept fix' with that report as its input, for gates 19-c, 20, 21, 23-a, 23-c and 23-d",
+   "why": "Item 2 needs the investigate report's root cause before a fix is written, and that report is not in this file."
+  }
+ ],
+ "checks": [
+  "git -C C:\\KenshiModding diff -- tools/automation/event-wait.sh",
+  "grep -n -i brief C:\\KenshiModding\\tools\\automation\\session-start.ps1",
+  "tail -n 5 C:\\KenshiTestRuns\\agents\\imm26-lanes-5090.status",
+  "tail -n 5 C:\\KenshiTestRuns\\agents\\imm26-lanes-4080.status",
+  "ls C:\\KenshiTestRuns\\agents\\out\\imm26-travel-blocker*"
+ ]
+}

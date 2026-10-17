@@ -1,0 +1,14 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP",
+   "why": "The Stop hook says work is genuinely in flight (Kenshi running, many live inflight markers, fresh RUNNING agents) and no waker is running, so the standing fix is to restart the event waker as a background job so peer messages, stalls and agent results wake this session."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (read the WAKER STATUS line first to confirm no waker is alive before starting a second one)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1 (one line per running agent; confirms the inflight markers are live work and not stale ones to clear)"
+ ]
+}

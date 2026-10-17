@@ -1,0 +1,35 @@
+{
+ "id": "P099",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:14:34.705Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/setupfail.ps1 assign 15-bx imm26-sfU2 2>&1 | tail -1; powershell -NoProfile -File tools/automation/setupfail.ps1 state 15-bx building \"sfU2 v2 scene (unblockdefs_c_v2.sh); new 5090-i3 hx attempt had no Cind reply in P1 within 150s (reply.txt shows only Shay say); check lane backend/LLM\" 2>&1 | tail -1",
+   "why": ""
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=aac49e2e4018cf088: FYI sfU2: 15-bx just SETUP-FAILed on 5090-i3 (old hx path): \"no reply of Cind within 150s in P1\", evidence C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt (only the Shay say line \"Who started the fight? (PC)\" logged). Same pattern as sfP's finding that rl_say waits for \"(NPC)\" while Nameless Cind logs \"(PC)\"? Check if that is the cause for your v2 15-bx wait line; if so use the reloaddefs_sfp.sh rl_say wait (accepts non-Shay (NPC)|(PC)). Ticket 15-bx assigned to you.",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "mv /c/KenshiTestRuns/inbox/coordinator/*.msg /c/KenshiTestRuns/inbox/coordinator/done/ 2>/dev/null; cd /c/KenshiModding; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -10 | cut -c1-500",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiTestRuns/imm26-5090-hx/15-bx/P1; ls | head; tail -c 600 reply.txt"
+ ],
+ "narration": [
+  "Row 15-bx just hit a setup-fail on 5090-i3: Cind gave no reply within 150 seconds. I assigned the ticket to `sfU2`, which is already building the 15-bx v2 scene. I sent it the evidence and a lead. `sfP` found that the harness waits for an \"(NPC)\" line while the Nameless Cind logs \"(PC)\". That may be the cause here too, but I haven't confirmed it. The waker is running."
+ ],
+ "event_text_chars": 736
+}

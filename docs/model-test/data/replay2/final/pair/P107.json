@@ -1,0 +1,31 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "write process-ideas/review-48b778a7-13d7-4f96-bc6b-30dba5670ae0-tail.json (tail closing review of this tail's conversation since the 16 Oct handoff: PI list updated, <= 3 new entries, each concrete; folder and form as in testing/AGENT_PROMPTS.md), then run: powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\process-ideas.ps1 review process-ideas/review-48b778a7-13d7-4f96-bc6b-30dba5670ae0-tail.json",
+   "why": "tail-close.ps1 refuses to close a tail session without this closing review file (Shay 2026-10-16)."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to \"16 coordinator\": Tail 48b778a7 has delivered every relay (last: imm26-5090-i3op21 STOPPED-CONTEXT, relay delivered; op21 reports no scripted row left). This tail owns no live agent and spawns nothing. The 5090-i3 lane is idle with no successor; any successor (imm26-5090-i3op22 via lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21) is your decision once new row scripts exist.",
+   "why": "The handoff left 5090-i3 ownership with this tail and the relay carried only op21's result, so the new coordinator must be told the idle lane is now theirs before the tail closes."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-close.ps1 -Session 48b778a7-13d7-4f96-bc6b-30dba5670ae0",
+   "why": "Every tail agent is DONE or STOPPED-CONTEXT with its relay delivered and the review file exists, so the tail may end."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none: no spawn, no respawn of imm26-5090-i3op21 from the tail, no extra relay of op21's result",
+   "why": "The tail spawns nothing, the op21 relay already reached the coordinator, and any successor is coordinator #16's decision."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-close.ps1 (no arguments) to confirm the -Session form if it is refused",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (TAIL and NO SUCCESSOR lines for 48b778a7 agents; if tail-close refuses on imm26-5090-i3op21 for having no successor, report it to the coordinator rather than respawning or abandoning it)",
+  "tail -c 600 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/48b778a7-13d7-4f96-bc6b-30dba5670ae0/tasks/bvvvs3lly.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live"
+ ]
+}

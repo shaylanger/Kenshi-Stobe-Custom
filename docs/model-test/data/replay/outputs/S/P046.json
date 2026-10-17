@@ -1,0 +1,25 @@
+{
+ "event_class": "other",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i5-op7, description '[case:generate] imm26-5090-i5-op7 lane operator', prompt: 'You are imm26-5090-i5-op7, the operator of lane 5090-i5 (predecessor imm26-5090-i5-op6). Read your full lane brief C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op7.brief.md first and follow it exactly. Task: (1) keep C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op7.status current via tools/automation/agent-status.ps1; (2) install the NC10 Stobe.dll (C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC10\\Stobe.dll, SHA256 E1302B7777BB0DC524351B8466550758B4B29716C8CD858CA56EE08D17180651, commit e3ab90a) on lane i5 only, with the lane Kenshi closed, checking the SHA256, never Shay live install, server tree or DB; (3) then run on i5 via go-row.sh the rows 25-b 25-a 22-a 26-abc (hunt wild-animal pass and No Faction mine permit) and report one RESULT line per row; one checkpoint per ~40k tokens.'",
+   "why": "NC10 native build is done and committed (e3ab90a) but not installed anywhere; i5 has no operator and the brief for op7 was just generated and registered, so the next step is to spawn it to install and run the NC10 rows."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add line '#9 NC10 DONE (aa97328751e9d9fee, e3ab90a, DLL pending-fixes/npc-immersion-26/NC10/Stobe.dll SHA E1302B77...0651, not installed); imm26-5090-i5-op7 spawned to install on i5 and rerun 25-b 25-a 22-a 26-abc'; also update the imm26 program ledger C:\\KenshiTestRuns\\programs\\ entry for NC10 to done and op7 as owner of the install/rerun package.",
+   "why": "State must be updated after every agent report so a coordinator stop loses nothing."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Re-arm Monitor on: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-stream.sh --as event-wait 2>&1 | grep -v --line-buffered SWEEP",
+   "why": "Work is in flight (op7, wpW-deploy, pi13-pi17 builds, 4 lane operators), so a waker must keep running."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"(Get-FileHash C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC10\\Stobe.dll -Algorithm SHA256).Hash\"",
+  "git -C C:\\KenshiModding log --oneline -3 (confirm e3ab90a pushed)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md: insert at top of 'Right now' (same sed pattern as before): '**imm26-fix-pq DONE (e7e70c4): 10-a quote-suffix fix = pending-fixes/imm26-fix-pq/apply.py (python3 apply.py <tree-root> in WSL, idempotent, adds tests/imm26_pq_quote_regression.php). NOT applied to compose/deployed. NEXT: after imm26-tripresume-a DONE apply to /root/imm26/compose together with the trip-resume change, php -l + stobe-tests, mkcompose_patch.sh APPLY-IDENTICAL, commit compose.patch, mk.sh then deploy.sh to lanes, then rerun 10-a on 5090 i5 (imm26-5090-i5-op4) with --allow-retry \"fix-pq quote core strip deployed\". Assumption unverified: model real output decorations; 10-a live rerun is the proof.**'",
+   "why": "HANDOFF Right now must be updated after every agent report so a successor sees fix-pq is done but pending compose/deploy."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git -C C:/KenshiModding add testing/HANDOFF.md && git -C C:/KenshiModding commit -qm \"HANDOFF: imm26-fix-pq done (e7e70c4), pending compose after tripresume-a\" -m \"Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\" && git -C C:/KenshiModding push -q origin HEAD",
+   "why": "Push right after every commit; the report's own commit e7e70c4 is already pushed by the agent."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for imm26-tripresume-a DONE (owns /root/imm26/compose; applying fix-pq to compose now would collide with its in-progress edits and the WP-C compose/deploy sequence); the background event-wait.sh waker (bwp3oavb5) stays running and will wake on that event.",
+   "why": "The agent said apply to compose only once tripresume-a is done; fix-pq is a server-only change so no DLL/rig step needs to happen before then, and 10-a is not rerun without --allow-retry and a deployed fix."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-fix-pq.status",
+  "head -c 600 C:/KenshiTestRuns/agents/imm26-tripresume-a.status",
+  "git -C C:/KenshiModding log --oneline -3 -- pending-fixes/imm26-fix-pq"
+ ]
+}

@@ -1,0 +1,41 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "check first: powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (look for a successor of imm26-5090-i4op3 and its OPEN ALERT); ls C:/KenshiTestRuns/inbox/coordinator (look for a TAIL-RELAY of imm26-5090-i4op3); powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-mode.ps1 status; read C:/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md (tail -60)",
+   "why": "The ledger routes imm26-5090-i4op3 to tail:5720e5b8, so first confirm no relay or successor already took it before spawning; the tail relays within minutes, so this wait is short and the lane is not left idle."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-5090-i4op3",
+   "why": "Once the tail's TAIL-RELAY for the stopped agent is in the inbox, ack it exactly as was done for imm26-4080-op2g so the ledger route is closed and the tail can end (skip if no relay exists and the ledger shows no live tail owner)."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] 5090 i4 NC5 rows operator op32 | You are imm26-5090-i4op32, fresh successor of imm26-5090-i4op3 (STOPPED-CONTEXT) as the operator of lane 5090 i4 (imm26 NPC immersion program). Start by reading C:/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md in full, then the top section of testing/NPC_IMMERSION_26_HANDOFF.md, the operator briefs (OPERATOR_COMMON.md / COMMON.md under pending-fixes/npc-immersion-26), docs/COORDINATOR_IMPROVEMENTS.md and testing/KNOWN_BLOCKERS.md. Keep C:/KenshiTestRuns/agents/imm26-5090-i4op32.status current with agent-status.ps1 (name imm26-5090-i4op32) and write C:/KenshiTestRuns/agents/imm26-5090-i4op32.handoff.md at every milestone (~40k tokens). Rules: isolated lane 5090 i4 only, never Shay's live install, server tree or DB. Keep the inflight marker. Debug budget ONE attempt per row; handbacks <= 8 lines. Continue the NC5 native and activity rows (25-a/b, 26, 22 with NC5, squad actor FX-SQUIN) from the handoff; NC5 DLL SHA 25252267 is the one to run.",
+   "why": "The stopped agent has no successor yet, so a fresh successor named by the handoff rule (imm26-5090-i4op32) carries the lane forward from its checkpoint; the lane must not sit idle."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/alert-ack.ps1 imm26-5090-i4op3 \"successor imm26-5090-i4op32 spawned from handoff\"",
+   "why": "Closes the open agent-stopped alert (ack accepts the subject name, so no unknown id is needed) once the successor exists."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now': record that 5090 i4 operator imm26-5090-i4op3 stopped (STOPPED-CONTEXT) and is replaced by imm26-5090-i4op32 (handoff agents/imm26-5090-i4op3.handoff.md), plus the program ledger live-rows note",
+   "why": "HANDOFF Right now and the ledger must be updated after every agent report, not only at the context limit."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP",
+   "why": "The waker exited (exit code 0) after delivering this event, so it must be restarted to keep watching the lanes."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-mode.ps1 status",
+  "ls C:/KenshiTestRuns/inbox/coordinator",
+  "tail -60 C:/KenshiTestRuns/agents/imm26-5090-i4op3.handoff.md"
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "id": "L17",
+ "batch_id": 17,
+ "class": "setup-fail ticket",
+ "window": [
+  "2026-10-16T22:13:28.939Z",
+  "2026-10-16T22:14:25.415Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 8,
+ "action_types": [
+  "read",
+  "read",
+  "restart-waker",
+  "run",
+  "spawn",
+  "restart-waker",
+  "spawn",
+  "spawn"
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do NOT spawn a 5090-i4 operator successor to imm26-5090-i4-hard2b2 from its handoff",
+   "why": "Shay's latest order (just received): no new 5090 testing sessions until he says otherwise, so the LANE NO-OPERATOR 5090-i4 suggestion must not be followed."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-no-operator-5090-i4 \"Shay 2026-10-15: no new 5090 testing sessions until he says otherwise; lane held on purpose, hard2b2 handoff kept for later respawn\"",
+   "why": "Closes the open lane alert with the reason; the alert id lane-no-operator-5090-i4 is inferred from the pattern of the other lane alerts and the subject can be used if the id differs."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i4-hard2b2 \"Shay 2026-10-15: no new 5090 testing sessions until he says otherwise; STOPPED-CONTEXT, respawn from C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b2.handoff.md when Shay lifts the hold\"",
+   "why": "The STOPPED-CONTEXT agent has no successor and would otherwise block the Stop hook, exactly as was done for hard2c and op9."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add a line that 5090 lanes i3/i4/i5 have no operator by Shay's order (hard2c and op9 stopped and abandoned, hard2b2 abandoned with handoff kept at C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b2.handoff.md); 4080 lanes and offline fixers continue",
+   "why": "A resuming coordinator must see that the 5090 hold is deliberate and where the 5090-i4 state is."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "alert-ack.ps1 for the other open alerts lane-no-operator-5090-i3, agent-stopped-context-imm26-5090-i3-hard2b and lane-idle-5090-i4 with the same reason (5090 hold by Shay's order)",
+   "why": "They are all consequences of the same hold; leaving them open would block the Stop hook after 5 min."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the waker running and continue the 4080 and offline work (imm26-4080-i4op8, imm26-4080-op2jc, imm26-wpL2, imm26-fix10a, reloadrows-A/B); wait for Shay to lift the 5090 hold",
+   "why": "Only 5090 testing sessions are held; 4080 and offline work is unaffected."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-scan.ps1 (list open alert ids)",
+  "ls C:\\KenshiTestRuns\\alerts\\open",
+  "head -3 C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b2.status"
+ ]
+}

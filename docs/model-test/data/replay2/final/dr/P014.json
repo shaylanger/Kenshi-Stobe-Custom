@@ -1,0 +1,23 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Read-only first: ssh 4080 for C:\\KAH\\ctl.ps1 status -Instance 3 and -Instance 4, plus powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-isolation-check-5090.ps1 (RUNNING lines for i3/i4/i5) and kenshi-ctl.ps1 status. Do not release any marker while imm26-4080-op2c, imm26-4080-i4op, imm26-5090-i4op or imm26-5090-i5op show a fresh RUNNING status. Release a 4080 busy marker (4080-imm26, 4080-imm26-i4) with the C:\\KAH rig-lock tool, and tell the owning operator, only if its game is confirmed gone; if the games are up, treat kenshi=no as a waker detection miss for isolated-lane processes and fix the check in tools/automation/event-wait.sh at the root (selftest + commit).",
+   "why": "RIG STALL (kenshi=no, lock free, markers claimed) fired right after four operators were started on isolated lanes whose games were reported up, so it is most likely a false positive; confirm game state before releasing claims and fix the detection if so (which rig reported kenshi=no is not stated)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Restart the background event-wait.sh waker, then wait for the status results and the next operator report or waker event.",
+   "why": "The waker just returned, and work is in flight, so a waker must be running again before the turn ends."
+  }
+ ],
+ "checks": [
+  "ssh 4080 \"C:\\KAH\\ctl.ps1 status -Instance 3\"",
+  "ssh 4080 \"C:\\KAH\\ctl.ps1 status -Instance 4\"",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1 status",
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-4080-op2c.status",
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-4080-i4op.status",
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-5090-i4op.status"
+ ]
+}

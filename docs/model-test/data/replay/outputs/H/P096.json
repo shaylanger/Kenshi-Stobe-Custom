@@ -1,0 +1,35 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-sfS DONE (commit a85c7b7a, pushed): 05-cx v2 (hxrun_cx2.sh, hxdefs_cx2.sh, hxscen_cx2.py, hx-selftest_cx2.sh, SELFTEST HXCX2 23/23) and 08-d v2 (unblockrun_sfs.sh, unblockdefs_sfs.sh, unblockcheck_sfs.py, SELFTEST SFS 18/18), both offline-verified only, no row run yet; 05-cx held for the 5090 hold; 08-d queued on 4080-i4.",
+   "why": "The coordinator must record every agent result in the handoff state at once, and sfS is now DONE with its operator note in inbox\\operators\\sfS.txt."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "bash C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/unblockrun_sfs.sh 08-d 4080-i4 --allow-retry \"sfS v2 08-d: attn in_combat false, ask check after tick 1\"",
+   "why": "The 4080 rig is free to take the 08-d v2 row, which sfS verified offline (SELFTEST SFS 18/18) and which the operator note sfS.txt routes to 4080-i4."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Route to the 4080-i4 lane operator: read inbox\\operators\\sfS.txt (08-d: unblockrun_sfs.sh 08-d 4080-i4 --allow-retry; 05-cx is held).",
+   "why": "The lane operator needs the exact sfS commands and options to run the row, and the note already exists at that path."
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "5090-i3: do not start 05-cx (hxrun_cx2.sh 05-cx 5090-i3 --out C:/KenshiTestRuns/imm26-5090-hx); a --dry run is allowed.",
+   "why": "Shay's no-new-5090-sessions hold is still in force, so 05-cx waits for his go even though sfS verified it offline."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the 08-d 4080-i4 run result line RESULT 08-d PASS|FAIL, and for the 4080-i4 operator to report an arrival or a retire.",
+   "why": "The 08-d result decides whether the fxC product fix (move the retire block above the speech gates in stobeSocialFollowupsClaim) is needed."
+  }
+ ],
+ "checks": [
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-sfS.status",
+  "ls /c/KenshiTestRuns/inbox/operators/sfS.txt",
+  "bash C:/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/unblockrun_sfs.sh 08-d 4080-i4 --dry"
+ ]
+}

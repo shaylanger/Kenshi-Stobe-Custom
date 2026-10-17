@@ -1,0 +1,14 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the RESULT line of row 03-b on lane 5090-i4 (operator imm26-5090-i4-hard2b) in C:/KenshiTestRuns/row-timing.log; send no message to the operator",
+   "why": "The operator reports preflight OK, the 402 fixed and 03-b running, which clears the 16.7 min LANE IDLE condition, and its report is a result to read, not an order to act on."
+  }
+ ],
+ "checks": [
+  "tail -5 /c/KenshiTestRuns/row-timing.log | cut -c1-140",
+  "grep -c 402 /tmp/stobe-imm26-5090-i4/site/log/stobeserver.log"
+ ]
+}

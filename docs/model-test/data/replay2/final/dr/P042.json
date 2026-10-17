@@ -1,0 +1,34 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add 'imm26-batch5 DONE f62a91b: pending-fixes/imm26-batch5/apply.py <tree-root> (FIX1 16-c dps_generate counts enabled fields only + anchor traits v2; FIX2 02-bx slavery request regex; FIX3 17-bx imm26IsChallenge); stobe-tests 107 pass, 5 pre-existing fails; not composed, not deployed, no in-game proof; goes into WP-C with trip resume + imm26-fix-pq'; also update the program ledger entry for batch5 in C:\\KenshiTestRuns\\programs (program file name not in this input, look it up with session-start.ps1 -Brief)",
+   "why": "the batch5 hand-back is a new checkpoint and HANDOFF and the ledger must match the repo state after every agent report."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-wpc, description '[case:patch] WP-C compose batch5 + trip resume + fix-pq'. Brief: 'Phase = patch/compose only, no deploy, no live rows. First read agents status files for imm26-tripresume-a, imm26-tripresume-b, imm26-fix-pq and imm26-batch5. In the compose tree /root/imm26/compose apply, in this order, pending-fixes/imm26-fix-pq/apply.py, the tripresume-a server code, then pending-fixes/imm26-batch5/apply.py <tree-root> (all idempotent), plus tripresume-b tests if its status is DONE. Then php -l on every touched file, full stobe-tests (expect only the 5 known failures: chat_json_endpoint, main_ingress_http, npc_player_view, social_property, social_fights), mkcompose_patch.sh APPLY-IDENTICAL, commit compose.patch with identity shaylanger and push. Checkpoint status via agent-status.ps1 every milestone. Report the commit id and any new test failure. Do not run imm26-install\\b4\\mk.sh or deploy.sh; the coordinator deploys after DeepInfra balance returns and lanes are idle.'",
+   "why": "imm26-tripresume-a was already marked DONE at 19:20 in HANDOFF, so the draft's wait gate is satisfied and this compose step needs no model reply, so it can run now during the 402 block."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "keep pending-fixes/imm26-batch5 in place until the compose.patch commit lands; do not delete it now",
+   "why": "the rule is to delete a patch script only after its fix is committed in its repo."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "rows 16-c, 02-bx and 17-bx: no marks and no reruns until DeepInfra balance is restored (Shay) and batch5 is deployed; then rerun with --allow-retry '<reason: batch5 FIX n applied>' if they were FAILs",
+   "why": "all three depend on a model reply, the 402 is still in the lane logs, and the row guard blocks a FAILED row rerun without a reason."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "17-bx also needs the fixture changes in triageB item 3 before its rerun (test-row work, not yet assigned); assign it to the next 17-bx operator brief",
+   "why": "the batch5 report says 17-bx needs those fixture changes and left them out."
+  }
+ ],
+ "checks": [
+  "git -C C:\\KenshiModding show --stat f62a91b",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

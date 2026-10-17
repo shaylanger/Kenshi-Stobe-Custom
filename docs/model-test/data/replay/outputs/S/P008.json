@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5  (run_in_background)",
+   "why": "The waker just exited with a status digest; work is still in flight (6 agents still RUNNING, two rigs up), so a waker must be restarted at once per the waker-guard rule."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for STOPPED-CONTEXT/DONE from claude-md-reviewer, imm26-4080-op2, imm26-nativecomp, imm26-wpA3, imm26-wpB3, program-ledger (about 10 min max, then TaskStop stragglers, run handoff-ready.ps1 and open the next session via the context-meter handoff command). imm26-5090-op2 is now STOPPED-CONTEXT, which is the expected outcome of the stop order; do not respawn it from this session (at context limit, start nothing new): the next coordinator respawns it fresh as imm26-5090-op3 from agents\\imm26-5090-op2.handoff.md.",
+   "why": "This coordinator is at its context limit and is only collecting checkpoints; the 5090-op2 stop is the ordered behaviour, and the HANDOFF text already lists it for fresh respawn by the successor."
+  }
+ ],
+ "checks": [
+  "ls C:\\KenshiTestRuns\\agents\\imm26-5090-op2.handoff.md",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

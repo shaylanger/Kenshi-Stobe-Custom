@@ -1,0 +1,26 @@
+{
+ "event_class": "build-compose",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record '#9 NC10 BUILT e3ab90a (Stobe.dll SHA256 E1302B77...0651, objects=69, applied to src and legacy-v1); NOT installed; lane 5090-i5 operator imm26-5090-i5-op7 registered to install it and run 25-b 25-a 22-a 26-abc'",
+   "why": "The NC10 agent result has arrived and HANDOFF must record every agent result at once; the install and reruns are still open."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i5-op7, description '[case:bench] imm26 lane 5090-i5 operator: NC10 install and rows 25-b 25-a 22-a 26-abc'; prompt = the full contents of C:/KenshiTestRuns/agents/imm26-5090-i5-op7.brief.md, plus: install pending-fixes/npc-immersion-26/NC10/Stobe.dll (SHA256 E1302B7777BB0DC524351B8466550758B4B29716C8CD858CA56EE08D17180651) into lane 5090-i5 only (never Shay's live install or server), verify the SHA after the copy, then run 25-b 25-a 22-a 26-abc through go-row.sh; report status with agent-status.ps1 and one RESULT line per row.",
+   "why": "NC10 is built but not installed, lane 5090-i5 has no operator, and the lane must not sit idle while queued rows exist."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-5090-i5-op7 and the imm26-wpW-deploy result; keep the event-wait waker running",
+   "why": "No other action is owed on this event; the rows run once the operator reports the install."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding show --stat --format=%h%n%s e3ab90a",
+  "Get-FileHash C:/KenshiModding/pending-fixes/npc-immersion-26/NC10/Stobe.dll -Algorithm SHA256",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-5090-i5-op7.brief.md -TotalCount 40",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 5090-i5"
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Run in background (Bash, run_in_background): MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP",
+   "why": "The waker (b7rkz2xpf) exited with code 0 and about 20 inflight markers remain, so one must always be running; any wake line it printed is read from its output file first."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-4080-i4op5b, description '[case:resume] 4080 lane i4 operator imm26-4080-i4op5b'. Brief: Resume the task '4080 lane i4 operator' as a FRESH agent named imm26-4080-i4op5b. Read C:\\KenshiTestRuns\\agents\\imm26-4080-i4op5.handoff.md first (status file C:\\KenshiTestRuns\\agents\\imm26-4080-i4op5.status) and continue from where imm26-4080-i4op5 stopped. Keep your own status current with tools\\automation\\agent-status.ps1 imm26-4080-i4op5b RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:\\KenshiTestRuns\\agents\\imm26-4080-i4op5b.handoff.md. Never SendMessage the old agent. Remaining rows: 09-c, 04-c, 10-a, 10-b, 08-b, 08-d, then batch2d reruns 06-c 08-a 15-a 16-c. Use NC2 DLL E17FC00C already on i4. Lane 4080 i4 only (C:\\KenshiInst\\4, private backend, save kah-imm26-4080-i4); never Shay's live install, server or DB. Follow the checkpoint, commit and handback rules in testing/AGENT_PROMPTS.md and docs/WP_SIZING.md (target <= 120k tokens).",
+   "why": "The Stop hook reported imm26-4080-i4op5 STOPPED-CONTEXT with no successor, and a lane with a running game and open rows must not sit without an operator. This is skipped only if the check shows a live successor such as imm26-4080-i4op52 already exists."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the restarted waker, the imm26-4080-i4op5b, imm26-pi06-09, imm26-pi07-08, imm26-pi10, imm26-pi11, imm26-pi12, imm26-fix-batch3 and imm26-fix-batch4 agent reports, and the 5090 i4 operator's NC6 swap and 13-b result.",
+   "why": "Nothing else is actionable until those agents report. Each result updates the ledger and HANDOFF, and each approved process idea is retired with process-ideas.ps1 done after its result is confirmed."
+  }
+ ],
+ "checks": [
+  "tail -c 1500 /c/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2b1a8eca-c7aa-44ff-bda2-326523d5864e/tasks/b7rkz2xpf.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "ls /c/KenshiTestRuns/agents | grep -E '4080-i4op5'",
+  "ls /c/KenshiTestRuns/alerts/open"
+ ]
+}

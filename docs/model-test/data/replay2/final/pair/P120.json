@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 for agent imm26-fix15bx05cx3 (task a96301375ebef4bae): carry the full SubagentHandback text into C:\\KenshiTestRuns\\inbox\\coordinator, marked as a result to act on, not an order",
+   "why": "The 14:58:20 autorelay logged report=(none), so the verdict (six defects fixed offline, HXCX4 43/43 and UNBLOCK-C-V4 56/56, commit a9e06e08, nothing run live) and the row commands never reached the new coordinator; the tail relays results and does not run rows itself."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the next task-notification from a96301375ebef4bae (its own background child is still running, so this result is interim) and for the DONE results of imm26-op16, imm26-op24 and imm26-pilotcmp; relay any new final result at once with tail-relay.ps1; no respawn and no steering message to fix15bx05cx3; stall rule: silent 10 min -> message it, 20 min -> TaskStop and tell the new coordinator",
+   "why": "The agent stopped with background work still running, so its result may change and may notify again, and a tail never steers or respawns an agent it does not own."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no edit, no live run, no lane or rig action, and no duplicate SendMessage for the repeat task-notification of a96301375ebef4bae",
+   "why": "The tail spawns, edits and decides nothing; the row runs (05-cx on 5090-i3 per the README) belong to the new coordinator after it reads the relay, and the repeat notice adds nothing until a new final result exists."
+  }
+ ],
+ "checks": [
+  "git -C C:\\KenshiModding log --oneline -3 (confirm commit a9e06e08 is on main and pushed)",
+  "Get-Content C:\\KenshiTestRuns\\tail\\autorelay.log -Tail 3 (confirm the relay line for imm26-fix15bx05cx3 and whether report=(none) was replaced)",
+  "Get-Content C:\\KenshiTestRuns\\agents\\fix15bx05cx3.status -Tail 3 (confirm the agent's current state)"
+ ]
+}

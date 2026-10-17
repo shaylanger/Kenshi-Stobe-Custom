@@ -1,0 +1,19 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, 'Right now' section: add a '#9 imm26-inv19d DONE (agents/out/imm26-inv19d/latest.md)' line. Root cause: the resume works (post-load OWNED_TRAVEL accepted, stobe.log:18445). The FAIL is the arrival half: the row teleports Cind about 14.6 km during a live MOVE order, both characters land at y~950 and fall ~620 u, the native order list empties, and FAILED native_order_ended_before_goal is by design. 19-d stays FAIL until a rerun with the new recipe.",
+   "why": "Standing rule is to update HANDOFF 'Right now' after every agent report, and this root cause is not recorded yet; the coordinator is at 271k, so the checkpoint has to land before the overlap handoff at 300k."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the reply from a0220684160339b7b (it already received the 19-d recipe message) and for its 19-d rerun result; no new spawn and no second message.",
+   "why": "The recipe was already delivered to the row owner, so a duplicate spawn or message would repeat ALREADY DONE work; the 19-d row only changes after a real rerun."
+  }
+ ],
+ "checks": [
+  "sed -n 1,40p /c/KenshiTestRuns/agents/out/imm26-inv19d/latest.md",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 -NoMemory"
+ ]
+}

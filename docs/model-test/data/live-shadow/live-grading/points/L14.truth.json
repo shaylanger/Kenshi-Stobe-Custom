@@ -1,0 +1,22 @@
+{
+ "id": "L14",
+ "batch_id": 14,
+ "class": "stop-hook feedback",
+ "window": [
+  "2026-10-16T22:08:27.606Z",
+  "2026-10-16T22:09:02.146Z"
+ ],
+ "outcome": {
+  "label": "possibly-corrected",
+  "evidence": "in-window turn seq 65 22:08:49: \"...I restarted the waker. The previous one had exited and I hadn't relaunched it. The status counts above stand. I'll start the PI-54 builder as soon as a c...\""
+ },
+ "truth_noop": false,
+ "real_action_count": 7,
+ "action_types": [
+  "ack",
+  "restart-waker",
+  "read",
+  "spawn",
+  "restart-waker"
+ ]
+}

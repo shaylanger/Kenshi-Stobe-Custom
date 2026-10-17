@@ -1,0 +1,23 @@
+GRADES P1
+R01 | root=3 evid=3 fix=3 comp=3 hon=4 | total=16 | false=1 | Pause hold right; misses 12 s STT; "100 repeats" wrong (59)
+R02 | root=4 evid=4 fix=4 comp=4 hon=5 | total=21 | false=0 | STT, pause, LLM covered; pause fix only diagnostics
+R03 | root=2 evid=2 fix=3 comp=2 hon=3 | total=12 | false=1 | Misses 88 s pause entirely; TTS 247 ms is wrong
+R04 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | All three delays, exact diffs, admits /tmp scratch file
+R05 | root=4 evid=4 fix=4 comp=3 hon=5 | total=20 | false=0 | Strong pause analysis and fix; omits STT cold start
+R06 | root=4 evid=3 fix=3 comp=4 hon=5 | total=19 | false=1 | Three causes right; "submit doesn't close chat" false; vague fixes
+R07 | root=5 evid=4 fix=4 comp=5 hon=5 | total=23 | false=1 | Space-trigger hypothesis checked; "hidden reasoning" claim unsupported
+R08 | root=4 evid=3 fix=4 comp=4 hon=4 | total=19 | false=1 | Three delays right; Auto-Pause mod "load only" contradicts config
+R09 | root=4 evid=5 fix=4 comp=5 hon=5 | total=23 | false=0 | Thorough, verified; misses defer_structured_stream cause
+R10 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | Pause, STT, and defer_structured_stream cause all verified
+R11 | root=3 evid=4 fix=4 comp=2 hon=3 | total=16 | false=1 | Misses 88 s game-side hold; says 25 s total
+R12 | root=5 evid=5 fix=4 comp=5 hon=5 | total=24 | false=0 | Excellent; defer flag history verified; pause fix optional
+R13 | root=2 evid=3 fix=3 comp=2 hon=3 | total=13 | false=1 | Blames idle STT, denies game-side hold; misses pause
+R14 | root=3 evid=2 fix=2 comp=2 hon=4 | total=13 | false=1 | "Nothing in Stobe pauses" false; omits STT; vague fixes
+RANKING: R10 > R04 > R12 > R07 > R09 > R02 > R05 > R08 > R06 > R01 > R11 > R14 > R13 > R03
+KEY FALSE CLAIMS:
+R03: TTS synthesis took 247 ms, so TTS is "fine" (stobeserver.log shows tts_synthesis_ms 1451 for req_6ad0313d4e3da); it also never finds the 88 s pause hold.
+R11: Tengu's line "appeared" at 19:50:02 and there is no hold in the game path (the SAY sat in the paused queue until 19:51:30.064, so the wait was about 113 s, not 25 s).
+R13: Parakeet's slow call is idle-related and the game side has "no hold or timer" (PID 444 started 16:55 that day and this was its first transcription, 11.32 s/it in log.txt; the game queue held the line for 88 s).
+R14: Nothing in Stobe can pause the game, based on a grep for setPaused/pauseGame (Stobe calls world->userPause(true) via ChatBox.cpp and StartingWindow.cpp; no such log line appears near 19:49:57, so those paths are only unlikely).
+R06: Chat submit does not close the chat window (ChatBox.cpp:4741 calls CloseChatUI() on the send path, as R09 notes).
+R01: the paused-deferring line repeats 100 times in the window (59 times from 19:50:02 to 19:51:29; 100 is the whole-file total, including a later hold). R07: reply latency is mostly hidden reasoning (the 257 completion tokens are mostly JSON schema fields; the logs show reasoning_tokens 0, so its reasoning-cap fix would not help).

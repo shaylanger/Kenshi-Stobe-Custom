@@ -1,0 +1,15 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do nothing new: this is the TAIL session, which spawns and decides nothing. Keep the two running background watchers (event-wait.sh waker bu59ciiuz and the status-file until-loop bnp0vbz0u) and wait for imm26-wpC-b5 or imm26-5090-i5-op6 to reach DONE/FAILED/STOPPED-CONTEXT. When one finishes: save its report to a file, relay it with tail-relay.ps1 plus SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator, then wait for the tail-ack.ps1 ack. Do not use tail-mode.ps1 leave -Force, since the flag is correct and both agents are still unfinished.",
+   "why": "The Stop hook feedback is a correct, expected block (2 agents running, not yet acknowledged) and is not a new fault; the only valid response is to keep waiting with the waker alive."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ Get-Content \\\"C:\\KenshiTestRuns\\agents\\$n.status\\\" -TotalCount 3 }\"",
+  "Confirm background tasks bu59ciiuz and bnp0vbz0u are still running; if the event-wait waker died, restart it with: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP",
+  "If imm26-5090-i5-op6 status is still unchanged since 19:35 at the 10-minute mark (about 19:45), SendMessage it for a status; at 20 minutes (about 19:55) TaskStop it and tell the new coordinator (this is the tail's stall rule, not a new decision)"
+ ]
+}

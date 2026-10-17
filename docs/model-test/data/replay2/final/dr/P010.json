@@ -1,0 +1,25 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for claude-md-reviewer, imm26-wpA3 and imm26-wpB3 to reach DONE or STOPPED-CONTEXT (read C:/KenshiTestRuns/agents/<name>.status line 1)",
+   "why": "three agents are still RUNNING and each must report before the context-limit handoff can close, and nothing new starts during that handoff."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no spawn of an imm26-4080-op2 successor in this session; the respawn todo written by agent-status.ps1 stays for the new coordinator",
+   "why": "imm26-4080-op2 is STOPPED-CONTEXT with no successor, but the context-limit order says start nothing new; the new session spawns a fresh agent named imm26-4080-op2b from agents/imm26-4080-op2.handoff.md."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md: add to Right now that imm26-4080-op2 is STOPPED-CONTEXT (2026-10-15 14:45), its handoff is agents/imm26-4080-op2.handoff.md, successor imm26-4080-op2b is pending, and the 4080 game (PID 16156, marker 4080-imm26) has no operator until then",
+   "why": "the handoff file must name the stopped agent and its successor so the next coordinator resumes the 4080 lane without relying on memory."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-4080-op2.status",
+  "ls C:/KenshiTestRuns/respawn/"
+ ]
+}

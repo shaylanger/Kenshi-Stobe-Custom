@@ -1,0 +1,35 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; mv C:/KenshiTestRuns/inbox/coordinator/*.msg C:/KenshiTestRuns/inbox/coordinator/delivered/ 2>/dev/null; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP   (run_in_background)",
+   "why": "The background waker just exited after delivering this DONE event, so it must be restarted at once (restart it each time it wakes) while ctxop3, i4op4 and install-nc-rest2b are still in flight."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add a line that imm26-compose-fix-batch2d is DONE (batch2 fixes 20-a,15-a,far-NPC,14-a,19-a,24-a,24-b in compose patch a299993, deployed to all 5 lane sites; 23-b skipped), the rerun list is 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a/b + travel rows >80u, and 13-d RETURN_ITEM (negotiation_engine.php ~1005) is still not fixed; update the imm26 program ledger entry for the compose/batch2 work package to done.",
+   "why": "State must be updated right after every agent report, and the batch2d slot is now free."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-compose-fix-batch2e, description '[case:patch] imm26 batch2e: 13-d RETURN_ITEM fix'. Brief: Read C:\\KenshiTestRuns\\agents\\briefs\\COMMON.md and the batch2d report (path is cut off in the event message; start from C:\\KenshiTestRuns\\agents\\imm26-compose-fix-batch2d.status and its handoff/latest.md). Fix only item 13-d (RETURN_ITEM baseline in negotiation_engine.php near line 1005). Use codemap.sh to find the function and read only that range. Back up, stage, php -l, run the offline stobe-tests, deploy to all 5 lane sites plus the live tree and ss-merge as the existing compose flow does, regenerate the compose patch, commit and push. Keep your status current with agent-status.ps1 imm26-compose-fix-batch2e and checkpoint every ~40k tokens. Do not run live rows.",
+   "why": "13-d was explicitly left out of batch2d and needs its own small patch package so the failed 12-c/12-d/13-d rows can be rerun."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "Send to imm26-4080-i4op4 and imm26-5090-ctxop3 (and write inbox\\imm26-install-nc-rest2b only if it is relevant): 'Batch2 server fixes are deployed to all 5 lane sites (compose patch a299993). Finish your current row, then rerun the affected rows that belong to your lane: 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a 24-b and the travel rows >80u. 13-d waits for batch2e. Mark each PASS/FAIL with a RESULT line.' (rows go only to the operator that owns that lane's save, nothing else changes)",
+   "why": "The operators are the live rig holders, so the rerun queue goes to them with no idle lane gap; no new lane or session is needed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the waker events: batch2e DONE, the ctxop3 / i4op4 / install-nc-rest2b reports, and the rowtools2 spawn once a slot is free.",
+   "why": "Nothing more is actionable until those results arrive, and the waker covers them."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/inbox/coordinator/delivered/20261015-170414-imm26-compose-fix-batch2d.msg | cut -c1-1500",
+  "cat C:/KenshiTestRuns/agents/imm26-compose-fix-batch2d.status",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-rollcall.ps1 | cut -c1-220"
+ ]
+}

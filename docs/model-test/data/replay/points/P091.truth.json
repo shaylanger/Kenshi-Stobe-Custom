@@ -1,0 +1,25 @@
+{
+ "id": "P091",
+ "session": "48b778a7",
+ "ts": "2026-10-16T17:22:06.534Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: so it seems llike onyl 4 things have moved to done in the last 1.2 hours. why is that? how can we sp"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "head -c 1200 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/48b778a7-13d7-4f96-bc6b-30dba5670ae0/tasks/b5a4r4dkp.output\"; ls /c/KenshiTestRuns/claims 2>/dev/null | tr '\\n' ' '"
+ ],
+ "narration": [
+  "The waker is running again. It had exited on the op20 relay and I hadn't restarted it.\n\nThe claims folder answers my earlier open question. Operators have already claimed 03-b, 10-b, 13-c, 13-c-neg, 14-d, 20-d, 23-e, 24-c and 26-f, along with the hx rows. So most of the \"fix built\" rows are at least picked up. Not claimed yet: 10-e, 22-a, 26-b, 26-c and 11-b. The first four wait on a build or deploy, and 11-b waits on sfK2's recipe. Claimed only means picked up, so these rows still need to be ru...[truncated 20 chars]"
+ ],
+ "event_text_chars": 922
+}

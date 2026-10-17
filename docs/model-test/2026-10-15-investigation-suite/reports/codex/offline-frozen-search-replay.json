@@ -1,0 +1,30 @@
+{
+  "kind": "frozen_search_replay",
+  "status": "PASS",
+  "fixture": "C:\\KenshiTestRuns\\invest\\frozen-2026-10-14",
+  "calls": [
+    {
+      "path": "server/lib",
+      "elapsed_ms": 172,
+      "bytes_scanned": 5909936,
+      "files_scanned": 134,
+      "result_count": 1,
+      "long_lines_skipped": 1,
+      "incomplete": true,
+      "truncated": false
+    },
+    {
+      "path": "logs/output_from_llm.log",
+      "elapsed_ms": 516,
+      "bytes_scanned": 11653213,
+      "files_scanned": 1,
+      "result_count": 25,
+      "long_lines_skipped": 0,
+      "incomplete": false,
+      "truncated": true,
+      "truncation_reason": "result_limit"
+    }
+  ],
+  "result_text_retained": false,
+  "model_inference": false
+}

@@ -1,0 +1,25 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; never a bare & or disown)",
+   "why": "The restart step only killed stale event-wait.sh processes and the sweep digest woke the coordinator, while agents and lanes are in flight so a waker must stay up."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-fix-19e \"superseded: 19-e fix already produced as pending-fixes/19e-recipe (fxB table) and routed to imm26-5090-i5-op9n; status stale 520 min, no log\"",
+   "why": "The 19-e work is already done and routed, so the stale agent is dropped on purpose instead of respawning a redundant successor."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-4080-i4 out dir C:\\KenshiTestRuns\\imm26-4080-i4 (reported missing); wait for imm26-4080-i4op14 (started, reading brief) to bring the lane up",
+   "why": "A missing out dir during lane bring-up is expected and not yet a stall."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "wsl check: ps -ef | grep event-wait (confirm exactly one waker after the restart)",
+  "read the tail of C:\\KenshiTestRuns\\agents\\imm26-fix-19e.status to confirm it is not DONE and has no newer line before abandoning it"
+ ]
+}

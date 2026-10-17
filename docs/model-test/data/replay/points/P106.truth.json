@@ -1,0 +1,21 @@
+{
+ "id": "P106",
+ "session": "48b778a7",
+ "ts": "2026-10-16T19:04:39.590Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-5090-i3op21 -Kind DONE -Report C:\\KenshiTestRuns\\agents\\out\\imm26-5090-i3op21\\out-20261016-130429.md -Summary \"imm26-5090-i3op21 STOPPED-CONTEXT: LAST AGENT OF THE TAIL; 5090-i3 lane idle (Kenshi i3 up on NC20, lock game-3.lock held, compose bundle deployed on its private backend). No scripted row is left for 5090-i3; a successor imm26-5090-i3op22 is only useful once new row scripts exist. PASS: 19-ax, 10-e (real game restart via ub10e.sh; repairprobe.php fix c2c3a9ce). FAIL: 20-d (bundle incl. sfQ: pending change survives load, bare Yes after reload not confirmed), 16-bx (checke...[truncated 1158 chars]",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 3175
+}

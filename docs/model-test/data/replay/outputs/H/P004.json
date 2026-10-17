@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/savever.py a5f5a157aa21dff07 A3 ''",
+   "why": "Save the SUITE-A3 verify verdict (PASS) the same way the A2 verdict was saved, before acting on it."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiTestRuns/invest/suite/tools/state-check.sh /mnt/c/KenshiTestRuns/invest/suite/A3/state-after.txt",
+   "why": "Record the post-round state and confirm the suite state is clean after A3, as in the A2 round."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name: suite-a3-fix-phase1. [case:patch] [ticket:SUITE-A3] Brief: Restore the LocalTravel producer in the Stobe build tree. Facts: the Stobe.dll in use (D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\mods\\Stobe\\Stobe.dll) has 0 matches for travel_destinations and 0 for path_confirmed; the workspace snapshot C:\\KenshiModding\\components\\STOBE\\src\\Context.cpp includes LocalTravel.h and writes travel_destinations (about line 3620); /root/STOBE-src/src has no LocalTravel file; C:\\StobeBuild\\build_portable.bat line 21 is the SOURCES= line. Task: add the LocalTravel source to the build tree through an anchored patch in build_portable.bat (not by copying whole files), add a build-script guard that fails if the LocalTravel source is missing, build the portable DLL into C:\\StobeBuild\\out, and confirm travel_destinations appears in the new DLL with grep -c -a. Do NOT install and do NOT launch Kenshi or touch the 5090 game or any rig. Report the DLL SHA256, the grep counts and the exact files changed. No game validation claim.",
+   "why": "The A3 investigation found the root cause (missing LocalTravel producer in the build tree, so Mouse has no local destinations and her replies are dropped) and the Phase 1 fix is small and specific, so a single patch agent should implement and build it now."
+  }
+ ],
+ "checks": [
+  "grep -c -a travel_destinations \"D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\mods\\Stobe\\Stobe.dll\"",
+  "ls /root/STOBE-src/src | grep -i localtravel (WSL, expect no match)",
+  "grep -n \"SOURCES=\" C:\\StobeBuild\\build_portable.bat"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22b -Predecessor imm26-5090-i3op22 -MaxBytes 16000 -Out C:/KenshiTestRuns/agents/imm26-5090-i3op22b.brief.md 2>&1 | tail -1 | cut -c1-150",
+   "why": "op22 hit STOPPED-CONTEXT mid-work (it only existed because the 5090-i3 park was lifted and a row script was made), so the lane needs a fresh successor built from its handoff, not an abandon."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent [case:generate] 5090-i3 operator op22b | You are lane operator imm26-5090-i3op22b for the 5090-i3 lane, successor of imm26-5090-i3op22 (STOPPED-CONTEXT). Read your brief C:\\KenshiTestRuns\\agents\\imm26-5090-i3op22b.brief.md first, then the predecessor handoff C:\\KenshiTestRuns\\agents\\imm26-5090-i3op22.handoff.md. Continue its unfinished rows on the installed build (NC24 unless the handoff says otherwise), keep C:\\KenshiTestRuns\\agents\\imm26-5090-i3op22b.status current via agent-status.ps1, checkpoint every ~40k tokens, hand-back <= 8 lines.",
+   "why": "The agent-stopped rule is to respawn a fresh successor (op22b is a name the event itself lists) so the lane is not left with NO SUCCESSOR or NO-OPERATOR."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; powershell -NoProfile -File tools/automation/agent-ids.ps1 add imm26-5090-i3op22b <agentId returned by the spawn>",
+   "why": "SendMessage to a live subagent works only by agent id, so every new spawn must be recorded."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The waker task that delivered this event has completed, and work is in flight, so it must be restarted."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File tools/automation/agent-ids.ps1 list -Live (confirm no successor such as imm26-5090-i3op222 or imm26-5090-i3op22b already runs)",
+  "tail -c 1500 C:/KenshiTestRuns/agents/imm26-5090-i3op22.handoff.md (confirm unfinished rows exist; if it says no runnable row remains, use agent-abandon.ps1 imm26-5090-i3op22 instead of spawning)",
+  "cat C:/KenshiTestRuns/lanes.held (confirm 5090-i3 is not held)"
+ ]
+}

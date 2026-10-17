@@ -1,0 +1,38 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Build the bug/failure audit myself from the checks: list every FAIL/open row in testing/NPC_IMMERSION_26_TESTS.md and every agent .handoff.md TODO, and for each one record: fix owner (agent or commit), fix deployed to lane sites (yes/no), re-queued to a row operator (yes/no). Write the table to C:\\KenshiTestRuns\\agents\\out\\coordinator\\bug-audit.md (plain notes file, not a report).",
+   "why": "Shay asked whether every bug and failure has a fix in place and is re-queued; I must answer from the real ledger and row state, not from memory, and the audit shows which items lack an owner or a queue slot."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent imm26-fixer-gap [case:generate] (spawn only for each audit line with no fix owner): 'Read C:\\KenshiTestRuns\\agents\\out\\coordinator\\bug-audit.md, take the listed FAIL rows that have no fixer, fix each at its root (server patch in pending-fixes/npc-immersion-26 with stobe-tests passing, or native change via build-stobe), keep agent-status.ps1 imm26-fixer-gap current after every row or every 8 min, checkpoint and commit+push, and list the rows to re-run.' One agent per independent root cause; the exact agent count and row ids are unknown until the audit runs.",
+   "why": "Any failure found without a fix gets a fixer immediately, as Shay ordered; the specific rows are not in this file so the spawn is conditional on the audit."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "For every fixed-but-not-yet-retested row, append it to the pending row list of the lane operator that already runs on the installed build: imm26-5090-ctxop32 (5090 lanes i5 then i4) and imm26-4080-i4op4 (4080 i4), by writing an .msg file into C:\\KenshiTestRuns\\inbox\\<agent>\\ with the row ids and the commit or compose id; rows needing a new DLL wait for the next install boundary but are queued now.",
+   "why": "Fixes only count once re-queued for in-game retest, and rigs must not idle or wait for a build."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Checking now, answer in a few minutes with a table. What I know right now: the stopped 5090 operator imm26-5090-ctxop3 (i5 rows 05-a, 05-b, 07-a, 07-c, 07-d PASS) was respawned as imm26-5090-ctxop32 for the remaining i5 rows 04-b, 06-d, 14-b, 18-a, 18-b, then all i4 rows, plus a rerun of the rows changed by the batch2d fixes (deployed to all lane sites in compose a299993); imm26-4080-i4op4 and imm26-install-nc-rest2b are running. I am auditing every FAIL in the imm26 test list against fix owner, deployed, and re-queued, and I am spawning a fixer for any failure without one and queuing every fixed row for retest. Separately, the tail-handoff build (wpT1, wpT2, wpT3) is running per your approval.",
+   "why": "Shay asked a direct status question; give an honest interim answer without claiming everything is covered before the audit confirms it."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background Bash task, restart each time it wakes me)",
+   "why": "Agents are in flight, so the waker must keep running after this turn."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "grep -nE 'FAIL|OPEN|TODO|BLOCKED' C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md",
+  "cat C:\\KenshiTestRuns\\programs\\imm26.json",
+  "tail -40 C:\\KenshiModding\\testing\\NPC_IMMERSION_26_HANDOFF.md",
+  "ls C:\\KenshiTestRuns\\agents\\*.handoff.md"
+ ]
+}

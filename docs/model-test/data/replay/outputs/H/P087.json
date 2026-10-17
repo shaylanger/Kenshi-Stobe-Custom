@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "tail-relay.ps1 (args per testing/AGENT_PROMPTS.md overlap-handoff section) for agent imm26-sfE3, DONE, commit b38bd383: 24-c and 26-f setup recipes built and pushed; offline selftest 46/46 in Git Bash; WSL run 40/46, the 6 failures are CRLF handling in CLI checks, not recipe defects; 24-c stays PARTIAL until the region_name fix (pending-fixes/imm26-sfE2-region-name) and Shay's current-town guard decision; 26-f needs NC20 on 4080-i3 and a SCENE-OK where Cind sees at least 3 of 4 bandits; operator notes C:/KenshiTestRuns/inbox/operators/sfE-24c.txt and sfE-26f.txt; report C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md; for the successor to spawn as [case:patch]: fix CRLF handling so reload-sfe-selftest.sh passes under WSL",
+   "why": "Agent results during the overlap handoff go to the new coordinator by tail-relay, and the coordinator is at 294k so it does not spawn new work before the handoff."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' block and the imm26 program ledger under C:/KenshiTestRuns/programs/ (program name as printed by session-start.ps1): mark sfE3 DONE at b38bd383; 24-c PARTIAL (every RESULT line SEEDED); 26-f queued for 4080-i3 behind the NC20 install and a SCENE-OK; NOT run until both are in place",
+   "why": "State lives in files, so the ledger and HANDOFF must reflect each agent report as soon as it arrives."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the 4080-i3 operator's 08-e result from the imm26-sfG2 recipe v2 run, the NC20 install boundary on 4080-i3, and Shay's decisions on the 24-c region_name fix and the current-town guard (area_goal.php:36-37)",
+   "why": "26-f and 24-c cannot be dispatched until those prerequisites exist, and the open design calls belong to Shay."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding show --stat b38bd383",
+  "powershell -NoProfile -Command Get-Content C:/KenshiTestRuns/agents/imm26-sfE3.status",
+  "powershell -NoProfile -Command Get-Content C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md -TotalCount 40"
+ ]
+}

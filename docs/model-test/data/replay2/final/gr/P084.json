@@ -1,0 +1,25 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "HANDOFF/TESTS table: rows 26-dx and 26-e = SETUP-FAIL (5090-i3, NC16 96C6FDDF, no Hunt proposal, cause NC17 not installed); unblock = run on 5090-i5 right after 26-c with rd_26dx / rd_26e via reload-run.sh once NC17 (d0221bf, SHA 6DDCA648) is installed and 26-a has PASSed",
+   "why": "the event is a SETUP-FAIL report for rows whose only unblock is the NC17 install on 5090-i5, and the handoff TODO already says SETUP-FAIL rows must be marked in the table"
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cat >> C:\\KenshiTestRuns\\inbox\\operators\\5090-i3-setupfail-ack.txt (text: 26-dx and 26-e SETUP-FAIL received; no separate recipe on 5090-i3; both rows run on 5090-i5 after 26-c once NC17 is installed and 26-a PASSes; do not retry them; release C:\\KenshiTestRuns\\claims\\26-dx and C:\\KenshiTestRuns\\claims\\26-e if you hold them; take the next runnable row from inbox\\operators\\lane-plan-20261016.txt, hardening rows first)",
+   "why": "the operator asked for an unblock plan on lane 5090-i3, and the only unblock is on 5090-i5, so 5090-i3 must release the claims and take the next runnable row at once (Shay order: stuck row -> SETUP-FAIL after one attempt, take the next runnable row)"
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "this batch woke the event waker, and work is still in flight on both 5090 lanes and the 4080 lanes, so a new waker must run"
+  }
+ ],
+ "checks": [
+  "dir C:\\KenshiTestRuns\\claims  (which claims 26-dx and 26-e currently hold on 5090-i3)",
+  "grep -n \"26-dx\\|26-e\\|next\" C:\\KenshiTestRuns\\inbox\\operators\\lane-plan-20261016.txt  (confirm the next runnable row for 5090-i3)",
+  "grep -n \"26-a\\|NC17\\|6DDCA648\" C:\\KenshiTestRuns\\inbox\\operators\\5090-i5-ready-nc17.txt  (confirm NC17 is installed on 5090-i5 and whether 26-a has PASSed before 26-dx and 26-e run)"
+ ]
+}

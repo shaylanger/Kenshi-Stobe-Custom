@@ -1,0 +1,36 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding; mv C:/KenshiTestRuns/inbox/coordinator/*.msg C:/KenshiTestRuns/inbox/coordinator/delivered/ 2>/dev/null; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP (background Bash task)",
+   "why": "The event-wait task that delivered the batch2d DONE event has exited, and batch2d's inflight marker is going away while ctxop3, i4op4 and install-nc-rest2b are still running, so a live waker is required first."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md: add a #7 line under Right now: batch2d DONE, batch2 fixes (20-a,15-a,far-NPC,14-a,19-a,24-a,24-b) in compose patch a299993 deployed to all 5 lane sites; reruns to queue: 06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a/b + travel rows >80u; 13-d RETURN_ITEM still open (batch2e); rowtools2 to spawn; also update the imm26 program ledger",
+   "why": "The coordinator updates Right now and the ledger after every agent report, and this report changes state."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Fresh agent imm26-compose-fix-batch2e, [case:patch]: 13-d RETURN_ITEM baseline fix in negotiation_engine.php (~line 1005), on top of compose patch a299993, patch both live tree and ss-merge per server rules; brief from C:\\KenshiTestRuns\\agents\\briefs\\ plus COMMON.md; keeps its own status via agent-status.ps1; launch via & C:\\KenshiModding\\tools\\automation\\spawn-wp-session.ps1 imm26-compose-fix-batch2e generate <brief file> -Program imm26 -Wp compose (PowerShell, not Git Bash, so backslashes survive)",
+   "why": "batch2d did not include 13-d RETURN_ITEM, which the previous handoff said needs batch2d or a batch2e."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "& C:\\KenshiModding\\tools\\automation\\spawn-wp-session.ps1 imm26-rowtools2 generate C:\\KenshiTestRuns\\agents\\briefs\\imm26-rowtools2.md -Program imm26 -Wp rowtools (PowerShell; the -Wp name is a guess, check program-ledger first)",
+   "why": "imm26-rowtools2 was queued waiting for a host slot (max 4 live) and batch2d finishing frees one."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "Dry run of the detached run-batch.sh rerun list (06-c 08-a 12-* 14-a 15-a 16-c 19-a 20-a 24-a 24-b plus travel rows >80u) split into a 5090 job and a 4080 job; launch for real only on lanes that are not in use, and touch C:/KenshiTestRuns/inflight/<batch name chosen at launch> when it starts",
+   "why": "batch2d asked for exactly these reruns and the two rigs run as parallel jobs, but lanes i3/i4/i5 on the 5090 and i3/i4 on the 4080 are currently held by ctxop3, i4op4 and install-nc-rest2b, so the real start must wait for a free lane; the batch name is not in the input."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1",
+  "type C:\\KenshiTestRuns\\agents\\imm26-compose-fix-batch2d.status",
+  "ls C:/KenshiTestRuns/inbox/coordinator",
+  "ls C:/KenshiTestRuns/agents/briefs"
+ ]
+}

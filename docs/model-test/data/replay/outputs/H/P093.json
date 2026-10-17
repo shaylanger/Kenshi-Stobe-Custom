@@ -1,0 +1,18 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Read-only confirmed: from now on this session only reads files. No edits, writes, commits, spawns, runs or rig actions from me. Running agents and the waker keep their current state; tell me if you also want rigs or agents stopped.",
+   "why": "Shay's batch order says read files only and make no writes or modifications, so I acknowledge the scope and change nothing."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Next instruction from Shay; no action on the event-wait waker or on running agents",
+   "why": "Nothing in this event needs a mutating action, and a read-only order does not change work already in flight."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding status --short (read-only, confirms this session has left no uncommitted writes)"
+ ]
+}

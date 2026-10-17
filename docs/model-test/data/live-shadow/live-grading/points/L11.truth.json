@@ -1,0 +1,20 @@
+{
+ "id": "L11",
+ "batch_id": 11,
+ "class": "relay/hand-back",
+ "window": [
+  "2026-10-16T22:04:57.162Z",
+  "2026-10-16T22:07:18.319Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": false,
+ "real_action_count": 4,
+ "action_types": [
+  "run",
+  "spawn",
+  "spawn"
+ ]
+}

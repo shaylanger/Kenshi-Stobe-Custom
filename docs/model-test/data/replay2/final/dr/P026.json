@@ -1,0 +1,46 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Shay: I have not yet confirmed that all five lanes are running tests. I am checking each lane now (lane-idle.ps1 and each operator status file). Any lane without a row in progress gets its operator told to start the next row at once, and you get one line per lane with the reason it was idle. Last known: 5090 i3 mid-rows, last status 17:41 (23-a PASS); 4080 i3 on NC3 with a relaunch and NC5 install pending, last status 17:36; 5090 i5 operator imm26-5090-ctxop322 first posted at 17:47.",
+   "why": "Shay asked directly whether every lane is running, so he gets an immediate answer while the lane checks run."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-op2g: Coordinator to 4080 i3 operator: Shay asks whether all lanes are running tests. Your last status was 17:36 on NC3. If no row is running on your lane now, relaunch on the installed build (NC5, SHA 25252267D3C07BE39E176685EE4CEEBF5A3933DCC12BF8B9204FB7F6B9A380B4, if the install check passes, otherwise the build you have) and start the next row at once. Do not wait for a newer build. Reply with one line: the row now running, or the exact blocker and when it started.",
+   "why": "4080 i3 was the lane furthest from a running row at its last status (relaunch and install pending), so it gets the restart instruction first."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-ctxop322: Coordinator to 5090 i5 operator: Shay asks whether all lanes are running tests. Your first status was 17:47. If no row is running on your lane now, start the next row at once on the installed build. Reply with one line: the row now running, or the exact blocker and when it started.",
+   "why": "The 5090 i5 operator only reported at 17:47 and the lane may not have a row running yet."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to aa31cd5b99a665d77 (imm26-5090-i3op3): Coordinator: Shay asks whether all lanes are running tests. Reply with one line now: the row running on your lane and its start time, or the exact blocker and when it started. If your lane is idle, start the next row at once (23-b rerun per my earlier message).",
+   "why": "5090 i3 had no confirmed running row since 23-a PASS; its agent id appears in the input."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i4op3: Coordinator: Shay asks whether all lanes are running tests. Reply with one line now: the row running on your lane and its start time, or the exact blocker and when it started. If your lane is idle, start the next row at once.",
+   "why": "5090 i4 had no confirmed running row in the preceding conversation."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op5 (hidden agent-host; if undeliverable, rely on lane-idle.ps1 output): Coordinator: Shay asks whether all lanes are running tests. Reply with one line now: the row running on your lane and its start time, or the exact blocker and when it started. If your lane is idle, start the next row at once.",
+   "why": "4080 i4 had no confirmed running row; its operator is a hidden agent-host so delivery may fail."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the one-line operator replies and the lane-idle.ps1 result, then send Shay one line per lane with the reason any lane was idle.",
+   "why": "Shay asked to be told why any lane was not running; this needs the replies before the follow-up."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/lane-idle.ps1",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "tail -5 C:/KenshiTestRuns/agents/imm26-4080-op2g.status",
+  "tail -5 C:/KenshiTestRuns/agents/imm26-5090-ctxop322.status"
+ ]
+}

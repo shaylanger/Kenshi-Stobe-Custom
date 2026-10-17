@@ -1,0 +1,22 @@
+{
+ "event_class": "other",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-wait.ps1 -Session 2a0cfe9b-63fb-4663-b97a-4a00df3b4e02",
+   "why": "The tail-wait task bw7rbn83m exited 127 (command not launched), so the tail session has no armed wake-up while its two owned agents imm26-5090-i5-op9c and imm26-4080-i4op10 run; re-arm it with forward slashes to avoid the backslash path that likely failed."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the re-armed tail-wait task to write C:/KenshiTestRuns/tail/2a0cfe9b-63fb-4663-b97a-4a00df3b4e02.wait with a heartbeat",
+   "why": "Confirms the new waker is alive before the tail ends its turn, and the Stop hook can see it."
+  }
+ ],
+ "checks": [
+  "cat C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2a0cfe9b-63fb-4663-b97a-4a00df3b4e02/tasks/bw7rbn83m.output",
+  "ls C:/KenshiTestRuns/tail/",
+  "tail -n 3 C:/KenshiTestRuns/agents/imm26-5090-i5-op9c.status",
+  "tail -n 3 C:/KenshiTestRuns/agents/imm26-4080-i4op10.status",
+  "which powershell"
+ ]
+}

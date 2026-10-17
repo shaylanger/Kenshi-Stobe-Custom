@@ -1,0 +1,13 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action: the waker event 'EVENT STATUS imm26-pi15 DONE: task: PI-15' is the status-file echo of a result already processed in this session (hand-back received, PI-15 built and committed 34c156c, recorded done in process-ideas.ps1, imm26-pi1920 already spawned on lane-brief.ps1, HANDOFF #9 20:50 line already lists 15 as done).",
+   "why": "Duplicate DONE notice for an agent whose report was already handled and whose follow-on work (imm26-pi1920) is already running; nothing new to ack, spawn or edit."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

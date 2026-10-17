@@ -1,0 +1,39 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Create C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\memory\\rumor-hook-in-director-turns.md (frontmatter name/description/metadata type feedback) and add a one-line index entry to MEMORY.md: Shay 2026-10-15 chose option A (yes) for 'should the rumor hook also run in director-mode turns (needed for row 03-b)'. Why: almost every busy-scene chat is a director scene (lifelike initiative) and the share hook stobeKnowledgeShareFromSpeech only ran on mode=autochat. How to apply: build the server change so director scenes also run the rumor-share hook; do not touch the native bored timer.",
+   "why": "Shay's decision must persist across coordinator handoffs as a standing rule, and it is a decision (not a what-if question) because he answered the explicit A/B question."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-wpRumor, description '[case:generate] imm26-wpRumor director-turn rumor hook'. Brief: You are imm26-wpRumor. Shay decided (2026-10-15) option A: the server rumor-share hook (stobeKnowledgeShareFromSpeech) must also run on director-mode turns (mode=director from TriggerBoredEvent lifelike initiative), not only mode=autochat, so row 03-b can pass. Read C:\\KenshiTestRuns\\agents\\out\\imm26-inv-03b\\latest.md (the investigation: sections 0 and 1 name the exact code paths) and the NPC immersion handoff testing/NPC_IMMERSION_26_HANDOFF.md plus row 03-b in testing/NPC_IMMERSION_26_TESTS.md. Server-only, offline, WP size <= 120k tokens: use bash tools/automation/codemap.sh maps (grep -n funcname map, sed -n a,bp file; never read a file > 60 KB whole) to find the director-turn path and where stobeKnowledgeShareFromSpeech is called on the autochat path; add the same call (same witness/hearsay rules, same guards, no duplicate share per scene) to the director path. Work in your own work dir under /root/imm26 (never the live tree or Shay's DB), write the change as an anchor-asserting patch script in pending-fixes/imm26-wpRumor, php -l every touched file, add an offline test (director scene with a witness NPC produces hearsay for bystander B attributed to the witness; autochat behaviour unchanged), run the relevant offline suite (note: negotiation_engine_regression 'cap tiers @topup/@exact' fails pre-existing in a pristine tree, not yours). Do not touch native code, rowdefs.sh/tripdefs.sh/rowcheck.py. Checkpoint every milestone, keep C:\\KenshiTestRuns\\agents\\imm26-wpRumor.status current via tools/automation/agent-status.ps1, hand off as STOPPED-CONTEXT before 150k. Report: patch path, test results, the exact row-03-b run recipe. Do not compose or deploy; the coordinator does that.",
+   "why": "Option A is a server-only offline change that unblocks row 03-b; it is one small work package so it gets one fresh generator agent, no cascade or verifier."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "touch C:\\KenshiTestRuns\\inflight\\imm26-wpRumor (and register the work package in the imm26 program ledger via program-ledger.ps1 with owner imm26-wpRumor)",
+   "why": "A running agent must have an inflight marker and a ledger entry so the Stop hook and supervisor see in-flight work."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md Right now: add line '#10 SHAY DECISION: rumor hook also runs in director-mode turns (option A). imm26-wpRumor RUNNING (server patch, offline). After DONE: compose + deploy to the lanes that are allowed (4080 only while the 5090 hold stands), then run row 03-b.' Then commit and push with message 'HANDOFF: rumor hook in director turns decided (A), wpRumor spawned' plus the Co-Authored-By line.",
+   "why": "HANDOFF 'Right now' must be updated the moment an agent starts and a decision is made."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Got it, option A. The rumor hook will also run in director scenes. I started imm26-wpRumor (server-only, offline) and row 03-b stays open until it is composed and deployed and the row passes. Still open for you: native WP-N1 resume probe, WP-N2 displayed-proposal carry-over, durable item id, and PI-25/27/28 status (building).",
+   "why": "Short acknowledgement for Shay with the remaining open items, no question that blocks."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-wpRumor DONE event from the event-wait.sh stream (waker stays armed), alongside fix10a, rowtools4, reloadrows-A2/B2, pi25, pi28 and the two 4080 operators.",
+   "why": "Next step (compose + deploy, then row 03-b) depends on the patch report."
+  }
+ ],
+ "checks": [
+  "grep -n stobeKnowledgeShareFromSpeech /root/imm26/codemap/*  (WSL, via wsl.exe bash -s) to confirm the autochat call site and the director path before writing the brief",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1  (confirm no existing wpRumor-like agent is running, per PI-26)"
+ ]
+}

@@ -1,0 +1,32 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Shay: your message 'size 3 and do it if it isnt too large' does not name the item. Which item is size 3? Reply with its name or number and I will do it if it is small enough. Meanwhile I am finishing the 5090 stop you ordered: the lane php backends on 127.0.0.1:18087 and 127.0.0.1:18088 are still running after the Kenshi stop.",
+   "why": "The message is ambiguous and no size-3 item is named in the handoff, so Shay is asked once and the coordinator keeps working on the open 5090 stop order."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash /mnt/c/KenshiModding/tools/automation/lane-backend.sh stop imm26-5090-i4",
+   "why": "Shay ordered all 5090 testing stopped and the lane php backend on 18087 (/tmp/stobe-imm26-5090-i4) is still running; the lane id is inferred from that path, so the status check below must confirm it first."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash /mnt/c/KenshiModding/tools/automation/lane-backend.sh stop imm26-5090-i5",
+   "why": "Same 5090 stop order: the lane php backend on 18088 (/tmp/stobe-imm26-5090-i5) is still running after the Kenshi stop; the lane id is inferred from that path."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for Shay's reply on which item is size 3; re-check the 5090 php backends and Kenshi processes after the two stop runs",
+   "why": "The size-3 item is unknown until Shay answers, and the stop result must be confirmed before anything else runs on the 5090."
+  }
+ ],
+ "checks": [
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash /mnt/c/KenshiModding/tools/automation/lane-backend.sh status imm26-5090-i4",
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash /mnt/c/KenshiModding/tools/automation/lane-backend.sh status imm26-5090-i5",
+  "wsl.exe -d DwemerAI4Skyrim3 -u root -- bash -c \"ps -eo pid,etime,args | grep -E 'php -S 127.0.0.1:1808[0-9]' | grep -v grep | cut -c1-200\"",
+  "powershell -NoProfile -Command \"Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select Id,Path | Format-Table -Auto | Out-String\"",
+  "ls C:\\KenshiTestRuns\\inflight | grep -i 5090"
+ ]
+}

@@ -1,0 +1,22 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-abandon.ps1 imm26-5090-i3op22 \"5090-i3 lane is PARKED on purpose (HANDOFF #17 13:12: no runnable row left, 22-b/25-b native gaps, 08-d needs the sfTrav deterministic Travel inject); respawn an i3 operator only when a row script exists. Superseded by NC25 testing on 4080-i3 (op23).\"",
+   "why": "A STOPPED-CONTEXT agent with no successor blocks the Stop hook, and the handoff says the 5090-i3 lane was parked deliberately, so a respawn would burn tokens on a lane with no runnable rows."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Respawn a fresh 5090-i3 operator (lane-brief.ps1 5090-i3 -Name imm26-5090-i3op23 -Predecessor imm26-5090-i3op22) only when imm26-sfTrav or imm26-fix26f11b lands a runnable row script, or NC25 passes on 4080-i3 and is rolled to the 5090 lanes. Until then wait for imm26-sfTrav, imm26-fix26f11b and imm26-4080-i3op23 results via the waker.",
+   "why": "No runnable work exists for 5090-i3 now, and the waker is already running for the in-flight agents."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 list -Live",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i3op22.status",
+  "type C:\\KenshiTestRuns\\lanes.held",
+  "ls C:\\KenshiTestRuns\\agents | findstr 5090-i3op2",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list"
+ ]
+}

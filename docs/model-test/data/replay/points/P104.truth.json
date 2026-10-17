@@ -1,0 +1,31 @@
+{
+ "id": "P104",
+ "session": "245d8ad7",
+ "ts": "2026-10-16T18:33:07.791Z",
+ "class": "setup-fail",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=a10e0b733c56138df: pilotC scope change (Shay, via previous coordinator): REDO the audit for 2026-10-14 00:00 (local) to now ONLY; earlier data did not use the current setup (often Opus coordinator) and must be ignored. Add --since/--until (local datetime) if missing and make the default report this window. Required in the new ledger.md/.csv/docs copy: (a) categories listed separately: lane operators (all imm26-*op* agents, plus -hk pilot operators), coordinators (main sessions), investigators/classifiers/fixers/recipe/native-builder agents each on their own line; (b) for lane operators: Sonnet-high actual cost per operator, per operator-hour (wall time first to last message), per row where countable (count status-mark.sh / mark-row calls or 'RESULT ... PASS|FAIL' marks in the transcript; blank if not derivable), plus the split of cost by cache read / cache write / output; (c) Haiku-high what-if for operators with Shay's table ratio AND a sensitivity: Haiku needs 1.5x and 2x the turns (turn growth also raises cache-read volume roughly in proportion; state the assumption); keep the Haiku over-100k prompt band rule; (d) unpriced claude-fable-5-1 messages: find a price (docs/MODEL_ROUTING.md or prices.json; if none is known list them in a separate table for the window with token counts and an Opus-rate bound); (e) recheck 3 totals by independent awk/python (flag > 2%). Keep the earlier --pilot-compare mode. Final report to include: window total, operator share, Haiku what-if numbers incl. 1.5x/2x, and one sentence on what it implies for the pilot (Haiku operator saves X USD per operator-hour only if turns stay below Y x).",
+   "why": ""
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=ac12b657f0aab5448: pilotA scope addition (Shay, via previous coordinator): the pilot audits COST, TIME, QUALITY and FALSE INFORMATION. (1) Shadow ledger C:\\KenshiTestRuns\\pilot\\haiku-i4\\verdicts.csv columns become: row,lane,model,start,end,wall_s,tokens,cost,operator_verdict,checker_result,agree,false_claims_n,notes (tokens/cost/false_claims_n are filled later by the audit tool; pilot-mark.sh fills row,lane,model,start,end,wall_s,operator_verdict,checker_result,agree; start = the first pilot-mark/claim-less 'row started' note: add `pilot-mark.sh <agent> <ROW> START` and have the pilot brief tell the operator to call it before each row). (2) Add tools/automation/pilot-audit.py (offline, read-only): inputs the pilot agent name (and optionally the paired Sonnet agent), reads verdicts.csv, the status files/handoff/final report, the evidence dirs, and (TIME) wall seconds per row, rows/hour, idle gaps between rows, time to first row after start; (QUALITY) agreement of operator verdict with the checker RESULT line, rows completed, escalations; (FALSE INFO) extract checkable claims from the pilot's status lines, relays and final report (paths mentioned must exist, numbers like SHA/row ids/counts must appear in the cited evidence file, 'PASS' claims need a RESULT PASS line) and count false/unverifiable claims per row and per report, applying the identical counting to the paired Sonnet agent's status lines for the same rows; (COST) call cost-audit.py (pilotC extends it: --pilot-compare A B) for tokens/usd per agent. Output a side-by-side markdown summary C:\\KenshiTestRuns\\pilot\\haiku-i4\\SUMMARY.md. Include a selftest with fixtures. Keep this a separate milestone AFTER the lane prep + pilot-mark.sh are done and reported (the Haiku operator should be able to start before pilot-audit.py exists): report once the lane prep is done, then continue with the audit tool and report again.",
+   "why": ""
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "to=uds:\\\\.\\pipe\\LOCAL\\cc-msg-bdae596d58e6afcdfa0a54295c30a827: Coordinator #16: both orders assigned. (1) pilotC (already extending cost-audit.py for a lane-operator line) now redoes the audit for 14 Oct 00:00 to now only, with separate categories (operators / coordinators / investigators-fixers-recipes), per-operator, per-hour, per-row cost, cache read/write/output split, Haiku what-if at table ratio plus 1.5x/2x turns, fable messages priced or listed separately, 3 totals rechecked; I recheck a few myself and then report to you/Shay. (2) pilotA builds the pilot tooling with the shadow ledger columns row,lane,model,start,end,wall_s,tokens,cost,operator_verdict,checker_result,agree,false_claims_n,notes and a separate pilot-audit.py (cost, time, quality, false-info counting identical for the paired Sonnet lane) producing SUMMARY.md; the Haiku operator hk1 starts as soon as lane prep + pilot-mark.sh exist.",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 2823
+}

@@ -1,0 +1,26 @@
+{
+ "id": "P041",
+ "session": "6cd72ef5",
+ "ts": "2026-10-16T01:16:02.799Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "to=ae381b64fa7651050: Extra notes from the tail relay for imm26-5090-i3-hard2: Cind [Hungry Bandit] was NOT FOUND after the last 3 loads (harness says 'no game loaded (phase=loading)' right after 'game load signalled'): wait ~40 s after a load before lane-setup, or load twice. Load only save kah-imm26-5090-ready (delete the hxA/B/C copies, they behave differently). Run rowtools/trip-run.sh with KAH_PF_ISOLATION=0 (lane windows overlap on DISPLAY2, preexisting). Driver: source C:/KenshiTestRuns/imm26-5090-hx/hx.sh. No reply needed.",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:\\KenshiModding; powershell -NoProfile -File tools\\automation\\agent-status.ps1 imm26-5090-i3-hard2 RUNNING \"5090-i3 operator hard rows\" \"starting\" \"agents\\out\\imm26-5090-i3-hard2\" \"reload check\" | Select-Object -Last 1",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 1156
+}

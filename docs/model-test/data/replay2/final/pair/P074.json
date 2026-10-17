@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background; never a bare &)",
+   "why": "This subagent hand-back woke the coordinator, and the waker must be re-armed for the Stop hook and the lanes."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiModding/testing/HANDOFF.md 'Right now' plus the imm26 program ledger under C:/KenshiTestRuns/programs/: record imm26-u3-nc15 DONE (NC15 built and pushed, commits af010bd and e8afd0f on origin/main, DLL C:/KenshiModding/pending-fixes/npc-immersion-26/NC15/Stobe.dll SHA256 9EABD486FBF8F996D2153DDA5FD8FE057DBC55AF93D1DCAA433A046841CE5748). Not installed and not run in game; row 14-c stays SETUP-FAIL until the live run shows accepted>0 and reasons=ok_sid_keyed:N. Next open item after that: a hostile member Cind can see inside the camp borders (ActivityRuntimeBindings.cpp:629-631).",
+   "why": "The ledger and Right now are updated after every agent report, and this report finishes a work package."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the 5090-i5 chain (op9g, then WP-5 26-b 26-c 22-a) to end. Then spawn one i5 install agent with [case:generate] that stops the game at that clean boundary, copies NC15 Stobe.dll to the lane, runs lane-setup.sh 5090 5 kah-imm26-i5 --clear-faction none, checks the SHA256, relaunches and runs row 14-c. Do not message the running operators.",
+   "why": "Kenshi cannot be closed while op9g and WP-5 run, and running arms take no coordinator input, so the install must follow their end."
+  }
+ ],
+ "checks": [
+  "cat C:/KenshiTestRuns/agents/imm26-u3-nc15.status",
+  "sha256sum C:/KenshiModding/pending-fixes/npc-immersion-26/NC15/Stobe.dll",
+  "git -C C:/KenshiTestRuns/imm26-nc15 branch -r --contains e8afd0f",
+  "ls C:/KenshiTestRuns/inflight/"
+ ]
+}

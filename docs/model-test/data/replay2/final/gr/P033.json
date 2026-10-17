@@ -1,0 +1,20 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh | grep -v SWEEP (run_in_background: true; restart it each time it wakes the coordinator)",
+   "why": "Real work is in flight (imm26-pi06-09, imm26-pi07-08, imm26-pi10, imm26-pi12, imm26-fix-batch4 are RUNNING and Kenshi is running) and no waker is running, so the Stop guard correctly blocks the turn end."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+   "why": "Confirm which inflight markers belong to live agents before deciding whether any stale marker needs release; the hook also lists markers (e.g. imm26-setupfail-scope, imm26-compose-fix-batch2c) that are not among the five agents spawned in this session."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "dir C:\\KenshiTestRuns\\inflight",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-rollcall.ps1"
+ ]
+}

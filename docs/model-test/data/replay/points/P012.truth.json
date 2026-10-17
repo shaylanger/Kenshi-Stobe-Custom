@@ -1,0 +1,26 @@
+{
+ "id": "P012",
+ "session": "322d19f5",
+ "ts": "2026-10-15T21:07:24.361Z",
+ "class": "other",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cat /c/KenshiTestRuns/inbox/coordinator/*lanes-4080*.txt 2>/dev/null | cut -c1-2500; ls /c/KenshiTestRuns/inbox/coordinator/ | tail -5",
+  "ls /c/KenshiTestRuns/inbox/coordinator/delivered | tail -3; cat /c/KenshiTestRuns/inbox/coordinator/delivered/*lanes-4080.txt | cut -c1-2500"
+ ],
+ "narration": [
+  "The 4080 now has two lanes, and DeepInfra works there: a chat reply takes 7\u20138 s, where local Qwen took 40\u201370 s.\n\n- **Lane i4:** it's up on the 4080 (Kenshi pid 348, save `kah-imm26-4080-i4`, backend port 18085, its own database).\n- **DeepInfra applied:** to the databases of both i3 and i4, and the check passed (12 rows each). I haven't re-checked this myself.\n- **Row operator on i3:** no breakage seen.\n- **Local llama:** stopped on the 4080, which freed about 3.6 GB RAM and 2.7 GB VRAM.\n\nThe 408...[truncated 361 chars]"
+ ],
+ "event_text_chars": 745
+}

@@ -1,0 +1,24 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-pi06-09, imm26-pi07-08, imm26-pi10 and imm26-pi12 (one message each, same text): Shay order 2026-10-15: remove a PI entry from the list as soon as it is built. When your item is finished and its selftest passes, delete your PI entry (PI-06/PI-09, PI-07/PI-08, PI-10 or PI-12) from docs/PROCESS_IDEAS.md in the same commit as the code (git keeps the history), and name the removed ids in your final handback line. Do not remove any other entry, and do not touch PI-11.",
+   "why": "The four tooling agents are running now and each one knows exactly when its own item is done, so they can remove the entry in the same commit instead of leaving a stale entry."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/AGENT_PROMPTS.md step 2b (process ideas review) and docs/PROCESS_IDEAS.md header: add the standing rule 'when an idea is built and its selftest passes, delete its entry from docs/PROCESS_IDEAS.md in the same commit; ideas answered no are also deleted; only open or in-progress ideas stay listed'. If process-ideas.ps1 has no close/remove subcommand, note that its 'answer' step only records and a separate edit is needed (subcommand name unknown, check with -Help first).",
+   "why": "The order should hold at every later handoff, not only for this batch, and the list limit of 15 active items depends on finished items leaving it."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Understood: from now on a PI entry is deleted from docs/PROCESS_IDEAS.md as soon as it is built and its selftest passes. The four agents building PI-06/09, PI-07/08, PI-10 and PI-12 are running and will remove their entries in their own commits. PI-11 stays open until you decide on it.",
+   "why": "Shay should get a short confirmation of the order and of what is still on the list."
+  }
+ ],
+ "checks": [
+  "grep -n -E '^#+ *PI-|^- *PI-|^\\| *PI-' C:/KenshiModding/docs/PROCESS_IDEAS.md | cut -c1-120",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\process-ideas.ps1 -Help"
+ ]
+}

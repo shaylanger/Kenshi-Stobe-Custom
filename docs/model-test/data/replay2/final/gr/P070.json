@@ -1,0 +1,26 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background task)",
+   "why": "The waker exited with this LANE IDLE event, so it must be re-armed before anything else so no event is missed."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-5090-i5-op9d, summary 'lane idle 6 min, report status': Coordinator check: the 5090-i5 lane shows no game activity for 6.1 min (newest activity was status). Reply in one line with your current row and step and the command you are running now. If you are still reading the brief, start 26-a now per the brief (teleport Cind, wait about 10 s for onmesh, offer, accept within 3 s, read ACTIVITY_END_DIAG/VERIFY_DIAG). Update your status file now.",
+   "why": "The operator was spawned about 6 minutes earlier and may still be reading its brief, so the coordinator asks what it is doing per the lane-idle rule before deciding it is stuck."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for op9d's reply or its next status line; if the lane is still idle about 10 min after the spawn, respawn a fresh operator (op9d2) from C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.brief.md after checking C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.status for a successor.",
+   "why": "The alert is not closed until the lane is active again; the lane-idle condition clears by itself, so there is nothing to ack yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 -NoMemory",
+  "cat C:/KenshiTestRuns/agents/imm26-5090-i5-op9d.status | cut -c1-600",
+  "ls -t C:/KenshiTestRuns/inbox/coordinator | head -3",
+  "date"
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5 (run in background)",
+   "why": "The waker just exited with the digest and must be restarted each time it wakes, because five agents are still RUNNING and inflight work exists."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait up to about 10 minutes from the stop order for claude-md-reviewer, imm26-4080-op2, imm26-wpA3, imm26-wpB3 and program-ledger to report STOPPED-CONTEXT or DONE. imm26-nativecomp, imm26-compose-ci and imm26-5090-op2 have already stopped, as ordered.",
+   "why": "The nativecomp STOPPED-CONTEXT is the expected result of the coordinator's own handoff stop order, so it needs no action now. The context meter forbids starting anything new, and the successor coordinator respawns it fresh (nativecomp2 from agents\\imm26-nativecomp.handoff.md) via the respawn todo and session-start. I do not respawn it or abandon it."
+  }
+ ],
+ "checks": [
+  "cd C:/KenshiTestRuns/agents; for n in claude-md-reviewer imm26-4080-op2 imm26-nativecomp imm26-wpA3 imm26-wpB3 program-ledger; do sed -n 1p $n.status | cut -c1-90; done",
+  "ls C:/KenshiTestRuns/agents/imm26-nativecomp.handoff.md C:/KenshiTestRuns/respawn/imm26-nativecomp.todo"
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\process-ideas.ps1 list   (read the status of each entry in C:\\KenshiModding\\docs\\PROCESS_IDEAS.md and pick those Shay marked confirmed/yes; from HANDOFF the open ones are PI-29, PI-30, PI-31, PI-32; PI-26 hook version was declined and stays out)",
+   "why": "Shay's message 'lets do the confirmed PI items' does not name ids, so I resolve 'confirmed' from the PI ledger itself instead of asking, and never apply declined or unconfirmed ideas."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name pi-confirmed-1, [case:generate] Implement the Shay-confirmed process ideas from docs/PROCESS_IDEAS.md (candidates named in HANDOFF: PI-29 meter calls tail-close.ps1 at the tail limit [global hook, only if the ledger marks it confirmed], PI-30 size row-tool agents to <= 4 rows in lane-brief.ps1 / AGENT_PROMPTS.md, PI-31 no AGENT ORPHANED alert for in-session agents, PI-32 auto idle reason when spawning an operator). Do only the entries the ledger marks confirmed, max 4 items; never PI-26 hook (declined) and never anything that weakens a timeout/stall/idle/dead-agent catch. For each: edit the tool or doc, run its selftest, commit one item per commit with identity shaylanger, push, mark the PI done via process-ideas.ps1, and checkpoint the status file with agent-status.ps1. Do not touch running lane scripts or batches (no mid-run edits of any script a queued or running list uses). Report one line per PI id: done/skipped plus commit hash.",
+   "why": "'Build it' means implement now; the confirmed PI items are small tooling changes that fit one work package of 4 items or fewer, and the 5090/4080 lane agents keep running untouched."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Doing the confirmed PI items now (one agent, pi-confirmed-1, one commit per item, selftests run, nothing that weakens a stall/idle/dead-agent catch, the declined PI-26 hook stays out). I will report each PI id with its commit in the next summary. Lanes are unchanged: op9g (5090-i5) and i4op10 (4080) are still running.",
+   "why": "Shay gets a short acknowledgement via his relay session without blocking the coordinator."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the event-wait.sh waker running (re-arm on wake) and wait for the pi-confirmed-1 completion notification plus the op9g and i4op10 reports.",
+   "why": "Agents are in flight, so a waker must stay armed and results arrive by notification."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\process-ideas.ps1 list",
+  "grep -n -i -E \"confirm|PI-29|PI-30|PI-31|PI-32|PI-26\" C:\\KenshiModding\\docs\\PROCESS_IDEAS.md",
+  "git -C C:\\KenshiModding status --short tools/automation docs/PROCESS_IDEAS.md"
+ ]
+}

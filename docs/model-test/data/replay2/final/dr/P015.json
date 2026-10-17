@@ -1,0 +1,37 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash, run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The background event-wait task exited on this event, so nothing is watching for events until it is restarted."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-compose2 DONE (composed tree + compose.patch: 93 pass, only the 5 known fails, no new fails), the next steps, and the report path (the path in the message is malformed, so the corrected agents/out path is unconfirmed until checked); also update the imm26 program ledger (its file name is not in this batch)",
+   "why": "Standing rule: HANDOFF and the ledger are updated after every agent report, not only at the context limit."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git add testing/HANDOFF.md; git commit -m 'HANDOFF: imm26-compose2 DONE (93 pass, 5 known fails, no new)' with repo identity shaylanger2@gmail.com and the Co-Authored-By line; git push origin HEAD:main",
+   "why": "One commit per step with a push right after, so the handoff state survives a context stop."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "install the composed server on the imm26 lane private sites only (4080 lanes i3/i4, 5090 lanes i3/i4/i5) from pending-fixes/npc-immersion-26/compose (compose.patch; install steps in NOTES.md): dry run, then apply, then a backend health check on each lane; never the live install, server tree or DB",
+   "why": "Compose passed with no new fails and the handoff's next step is the composed build on the lanes before the failing rows rerun; the exact apply command is not in this batch, so NOTES.md is the source."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "after the install passes: fresh agents imm26-4080-op2c2 (4080 i3: rows 13-a, 13-d, 13-e, 12-a/b/c, 12-d-75b, 06-e, 08), imm26-4080-i4op2 (4080 i4: add STOBE_NEG_STOBE_LOG to /tmp/stobe-standalone4080-i4/env.sh and restart php first, then 03-c, 10-a, 05-a, 11-a/c), imm26-5090-i3op2 (5090 i3: rows 21, 23 and travel rows 19-c, 20-a), imm26-5090-i4op2 (5090 i4: rows 18-a, 18-c, 15-a, 15-b, 21-a); each brief points at its dead predecessor's status and handoff file and says rerun the FAIL rows on the composed build with real game state only; [case:] tag per tools/automation/model-policy.json; start the 5090 operators only if no current Shay order holds new 5090 sessions",
+   "why": "The four dead row operators' FAILs are on the old code, so fresh operators rerun them only after the composed build is on the lanes, and travel rows wait for the travel accept fix if it is not in that build."
+  }
+ ],
+ "checks": [
+  "cat /c/KenshiTestRuns/agents/imm26-compose2.status",
+  "cat /c/KenshiTestRuns/agents/out/imm26-compose2/latest.md | head -60",
+  "ls /c/KenshiModding/pending-fixes/npc-immersion-26/compose",
+  "ls /c/KenshiTestRuns/inflight",
+  "git -C /c/KenshiModding status --short pending-fixes/npc-immersion-26"
+ ]
+}

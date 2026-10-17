@@ -1,0 +1,26 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md: in Right now record that imm26-wk1 is DONE (tail 16 relay: waker digest candidate tools/automation/event-wait.sh.candidate, commits d87eee78 and 92c2d38e pushed, selftests digest 42/42, batch 26/26, filter 13/13, EW_DIGEST=1 default, DEAD/KILLED/STALL/ORPHANED/no-successor/questions/LANE IDLE/HEALTH still wake, not yet exercised live with real lane-idle/health wakes, event-wait.sh not swapped). Also update the wk1 entry in the program ledger (C:\\KenshiTestRuns\\programs\\<name>.json via program-ledger.ps1; program name not in this batch, look it up first).",
+   "why": "The coordinator updates HANDOFF and the ledger after every agent report, and wk1 finished."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "If a matching relay file exists in C:\\KenshiTestRuns\\inbox\\coordinator, run tail-ack.ps1 for it (filename and syntax per testing/AGENT_PROMPTS.md; not in this batch) and move it to inbox\\coordinator\\delivered\\. If it arrived only as the cross-session message, send the tail a short SendMessage 'ack wk1 result received, will swap candidate at next waker restart'.",
+   "why": "The tail session can only end once its relay is acked or delivered, and the draft left it hanging."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the current waker running. Do not copy event-wait.sh.candidate over event-wait.sh while it runs. At the next waker wake (the waker exits on each event, so no waker is running before the restart), diff event-wait.sh against event-wait.sh.candidate (event-wait.sh shows as modified in git status, so check nothing uncommitted is lost), then cp the candidate over it, run waker-stats.sh later, and restart the waker.",
+   "why": "The swap is safe only with no waker running, and the next waker exit is the natural moment. It is a tooling speed-up the coordinator can adopt, and the digest still wakes on every urgent class."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "C:\\KenshiTestRuns\\agents\\imm26-wk1.status (read the DONE line)",
+  "dir C:\\KenshiTestRuns\\inbox\\coordinator",
+  "git -C C:\\KenshiModding diff --stat tools/automation/event-wait.sh"
+ ]
+}

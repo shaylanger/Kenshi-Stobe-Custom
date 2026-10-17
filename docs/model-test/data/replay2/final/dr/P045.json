@@ -1,0 +1,13 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-wpC-b5 and imm26-5090-i5-op6 to report DONE/FAILED/STOPPED-CONTEXT (status files C:\\KenshiTestRuns\\agents\\imm26-wpC-b5.status and C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op6.status); tail session: no new spawn, no edits; on a result save the report, run tail-relay.ps1 + SendMessage to inbox C:\\KenshiTestRuns\\inbox\\coordinator, wait for the ack; message an agent only if silent 10 min (wpC-b5 last wrote 19:39, i5-op6 19:45, now about 19:46)",
+   "why": "The batch is only a repeat of the tail Stop-hook block; both agents are still RUNNING with no result, so there is nothing to relay or act on yet."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ $f=\\\"C:\\KenshiTestRuns\\agents\\$n.status\\\"; (Get-Item $f).LastWriteTime.ToString('HH:mm') + ' ' + (Get-Content $f -TotalCount 1) }\""
+ ]
+}

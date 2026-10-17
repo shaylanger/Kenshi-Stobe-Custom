@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "process-ideas/review-48b778a7-13d7-4f96-bc6b-30dba5670ae0-tail.json (tail closing review of the conversation since the handoff; location and format per testing/AGENT_PROMPTS.md)",
+   "why": "tail-close.ps1 refuses to close a tail session without this review file."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-5090-i3op21 \"STOPPED-CONTEXT, no scripted row left on 5090-i3; successor waits for coordinator row scripts (lane-brief.ps1 5090-i3 -Name <next> -Predecessor imm26-5090-i3op21)\"",
+   "why": "op21 is STOPPED-CONTEXT with no successor, which blocks the tail's Stop hook; its handoff says a successor is only useful once new row scripts exist, so the drop is deliberate and the lane goes to coordinator #16."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-close.ps1 48b778a7-13d7-4f96-bc6b-30dba5670ae0 (argument form per testing/AGENT_PROMPTS.md)",
+   "why": "tail-wait exited 0 and every relay (op9n, i3op21, i4op13, i3op21 of 4080, sfP, sfQ, sfR) is recorded as delivered, so the tail session can end after the review is written."
+  }
+ ],
+ "checks": [
+  "tail -c 600 C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/48b778a7-13d7-4f96-bc6b-30dba5670ae0/tasks/bvvvs3lly.output",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (read the TAIL and NO SUCCESSOR lines)",
+  "sed -n 1,6p /c/KenshiTestRuns/agents/imm26-5090-i3op21.status"
+ ]
+}

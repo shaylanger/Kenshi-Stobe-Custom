@@ -1,0 +1,37 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "NPC_IMMERSION_26_TESTS.md row IMM-08-e (4080-i3 op20): set Status to SETUP-FAIL. Find the Status cell index with awk first (03-cx had shifted cells). Evidence: 'test recipe/counter/fixture defect, not server: drawn_weapon reaction turn (req_6ad24e8b959bd, speaker Cind, 16:19:23 UTC) counted as a claim tick; rd_08e never re-quiets, re-sheathes or holds Cind across the 8 chunks; report C:/KenshiTestRuns/agents/out/imm26-sfG/latest.md'. Assertions unchanged.",
+   "why": "Shay's rule makes a stuck row SETUP-FAIL after one attempt, and sfG's root cause shows the FAIL measured a reaction turn, not a server result."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add '#14 10:36 CST: 08-e root cause (imm26-sfG): recipe/counter defect, not server; row SETUP-FAIL; fixer imm26-fix-08e stages pending-fixes/08e-recipe; 4080-i3 told to release claim 08-e (inbox 4080-i3-08e.txt)'. Program ledger in C:/KenshiTestRuns/programs/ (file name as printed by session-start.ps1): mark imm26-sfG DONE with output C:/KenshiTestRuns/agents/out/imm26-sfG/latest.md; add work package imm26-fix-08e, owner imm26-fix-08e, state RUNNING, checkpoint 08-e SETUP-FAIL, next: apply 08e-ready at the 4080-i3 boundary, then re-run 08-e once.",
+   "why": "HANDOFF is the live state file and the ledger must carry every agent report and root cause the moment it is known, not only at the context limit."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-fix-08e, subagent_type kenshi-generator, description '[case:generate] 08-e recipe, counter and checker fix'. Brief: 'Fix the 08-e test defect, not the server. Read C:/KenshiTestRuns/agents/out/imm26-sfG/latest.md first (root cause with line evidence). (1) rd_08e in testing/live-stobe-queue/imm26-assert/rowtools/reloaddefs_a.sh (about lines 233-262): at the start of each of the 8 chunks re-quiet strangers, re-sheathe Shay and hold Cind so no drawn-weapon reaction can start from the Hub patrol. (2) The tick counter must not count react= reaction turns as Cind-speaker claims, and cind_ticks_log must keep the full URI (it is cut at 260 chars). (3) The checker must name a reaction turn as the cause, not the server claim gate. Do NOT edit server code (bored.php), do NOT weaken any assertion, no server, DLL, install, Shay save or DB change, no game run. Do NOT edit reloaddefs_a.sh or any rowtools script in place: stage an anchor-asserting patch script in C:/KenshiModding/pending-fixes/08e-recipe (new files), dry-run it offline in WSL detached, and report the exact apply step. Write the operator note C:/KenshiTestRuns/inbox/operators/08e-ready.txt with the apply step for the next 4080-i3 row boundary. Report-only side check: logged chance 85 vs 100 in bored_chance.txt (not part of the fix). Status via tools/automation/agent-status.ps1 imm26-fix-08e, report via save-report.ps1, commit as shaylanger with item 08-e, push after the selftest passes.'",
+   "why": "One fixer at the root of the 08-e defect, and staging the patch avoids editing a script a queued list may use."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "write C:/KenshiTestRuns/inbox/operators/4080-i3-08e.txt: '08-e is a test defect (report agents/out/imm26-sfG/latest.md), now SETUP-FAIL. Do not re-run the current 08-e recipe. Release claim C:/KenshiTestRuns/claims/08-e after confirming the 4080-i3 lane holds it. Finish the current row, then take the next runnable row. The fixed recipe comes later as a staged patch (inbox 08e-ready.txt).'",
+   "why": "The lane holds the 08-e claim and must learn at its next row boundary not to re-run the broken recipe; the inbox file is the existing operator channel, so there is no mid-row message."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-fix-08e report and inbox/operators/08e-ready.txt. Do not re-run 08-e until the fix is staged and applied.",
+   "why": "A re-run on the current recipe would repeat the same defect."
+  }
+ ],
+ "checks": [
+  "awk -F'|' '/^\\| IMM-08-e/{for(i=2;i<=NF;i++) print i\": \"substr($i,1,120)}' C:/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md (find the Status cell index)",
+  "cat C:/KenshiTestRuns/agents/imm26-sfG.status (confirm DONE)",
+  "ls C:/KenshiTestRuns/claims/08-e C:/KenshiTestRuns/inflight (confirm the 08-e holder and that no running batch uses 08-e)",
+  "grep -ln reloaddefs_a C:/KenshiTestRuns/inbox/operators/* (find any queued or running list that uses the script before any edit)",
+  "ssh 4080 grep -n req_6ad24e8b959bd /tmp/stobe-standalone4080/site/log/stobeserver.log (read-only; confirm the drawn_weapon reaction turn)"
+ ]
+}

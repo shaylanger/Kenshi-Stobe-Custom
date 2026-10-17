@@ -1,0 +1,15 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "No new command. Stay in tail mode and keep the event watcher (event-wait.sh) running. Wait for imm26-wpC-b5 and imm26-5090-i5-op6 to finish. Stall rule: imm26-wpC-b5 last wrote 19:39 and was already messaged about 19:45; if it is still silent at 19:59, TaskStop it and tell the new coordinator. imm26-5090-i5-op6 last wrote 19:45; if it is silent at 20:05, do the same. When either reports DONE or FAILED, save its report to a file, relay it with tail-relay.ps1 and SendMessage to the new coordinator, then wait for its ack.",
+   "why": "Both agents are still RUNNING and inside their 10-minute and 20-minute stall windows, so there is nothing to relay yet and the tail may not end."
+  }
+ ],
+ "checks": [
+  "Get-Date -f HH:mm; foreach($n in 'imm26-wpC-b5','imm26-5090-i5-op6'){ Get-Content C:\\KenshiTestRuns\\agents\\$n.status -TotalCount 3 }",
+  "Get-ChildItem C:\\KenshiTestRuns\\inbox\\coordinator -Filter *tail* | Sort LastWriteTime -Desc | Select -First 2 Name",
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait"
+ ]
+}

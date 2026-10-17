@@ -1,0 +1,25 @@
+GRADES P2
+R01 | root=4 evid=4 fix=3 comp=3 hon=4 | total=18 | false=0 | Misses reply overwrite and stored-profile repair; job fix only rewords
+R02 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | Full chain, DB, diffs, repair SQL; "trust 0" misattributed but flagged
+R03 | root=5 evid=4 fix=3 comp=4 hon=4 | total=20 | false=1 | Correct causes; fixes vague, no diff; "11 Emperor rows" wrong
+R04 | root=5 evid=5 fix=5 comp=5 hon=4 | total=24 | false=0 | Verified eventlog, learned fact, -8; complete diffs, repair SQL
+R05 | root=4 evid=4 fix=4 comp=4 hon=4 | total=20 | false=0 | Sound; invented STOBE_LAST_PLAYER_TEXT variable, helper left undefined
+R06 | root=5 evid=5 fix=5 comp=5 hon=5 | total=25 | false=0 | Found profile created with Unknown race; both call sites
+R07 | root=3 evid=3 fix=2 comp=3 hon=4 | total=15 | false=0 | Missed schema.sql source; vague order-gate fix; short
+R08 | root=5 evid=5 fix=3 comp=4 hon=5 | total=22 | false=0 | Strong evidence, STT noted; never repairs stored profile
+R09 | root=2 evid=2 fix=2 comp=3 hon=3 | total=12 | false=2 | Blames LLM hallucination; missed server gate overwrite
+R10 | root=5 evid=4 fix=4 comp=4 hon=5 | total=22 | false=0 | Correct both causes; minimal diffs; repair path unconfirmed
+R11 | root=5 evid=4 fix=5 comp=5 hon=5 | total=24 | false=0 | Spotted upsert keeps old traits; concrete reset and diffs
+R12 | root=4 evid=2 fix=3 comp=4 hon=3 | total=16 | false=1 | Says Tango came from model, not STT; pseudo-code fix
+R13 | root=5 evid=3 fix=5 comp=5 hon=5 | total=23 | false=1 | Great extras (namesMF, 129 saves); wrong creation-race claim
+R14 | root=4 evid=4 fix=3 comp=3 hon=4 | total=18 | false=0 | Never repairs stored profile; confirm step would still fail
+
+RANKING: R02 > R06 > R04 > R11 > R13 > R10 > R08 > R05 > R03 > R01 > R14 > R12 > R07 > R09
+
+KEY FALSE CLAIMS:
+R09: "The LLM invented the job; reply had no action and no guard behind it" (the model emitted MoveToTarget@Shay, and the server gate rejected it and overwrote her line with the canned text, stobeserver.log 2157754-2157758)
+R12: "Tango came from the model; your typed line is logged as entered" (it came from Parakeet speech-to-text: stobeserver.log 2157671 STT transcription, stobe.log 828 STT_RESULT)
+R13: "Profile was created by the normal sync with the correct race and faction" (core_npc_master_history row 115968 'create' has race Unknown and empty faction)
+R03: "A separate Emperor Tengu set (11 rows)" (bio_unique and combined_bio_unique have 6 'Emperor Tengu' rows, ids 113-118)
+R02: "Trust 0 is below 56 (policy line 1917175)" (that line is from the first request; the failing turn showed -5, context line 1921140; the report flags this as unsettled)
+R14: "After the fix, the next prompt shows no Emperor text" (core_npc_master 85663 stores the Emperor traits and the upsert keeps non-empty values, so deleting only the bio_unique rows leaves the prompt unchanged)

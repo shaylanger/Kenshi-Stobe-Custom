@@ -1,0 +1,37 @@
+{
+ "id": "P014",
+ "session": "880f6d36",
+ "ts": "2026-10-15T21:25:06.264Z",
+ "class": "other",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Get-Process | Where-Object { $_.ProcessName -match 'kenshi' } | Select-Object Id,ProcessName,StartTime | Format-Table -AutoSize; Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'kenshi' } | Select-Object ProcessId,@{n='cmd';e={$_.ExecutablePath}} | Format-Table -AutoSize -Wrap | Out-String -Width 200",
+   "why": ""
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding/tools/automation; python3 - <<'EOF'\np='rig-health.sh'\ns=open(p,encoding='utf-8',newline='').read()\nnl='\\r\\n' if '\\r\\n' in s else '\\n'\ndef rep(a,b):\n    global s\n    a=a.replace('\\n',nl); b=b.replace('\\n',nl); assert s.count(a)==1,a[:30]; s=s.replace(a,b)\nrep('\"K yes\" } else { \"K no\" }; \"4 \"','\"K yes\" } else { \"K no\" }; \"L \" + @(Get-Process kenshi_x64 -EA 0 | ? { $_.Path -like \"D:\\\\KenshiInst\\\\*\" }).Count; \"4 \"')\nrep('if [ \"$k\" = yes ]; then echo \"RIG BUSY kenshi=yes lock=$lock inflight=$mk 4080=$r4\"; exit 0; fi\\n',\n'if [ \"$k\" = yes ]; then echo \"RIG BUSY kenshi=yes lock=$lock inflight=$mk 4080=$r4\"; exit 0; fi\\n# isolated 5090 lane games (D:\\\\KenshiInst\\\\<n>, imm26) are real work, not a Kenshi-gone stall (2026-10-15: false RIG STALL woke the coordinator with 3 lane games up)\\nlg=$(sed -n \\'s/^L //p\\' <<<\"$st\" | head -1); lg=${lg:-0}\\nif [ \"$lg\" -gt 0 ] 2>/dev/null; th...[truncated 194 chars]",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "cd /c/KenshiModding; git add tools/automation/rig-health.sh && git commit -q -m \"rig-health: 5090 lane games under D:\\\\KenshiInst count as BUSY (false RIG STALL woke the coordinator with 3 lane games up)\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\" && git push -q origin HEAD 2>&1|tail -1; git log --oneline -1\nMSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | head -30",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding/tools/automation; grep -n -i \"kenshi=\\|kenshi_x64\\|Get-Process\\|tasklist\" rig-health.sh | head -20; git log --oneline -3 -- rig-health.sh",
+  "cd /c/KenshiModding/tools/automation; sed -n 34,52p rig-health.sh | cut -c1-330",
+  "cd /c/KenshiModding; git log --oneline -1; git status --short tools/automation/rig-health.sh"
+ ],
+ "narration": [
+  "The waker returned a false RIG STALL. `rig-health.sh` excludes the lane games under `D:\\KenshiInst\\*` when it checks for Kenshi, so with all three 5090 lane games running it read \"Kenshi gone\". All three are actually up (i3, i4 and i5). I fixed it so lane games count as BUSY, and `rig-health.sh` now returns `RIG BUSY kenshi=lanes(3)` with exit 0 (commit `2e08605`, pushed). I also restarted the waker.\n\nA dead lane game with an idle main slot would no longer raise a stall alert. The lane agents an...[truncated 31 chars]"
+ ],
+ "event_text_chars": 1080
+}

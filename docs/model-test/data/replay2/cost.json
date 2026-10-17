@@ -1,0 +1,46 @@
+{
+ "arms": {
+  "pair": {
+   "points": 120,
+   "in": 3970.0,
+   "out": 2935645.0,
+   "cache_w": 16699211.0,
+   "cache_r": 47233839.0,
+   "tokens": 66872665.0,
+   "usd": 6.7336,
+   "calls": 546,
+   "wall_crit_s": 10324.4,
+   "wall_sum_s": 16995.0
+  },
+  "dr": {
+   "points": 120,
+   "in": 1458.0,
+   "out": 620291.0,
+   "cache_w": 7818615.0,
+   "cache_r": 19436366.0,
+   "tokens": 27876730.0,
+   "usd": 13.2879,
+   "calls": 240,
+   "wall_crit_s": 4972.4,
+   "wall_sum_s": 4972.4,
+   "draft_usd_included": 0.8089
+  },
+  "gr": {
+   "points": 120,
+   "in": 992.0,
+   "out": 557608.0,
+   "cache_w": 4154563.0,
+   "cache_r": 12556627.0,
+   "tokens": 17269790.0,
+   "usd": 0.9238,
+   "calls": 120,
+   "wall_crit_s": 3766.0,
+   "wall_sum_s": 3766.0
+  }
+ },
+ "graders": {
+  "n": 15,
+  "usd": 4.3557,
+  "tokens": 10258959
+ }
+}

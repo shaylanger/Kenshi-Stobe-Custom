@@ -1,0 +1,22 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:patch] imm26-rowtools432 hx one-call row scripts (item 4)', name imm26-rowtools432, brief: 'Successor of imm26-rowtools43 (STOPPED-CONTEXT). Read C:/KenshiTestRuns/agents/imm26-rowtools43.handoff.md first, then continue hx one-call row scripts (item 4) from its checkpoint, not from scratch. Mark your status RUNNING at start and DONE, FAILED or STOPPED-CONTEXT at end with tools/automation/agent-status.ps1 imm26-rowtools432 ... Save reports with save-report.ps1 (agents/out/imm26-rowtools432). Follow the standard block in testing/AGENT_PROMPTS.md. Do not edit /usr/local/bin/stobe-tests, do not touch running suites or lane trees, do not run wsl --shutdown or find /.' Spawn ONLY if the first check shows no successor already running (no imm26-rowtools432 or imm26-rowtools43b status RUNNING).",
+   "why": "imm26-rowtools43 stopped on context with no successor, and the Stop hook blocks on a STOPPED-CONTEXT agent with no successor, so a fresh successor with its handoff file is the required respawn (item 4 still open)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the successor's first RUNNING status line, then do nothing further for this event",
+   "why": "Once the successor sets RUNNING the no-successor condition clears by itself; the old marker C:/KenshiTestRuns/inflight/imm26-rowtools43 must stay until then (agent-status keeps it on STOPPED-CONTEXT)."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "ls C:/KenshiTestRuns/agents/ | grep -E 'imm26-rowtools43'",
+  "cat C:/KenshiTestRuns/agents/imm26-rowtools43.status",
+  "ls C:/KenshiTestRuns/respawn/ C:/KenshiTestRuns/inflight/ | grep -E 'rowtools43'",
+  "head -c 3000 C:/KenshiTestRuns/agents/imm26-rowtools43.handoff.md"
+ ]
+}

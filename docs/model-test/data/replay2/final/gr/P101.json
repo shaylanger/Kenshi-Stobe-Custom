@@ -1,0 +1,35 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash tool, run_in_background=true; never a bare & or disown)",
+   "why": "The waker fired its digest and exited, so nothing watches the lanes until it is re-armed; the restart already killed the stale event-wait processes, so only one waker runs."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-fix-19e2, description \"[case:patch] imm26-fix-19e2 finish the 19-e test-defect fix\", brief: \"You are imm26-fix-19e2, a fresh successor of imm26-fix-19e (orphaned, status stale 520 min). Read C:/KenshiTestRuns/agents/imm26-fix-19e.status and C:/KenshiTestRuns/agents/imm26-fix-19e.handoff.md if present. The 19-e test-defect fix is ready at pending-fixes/19e-recipe: verify it, finish what is missing, check it offline. Do not touch any lane, live install or server. Record status with tools/automation/agent-status.ps1 imm26-fix-19e2 (RUNNING, then DONE with outputs and next). Save the report with save-report.ps1 under agents/out/imm26-fix-19e2.\"",
+   "why": "The respawn rule needs a fresh successor with a +suffix name, and the 19-e row still waits on this fix."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-inv-fails, description \"[case:investigate] imm26-inv-fails root cause of two FAIL rows\", brief: \"You are imm26-inv-fails. Find the root cause, read-only, of two FAIL rows: 17-bx FAIL on lane imm26-5090-i3op21, and 26-b FAIL on lane imm26-5090-i5-op9n (operator notes say Malzin+inject accepts). For each row: grep its RESULT line and open only its excerpt= file; find the cause and the smallest fix. Do not edit code, and do not message or steer either operator (isolated arms get no coordinator input). Record status with tools/automation/agent-status.ps1 and save the report with save-report.ps1 under agents/out/imm26-inv-fails: per row the cause, evidence file:line, fix proposal, and whether it is a test defect or a game/server bug.\"",
+   "why": "Shay approved FAIL-row investigators, and a FAIL is odd behaviour that goes to [case:investigate] before any fix."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add one line: waker re-armed; imm26-fix-19e orphaned, respawned as imm26-fix-19e2; investigator imm26-inv-fails on the 17-bx (i3op21) and 26-b (i5-op9n) FAILs.",
+   "why": "CLAUDE.md requires Right now to be updated the moment an agent starts or the batch changes."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for: imm26-4080-i4op14 to start its first row; the sfR2 selftest; the imm26-costaudit ledger; a free lane to claim the 15-bx v2 ticket (already routed in inbox/operators/coordinator16-server-fixes.txt; send nothing to a lane). The no-out-dir sweep markers for 4080-imm26, 5090-imm26 and 5090-imm26-i5 are normal and need no action.",
+   "why": "These are running or already routed; messaging a test arm is forbidden, and the 4080-i4 marker check is in checks."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh",
+  "tail -n 3 /c/KenshiTestRuns/agents/imm26-fix-19e.status",
+  "ls /c/KenshiTestRuns/imm26-4080-i4 2>&1 | head -3"
+ ]
+}

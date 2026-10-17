@@ -1,0 +1,24 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 13-g imm26-setupfail-13-g",
+   "why": "Assign the SETUP-FAIL to the unblock agent right away so it is owned; the plan path is added by the agent when its plan exists (plan_path is optional and not known yet)."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description \"[case:investigate] imm26-setupfail-13-g\"; brief: row 13-g on lane 4080-i4 hit SETUP-FAIL: cannot read the GIVE_CATS price of deal-99fa2f6efec25f5083602a42 (price.txt empty). Inbox message: C:\\KenshiTestRuns\\inbox\\20261015-220022-setupfail-13-g.msg (look it up under the inbox dir; path unconfirmed). Row 13-g came with the wpR2 deploy (rows 14-e 13-g 10-e); the lane also got bak-pre-fixdeploy changes (fix10a, fix03b, fix17bx) at 22:05, so check whether the empty price is a row-script/rowtools issue (rowtools44 is still editing row scripts, do not edit files it owns) or a real server/deal problem on the 4080-i4 lane tree (/tmp/stobe-standalone4080-i4). Find the root cause, build any missing handler/command/driver instead of reporting blocked, write the unblock plan to C:\\KenshiTestRuns\\agents\\out\\imm26-setupfail-13-g\\latest.md, keep C:\\KenshiTestRuns\\agents\\imm26-setupfail-13-g.status current via agent-status.ps1, then run setupfail.ps1 assign 13-g imm26-setupfail-13-g <plan_path>. Isolated 4080-i4 lane only: never the live tree, ss-merge, Shay's install or DB; do not touch lane 4080-i4's running operator imm26-4080-i4op8 or its game.",
+   "why": "SETUP-FAIL with an unknown cause needs a diagnosis and unblock plan; missing handlers are built, not reported as blocked."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Waiting for the imm26-setupfail-13-g report, plus imm26-4080-i4op8, imm26-4080-op2jc and rowtools44; the event waker (task bf78meumf) keeps running.",
+   "why": "Other agents are still in flight and the waker must stay armed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "cat C:\\KenshiTestRuns\\inbox\\20261015-220022-setupfail-13-g.msg"
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no action on the imm26-bundle DONE event itself; its report and the operator routing note (inbox/operators/coordinator15-10e-route.txt, 12:00) were already handled in this session",
+   "why": "the bundle agent's result is already routed to the lane operators, so this digest adds no new work by itself."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': record imm26-bundle DONE (commit 9be74b55, pushed to origin/main), lane-deploy.sh and lane-deploy-4080.sh, and the operator note inbox/operators/bundle.txt; each lane runs the deploy once at its next row boundary, never mid-row",
+   "why": "the rule is that HANDOFF 'Right now' is updated after every agent report, so a new coordinator sees the bundle state."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background, never a bare & or disown)",
+   "why": "the waker process exited when this batch fired, and work is still in flight (fxA, fxB, fxC, ctxaudit, sfN, sfO and the four lane operators), so a waker must keep running."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "tail -3 /c/KenshiTestRuns/agents/imm26-bundle.status"
+ ]
+}

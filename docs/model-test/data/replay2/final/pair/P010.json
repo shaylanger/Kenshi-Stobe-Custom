@@ -1,0 +1,44 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md section 'Right now': add the line 'imm26-4080-op2 STOPPED-CONTEXT 2026-10-15 14:45 (rows 1-13 baseline; 4080 game PID 16156; marker 4080-imm26; rig4080 lock kept). Respawn FRESH as imm26-4080-op2b from agents/imm26-4080-op2.handoff.md; keep its inflight marker and respawn todo until imm26-4080-op2b exists.'",
+   "why": "The handoff is the resumable checkpoint, and the successor coordinator needs the 4080 stop and its respawn text recorded there."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-wpA3: 'Checkpoint now: regenerate your patch, compile-check, write agents/imm26-wpA3.handoff.md, then run agent-status.ps1 imm26-wpA3 STOPPED-CONTEXT with the exact next step. Your status file has not changed since 14:24.'",
+   "why": "Silent about 21 min with no nudge sent yet, past the 10-minute stall step, and a checkpoint keeps the work recoverable."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-wpB3: 'Checkpoint now: regenerate your patch, compile-check, write agents/imm26-wpB3.handoff.md, then run agent-status.ps1 imm26-wpB3 STOPPED-CONTEXT with the exact next step. Your status file has not changed since 14:23.'",
+   "why": "Same stall condition as imm26-wpA3: silent past 10 minutes with no nudge yet."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker exited on this event while claude-md-reviewer, imm26-wpA3 and imm26-wpB3 are still RUNNING, so the Stop guard needs a live waker."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No Agent spawn of imm26-4080-op2b in this session; no SendMessage to imm26-4080-op2; do not stop game PID 16156 or release the rig4080 lock; no tail-relay (this session is not in tail mode); no extra program-ledger sync (agent-status already syncs the ledger on STOPPED-CONTEXT)",
+   "why": "The context-limit handoff says to start nothing new, and the successor is respawned fresh from the handoff file by the next coordinator, never by messaging a stopped agent."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "RESULT, DONE or STOPPED-CONTEXT from claude-md-reviewer, imm26-wpA3 and imm26-wpB3; do not replace CLAUDE.md until the reviewer reports CLEAN; if imm26-wpA3 or imm26-wpB3 still shows an unchanged status 20 min after the nudge, TaskStop it and name it in the handoff for the new coordinator",
+   "why": "Nothing else can move until those results arrive, and the stall rule covers a nudge that goes unanswered."
+  }
+ ],
+ "checks": [
+  "sed -n 1,12p C:/KenshiTestRuns/agents/imm26-4080-op2.status",
+  "head -c 4000 C:/KenshiTestRuns/agents/imm26-4080-op2.handoff.md",
+  "ls C:/KenshiTestRuns/respawn/ C:/KenshiTestRuns/inflight/",
+  "ssh 4080 tasklist /FI \"PID eq 16156\"",
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-wpA3.status",
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-wpB3.status",
+  "sed -n 1p C:/KenshiTestRuns/agents/claude-md-reviewer.status"
+ ]
+}

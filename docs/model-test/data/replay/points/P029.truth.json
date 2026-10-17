@@ -1,0 +1,21 @@
+{
+ "id": "P029",
+ "session": "2b1a8eca",
+ "ts": "2026-10-15T23:59:21.764Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "cd /c/KenshiModding; powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/tail-ack.ps1 -Agent imm26-5090-i4op3; cat /c/KenshiTestRuns/lane-owners.json 2>&1 | head -20; grep -n -i 'owners' tools/automation/lane-idle.ps1 | head -15",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 1692
+}

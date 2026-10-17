@@ -1,0 +1,40 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "ack inbox message 20261016-102128-setupfail-26-e.msg (SETUP-FAIL 26-e from 5090-i3), via the event inbox; the msg directory is not stated in the batch",
+   "why": "26-e has the same known cause as 26-d (NC16 Hunt offer gets no proposal), so no new investigation is needed."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "26-e -> SETUP-FAIL. Cause: 5090-i3 NC16 build, Hunt offer gets no Hunt proposal (same as 26-d). Needs NC17 installed on 5090-i5 plus the 26-d/26-e offer scene (hunt26a-noface.sh or 14-d fixture).",
+   "why": "Records the known cause so the row is not retried on the old DLL."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "bash: rmdir /c/KenshiTestRuns/claims/26-e (only if 5090-i3 holds that claim and did not run the row)",
+   "why": "Releases the claim so 5090-i5 can take 26-e after NC17 is installed, per the lane plan claims rule."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "append to the 5090-i3 operator inbox note: do not spend more attempts on 26-e on the old DLL; it is marked SETUP-FAIL with the cause; take the next runnable hardening or re-run row (no lane idle)",
+   "why": "The 5090-i3 lane must stop retrying 26-e and move to the next runnable row, per the SETUP-FAIL one-attempt rule."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "append to inbox/operators/5090-i5-ready-nc17.txt: after 26-a PASSes on NC17 and after 26-d and 26-dx, run 26-e with the same offer scene (reload-run.sh rd_26e)",
+   "why": "26-e needs the working Hunt accept from NC17 on 5090-i5 and should run right after 26-d/26-dx on the same scene."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for 5090-i5 to report NC17 installed and 26-a PASS",
+   "why": "26-e cannot run before the NC17 Hunt accept is installed."
+  }
+ ],
+ "checks": [
+  "ls /c/KenshiTestRuns/claims/",
+  "ls /c/KenshiTestRuns/inbox/operators/",
+  "cat /c/KenshiTestRuns/inbox/20261016-102128-setupfail-26-e.msg"
+ ]
+}

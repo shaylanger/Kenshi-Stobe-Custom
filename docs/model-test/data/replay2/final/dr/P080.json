@@ -1,0 +1,14 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Take no action on the failed task bve0k8qy8 and do not run pkill -f 'event-wait.sh$' again; it would kill the live waker bp0tqjyzv.",
+   "why": "Exit 15 (SIGTERM) on bve0k8qy8 is the expected result of the coordinator's own pkill at the previous re-arm, and the replacement waker bp0tqjyzv was started right after that pkill and is the single live waker."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'pgrep -af event-wait.sh || echo none'",
+  "Read the tail of C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\bea16970-1102-47a3-b183-46101095930c\\tasks\\bp0tqjyzv.output to confirm the replacement waker is alive (if pgrep shows none, re-arm once with: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh as a Bash run_in_background task)"
+ ]
+}

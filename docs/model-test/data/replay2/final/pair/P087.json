@@ -1,0 +1,40 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' + the imm26 program ledger (its name is not in this batch: find it with ls C:/KenshiTestRuns/programs/): checkpoint imm26-sfE3 DONE: commit b38bd383 on origin/main (reloaddefs_sfe.sh, reload-run-sfe.sh, reload-py-sfe.sh, reloadcheck_sfe.py, reloadfake_sfe.py, reloadscen_sfe.py, seed24c.py, reload-sfe-selftest.sh, README_RELOAD_SFE.md); selftest SELFTEST SFE ALL PASS 46/46 in Git Bash, 40/46 in WSL (6 CRLF-only CLI-check failures, not a recipe defect); report C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md; 24-c = PARTIAL (every RESULT line SEEDED) until recipe B or the region_name fix (pending-fixes/imm26-sfE2-region-name) exists; 26-f = RECIPE READY on lane 4080-i3, needs NC20 (SHA 7A5AF9EA...) and SCENE-OK; NEXT WORK PACKAGE sfE-crlf recorded for the successor (spawn [case:patch] agent imm26-sfE-crlf: fix CRLF handling in reloadcheck_sfe.py and reload-py-sfe.sh so reload-sfe-selftest.sh passes 46/46 under WSL, without touching reloaddefs_a.sh, cleargroup14c-scene.sh or reload-run.sh; make the ~8 min selftest detachable and report the time saved)",
+   "why": "The sfE3 hand-back is a finished result that must be in the ledger and HANDOFF before the overlap handoff at 300k, and the coordinator is at 294k with new spawns on hold, so the successor needs the sfE-crlf package written down rather than started now."
+  },
+  {
+   "type": "mark-row",
+   "exact_command_or_message": "TESTS table: 24-c = PARTIAL (every RESULT line SEEDED, recipe b38bd383, blocked on the region_name fix and the current-town guard decision); 26-f = RECIPE READY, NOT RUN (ticket lane 4080-i3, needs NC20 and SCENE-OK); remove the stale UNRUN text",
+   "why": "The HANDOFF TODO says 24-c and 26-f still read UNRUN although SETUP-FAIL tickets exist and the recipes now exist, so the rows must show their real state."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:/KenshiTestRuns/inbox/operators/4080-i3-ready-26f.txt (new file, sent only after the claims check): 26-f RECIPE READY (imm26-sfE3 b38bd383). Sheet: C:/KenshiTestRuns/inbox/operators/sfE-26f.txt. At your next row boundary, after the current row: (1) if NC20 (SHA 7A5AF9EA...) is not in your tree, install it (NC17 is inside it); (2) claim with mkdir C:/KenshiTestRuns/claims/26-f; (3) from Git Bash in C:/KenshiModding (not WSL until the CRLF fix lands): bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfe.sh 26-f 4080-i3 --save <S> --dry, then the same line without --dry. One attempt only: SCENE-OK not reached or row fails = SETUP-FAIL, then take the next runnable row.",
+   "why": "The operator needs the exact install, claim, dry-run and run lines in the inbox channel this session already uses, and Git Bash is the path that passes the CLI checks right now."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/SHAY_DECISIONS.md: confirm entries exist with options, in-game effect, code consequence and default for the 24-c current-town guard (area_goal.php:36-37) and the 24-c region_name native+server fix (pending-fixes/imm26-sfE2-region-name); add any missing entry",
+   "why": "Every open Shay question must live in SHAY_DECISIONS.md and be kept current before any handoff, and both 24-c blockers are open design calls."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "the next 4080-i3 row result (26-f) or the overlap handoff at 300k; Shay's decisions on the 24-c current-town guard and the region_name fix stay open and go to him together in the next single summary, with the other open design calls (player-faction Hunt partner, participation_bound=0 hand_ fallback, 4080 lane deploys)",
+   "why": "Nothing else from this relay is due now: the 24-c fix is blocked on Shay's open design call, the sfE-crlf spawn belongs to the successor, and this hand-back needs no separate message to Shay."
+  }
+ ],
+ "checks": [
+  "git -C C:/KenshiModding branch -r --contains b38bd383 (confirm the sfE3 commit is on origin/main)",
+  "git -C C:/KenshiModding show --stat b38bd383 (confirm the sfE3 files are in the commit)",
+  "read C:/KenshiTestRuns/agents/out/imm26-sfE3/out-20261016-104754.md (confirm status DONE and the selftest lines)",
+  "read C:/KenshiTestRuns/inbox/operators/sfE-26f.txt and C:/KenshiTestRuns/inbox/operators/sfE-24c.txt (confirm the run lines match the report)",
+  "ls C:/KenshiTestRuns/programs/ (find the imm26 ledger name; the batch does not give it)",
+  "ls C:/KenshiTestRuns/claims/26-f (confirm the row is unclaimed before the operator note goes out)",
+  "git -C C:/KenshiModding status --short testing/live-stobe-queue/imm26-assert/rowtools (confirm no uncommitted sfE files)",
+  "grep -n -i 'current-town\\|region_name' C:/KenshiModding/testing/SHAY_DECISIONS.md (confirm the 24-c decision entries exist)"
+ ]
+}

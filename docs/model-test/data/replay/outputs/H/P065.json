@@ -1,0 +1,31 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 imm26-4080-op2jc STOPPED-CONTEXT 'TaskStop by tail after 25 min silent, at peer coordinator #11 request' 'latest = last row state from its status file (value not in this batch)' 'agents/imm26-4080-op2jc (TaskStop a9528fa658b941ea0); brief sits in a misnamed repo-root file' 'successor imm26-4080-op2jd: lane-brief.ps1 4080-i3 -Out agents/imm26-4080-op2jd.brief.md -Name imm26-4080-op2jd -Predecessor imm26-4080-op2jc; read the misnamed op2jc brief and the op2jb brief first'",
+   "why": "Marks the killed operator STOPPED-CONTEXT with its last row state, as the peer asked, so its respawn todo exists for coordinator #11 to spawn the successor."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/alert-ack.ps1 <id of the open AGENT ORPHANED alert for imm26-4080-op2jc, look up in C:/KenshiTestRuns/alerts/open> 'TaskStop by tail; STOPPED-CONTEXT marked; successor imm26-4080-op2jd spawned by coordinator #11'",
+   "why": "The orphan condition is resolved by the stop and the successor handoff, so the open alert is closed with its action; the alert id is not in this file."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To coordinator #11 (cross-session pipe cc-msg-8fe47832583a3e943c9c0c1d8a8e8386): Tail 4cdf261b: imm26-4080-op2jc is stopped (TaskStop a9528fa658b941ea0 done). Its status is STOPPED-CONTEXT with latest = last row state, and the respawn todo is written. Spawn imm26-4080-op2jd from lane-brief.ps1 4080-i3 with -Predecessor imm26-4080-op2jc. Its brief landed in a misnamed file in the repo root, so read that file plus the op2jb brief before acting. This tail spawns nothing, and no agents owned by this tail are still running.",
+   "why": "Replies to the peer's request, which asked for a reply when done, and hands over the successor and the brief location."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/tail-relay.ps1 for agent imm26-4080-op2jc: result is the TaskStop notice (killed; brief in misnamed repo-root file), inbox/coordinator",
+   "why": "Delivers this stopped agent's result to the new coordinator so the tail's relay obligation is met and the tail can end."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief (confirm the ORPHANED and NO SUCCESSOR lines for imm26-4080-op2jc)",
+  "Get-Content C:/KenshiTestRuns/agents/imm26-4080-op2jc.status (read the last row state to copy into latest)",
+  "git -C C:/KenshiModding status --short (locate the misnamed op2jc brief at the repo root; read only, do not move it here)",
+  "ssh 4080 'C:/KAH/ctl.ps1 status' (read-only: confirm the 4080-i3 lane has no live operator game or job before the successor starts)"
+ ]
+}

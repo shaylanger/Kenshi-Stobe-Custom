@@ -1,0 +1,31 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "cat > /c/KenshiTestRuns/inbox/operators/4080-i3-ready-sfe.txt <<'EOF'\n24-c and 26-f SETUP RECIPES READY (imm26-sfE3 DONE, b38bd383, selftest SFE 46/46 in Git Bash). Notes: inbox\\operators\\sfE-24c.txt and inbox\\operators\\sfE-26f.txt. One call per row, new files only, at your next row boundary: bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfe.sh <24-c|26-f> 4080-i3 --save <S> (use --dry first). 24-c: every RESULT line starts with SEEDED, row stays PARTIAL until the region_name fix exists, that is expected, record it. 26-f: needs NC17 or newer on your lane (install NC20 at the boundary if not yet) and a SCENE-OK where Cind sees at least 3 of the 4 bandits; if the scene is not OK after one attempt mark SETUP-FAIL and take the next runnable row. Claim first: mkdir C:\\KenshiTestRuns\\claims\\<row>. Run the selftest detached, not inline.\nEOF",
+   "why": "Shay's 10:30 order says no lane idles and the ticket lane for the new recipes is 4080-i3; the operator needs a short pointer to the notes the agent already wrote."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now' and C:\\KenshiModding\\testing\\NPC_IMMERSION_26_TESTS.md: move sfE3 from RUNNING to DONE (b38bd383, reload-run-sfe.sh); set rows 24-c to SEEDED/PARTIAL (needs region_name native+server fix plus a decision on the current-town guard) and 26-f to recipe-ready (needs NC17+, ticket lane 4080-i3) instead of UNRUN; remove the TABLE TODO about 24-c/26-f; add the handoff line 'CRLF: reload-sfe-selftest.sh gives 40/46 in WSL (6 CLI checks read the CRLF working tree), 46/46 in Git Bash, fix the CRLF handling at the next free slot'. Also update the program ledger entry for sfE3 to done with output C:\\KenshiTestRuns\\agents\\out\\imm26-sfE3\\out-20261016-104754.md.",
+   "why": "The handoff text and the ledger must be updated after every agent report, and the coordinator is about 6k tokens short of the 300k overlap handoff."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git -C C:\\KenshiModding add testing/HANDOFF.md testing/NPC_IMMERSION_26_TESTS.md && git -C C:\\KenshiModding commit -m 'imm26: sfE3 DONE (24-c/26-f recipes b38bd383), update HANDOFF + TESTS rows' (append the Co-Authored-By line from the attribution reminder) && git -C C:\\KenshiModding push",
+   "why": "The repo is the source of truth, so the state edit is committed and pushed straight away."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background)",
+   "why": "The waker has just woken on this relay, and agents plus lanes are still in flight, so it must run again."
+  }
+ ],
+ "checks": [
+  "git -C C:\\KenshiModding log -1 --format=%H%x20%an b38bd383",
+  "type C:\\KenshiTestRuns\\agents\\imm26-sfE3.status",
+  "dir C:\\KenshiTestRuns\\inbox\\operators\\sfE-24c.txt C:\\KenshiTestRuns\\inbox\\operators\\sfE-26f.txt",
+  "dir C:\\KenshiTestRuns\\claims"
+ ]
+}

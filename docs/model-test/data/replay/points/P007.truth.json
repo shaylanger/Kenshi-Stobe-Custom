@@ -1,0 +1,21 @@
+{
+ "id": "P007",
+ "session": "277ebe12",
+ "ts": "2026-10-15T20:36:27.206Z",
+ "class": "waker-digest",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiModding; python - <<'EOF'\nd=open('docs/WP_SIZING.md',encoding='utf-8').read()\nbad='\\n'.join(d.split('```')[1].strip('\\r\\n').split('\\n'))\nsec=d.split('## 8. PROPOSED CLAUDE.MD TEXT')[1].split('## 9.')[0]\ngood=sec.split('```')[1].strip('\\r\\n')\ns=open('CLAUDE.md',encoding='utf-8',newline='').read()\nassert s.count(bad)==1\ns=s.replace(bad,good)\nopen('CLAUDE.md','w',encoding='utf-8',newline='').write(s)\nEOF\ngrep -c \"Big files are read\" CLAUDE.md; grep -c \"CHECKPOINT every milestone\" CLAUDE.md; sed -n 92,95p CLAUDE.md | cut -c1-90",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 506
+}

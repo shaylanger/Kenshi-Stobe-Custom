@@ -1,0 +1,24 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | tail -5  (run_in_background)",
+   "why": "The waker just fired and work is still in flight (claude-md-reviewer, imm26-wpA3, imm26-wpB3 RUNNING, game lanes up), so a fresh waker must be running before the turn ends."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add imm26-4080-op2 to the STOPPED-CONTEXT list as already written (status 2026-10-15 14:45; respawn fresh as imm26-4080-op3 from C:\\KenshiTestRuns\\agents\\imm26-4080-op2.handoff.md; 4080 game PID 16156 and marker 4080-imm26 stay up); also update program ledger via program-ledger.ps1 set for its work package to stopped",
+   "why": "Handoff text must reflect the new state after every agent report, and the successor is the next coordinator's job since the context meter says start nothing new."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for claude-md-reviewer, imm26-wpA3 and imm26-wpB3 to finish or be marked STOPPED-CONTEXT in the next waker digest; then stop stragglers, finish the handoff (handoff-ready.ps1, tail-mode per the overlap contract) so the new coordinator respawns imm26-4080-op3, wpA4/wpB4 etc.",
+   "why": "The coordinator is at the context limit (244k) and must not spawn new agents now; only the fresh coordinator respawns stopped agents."
+  }
+ ],
+ "checks": [
+  "sed -n 1,12p C:/KenshiTestRuns/agents/imm26-4080-op2.status | cut -c1-300",
+  "ls C:/KenshiTestRuns/agents/imm26-4080-op2.handoff.md"
+ ]
+}

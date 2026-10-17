@@ -1,0 +1,37 @@
+{
+ "id": "P067",
+ "session": "2a0cfe9b",
+ "ts": "2026-10-16T04:52:09.646Z",
+ "class": "lane-alert",
+ "outcome": {
+  "label": "good",
+  "why": "no correction signal in the 15 following turns"
+ },
+ "actions": [
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "cd /c/KenshiModding/tools/automation; python3 - <<'EOF'\np='lane-idle.ps1'\nb=open(p,'rb').read()\nold=b'    if ($age -gt $Max) {\\r\\n        $key = \"idle:$l\"' if b'\\r\\n' in b else b'    if ($age -gt $Max) {\\n        $key = \"idle:$l\"'\nassert b.count(old)==1\nnew=old.replace(b'if ($age -gt $Max) {',b'if ($age -gt $Max -and ($held -notcontains $l)) {   # held lanes (lanes.held) never raise LANE IDLE either')\nopen(p+'.tmp','wb').write(b.replace(old,new))\nEOF\nmv lane-idle.ps1.tmp lane-idle.ps1; powershel...[truncated 140 chars]",
+   "why": ""
+  },
+  {
+   "type": "hold-lane",
+   "exact_command_or_message": "cd /c/KenshiModding/tools/automation; python3 - <<'EOF'\np='lane-idle.ps1'\nb=open(p,'rb').read()\nnl=b'\\r\\n' if b'\\r\\n' in b else b'\\n'\nold=b'    if (-not $runOp) {'+nl+b'        $key = \"noop:$l\"'\nassert b.count(old)==1\nnew=b'    if (-not $runOp) {'+nl+b'        if ($held -contains $l) { continue }   # held / retired lanes (lanes.held) never raise LANE NO-OPERATOR'+nl+b'        $key = \"noop:$l\"'\nopen(p+'.tmp','wb').write(b.replace(old,new))\nEOF\nmv lane-idle.ps1.tmp lane-idle.ps1; printf '5090-i3\\n...[truncated 559 chars]",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [
+  "cd /c/KenshiModding/tools/automation; grep -n \"lanes.held\\|held\\|LANE IDLE\" lane-idle.ps1 | head -12 | cut -c1-200",
+  "cd /c/KenshiModding/tools/automation; sed -n 58,64p lane-idle.ps1 | cut -c1-260",
+  "cd /c/KenshiModding/tools/automation; grep -n \"LANE NO-OPERATOR\" lane-idle.ps1 | cut -c1-120; sed -n 36,50p lane-idle.ps1 | cut -c1-200"
+ ],
+ "narration": [
+  "Two things moved.\n\n- **PASS count:** 10-a passed on the 4080-i4 lane. That is the first new PASS in about 75 minutes, so the em-dash fix works in game. The 4080-i4 operator continues with 10-b, 03-b, then 13-g, 14-e, 13-f, 27-a and 08-e.\n- **14-c:** the 5090-i5 operator found its root cause (no formal town bases in the loaded world) and ticketed it. It is now on 26-a.\n\nI also stopped the repeat idle alerts for lanes you held or retired. A small edit to `lane-idle.ps1` (selftest passes) makes the...[truncated 113 chars]"
+ ],
+ "event_text_chars": 939
+}

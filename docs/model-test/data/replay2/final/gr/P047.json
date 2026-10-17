@@ -1,0 +1,21 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the imm26-5090-i4-hard2b operator to report the 03-b RESULT line (RESULT 03-b PASS|FAIL) and its next row (18-a); no message to the operator, it already reports its own next steps",
+   "why": "The operator's relay says preflight is OK, the 402 is fixed and 03-b is running, which answers the earlier ping, so the lane is working and needs no further steering."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no message to ad38178c9940fc1ed; no respawn of imm26-5090-i4-hard2b",
+   "why": "Re-pinging a working operator would only add noise, and the previous ping is already answered by this report."
+  }
+ ],
+ "checks": [
+  "cd /c/KenshiModding; & .\\tools\\automation\\lane-idle.ps1 2>&1 | Select-Object -First 12  (confirm the LANE IDLE 5090-i4 alert clears)",
+  "grep -c 'Latency stage llm complete' /tmp/stobe-imm26-5090-i4/site/log/stobeserver.log and grep -c '\"http_code\":402' on the same log (confirm the 402 is gone from the i4 lane; WSL)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 is not needed; read C:\\KenshiTestRuns\\agents\\imm26-5090-i4-hard2b.status (first line and latest) to see the 03-b step",
+  "Check the window layout of the 5090 lanes (i4 and i5 windows moved by the operator): no game window on the Samsung display, per the windowed DISPLAY2 rule"
+ ]
+}

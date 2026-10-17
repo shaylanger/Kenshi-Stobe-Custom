@@ -1,0 +1,37 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the next task-notification from aac49e2e4018cf088 (imm26-sfU2 background work). Do not respawn or message it. Keep the event-wait waker b2xak5lca running.",
+   "why": "sfU2 stopped only because its own background work is still running; its report was already delivered as the SubagentHandback message, so a respawn would duplicate the work."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cat >> C:/KenshiTestRuns/inbox/operators/coordinator16-server-fixes.txt <<'EOF'\nCORRECTION to the 15-bx 5090-i3 diagnosis (sfU2 report): the P1 no-reply was a cancelled Cind reply (events.txt row cancelled, Cind 35.6 u away), not the rl_say (NPC)/(PC) wait. v2 accepts both speaker lines; a cancelled reply gets one ub15_say retry; a second cancel is a SETUP-FAIL that names it. Details: inbox/operators/sfU.txt.\nEOF",
+   "why": "The operator must not chase the wrong cause (the earlier note blamed the speaker-line wait), and the sfU2 report corrects it."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: record imm26-sfU2 DONE, commits 8c2c7911 and f00884bc on main (15-bx v2 with ub15_say retry, 16-bx and 02-ax/02-cx v2 asserters, offline selftest 40/40, nothing run in-game), report agents/out/imm26-sfU2, routing in inbox/operators/sfU.txt and coordinator16-server-fixes.txt.",
+   "why": "Coordinator rule: HANDOFF Right now is updated after every agent report, not only at the context limit."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Program ledger under C:/KenshiTestRuns/programs/ (the program file for imm26-sfU2; find its name with session-start.ps1 -Brief before editing): set imm26-sfU2 state DONE, owner none, outputs agents/out/imm26-sfU2, checkpoint = commits 8c2c7911 and f00884bc, with 15-bx/16-bx/02-ax/02-cx v2 ready for operators.",
+   "why": "The ledger is the resumable state file and must match the agent report."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No spawn, no install, no DLL change, no lane hold or release. 15-bx v2 stays at state ready; operators run it at their next free slot via the existing routing note.",
+   "why": "sfU2 changed only offline test scripts and asserters, and the operator note at line 192 already routes the rows, so no lane action is needed."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "cat C:/KenshiTestRuns/agents/imm26-sfU2.status",
+  "git -C C:/KenshiModding cat-file -t 8c2c7911",
+  "git -C C:/KenshiModding cat-file -t f00884bc",
+  "ls C:/KenshiTestRuns/inflight/"
+ ]
+}

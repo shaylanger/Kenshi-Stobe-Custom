@@ -1,0 +1,25 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Doing the speed and token items logged in HANDOFF now: (4) quieter waker so event-wait returns only on action events, (5) session-start -Brief kept tight, (1) row operators on the new lanes once isolation checks pass, (3) one-command lane setup helper. Item (2), the travel accept bug, stays with imm26-travel-investigate.",
+   "why": "Shay asked directly, so the coordinator acknowledges through the relay session and says what starts now."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-tokens, tag [case:generate]. Brief: implement HANDOFF SHAY'S NEXT-STEP items (4) and (5). (4) tools/automation/event-wait.sh returns only on action events (not on STATUS or HEALTH-OK events). (5) session-start.ps1 -Brief output stays small. event-wait.sh is the live waker: stage the edit in a copy, selftest the copy, and swap it in only at a waker restart boundary, never mid-run. Commit and push each fix in its own commit, then record the result with agent-status.ps1.",
+   "why": "Token-use items are small and separable, so one generator agent on the right tier can do them while the lanes run."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-lanehelper, tag [case:generate]. Brief: implement HANDOFF item (3), a one-command lane setup helper (load, speed 0 hold, wake, protect, teleport, speed 0.5) for the imm26 lanes on both rigs. Do not touch lane-isolation-check or the travel accept fix, which other agents own. Selftest, commit and push, then record with agent-status.ps1.",
+   "why": "The helper saves about 5 min per Hub reload and is independent of the travel bug work."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "grep -n -i \"NEXT-STEP\\|quieter waker\\|lane setup helper\" C:\\KenshiModding\\testing\\HANDOFF.md",
+  "git -C C:\\KenshiModding diff --stat -- tools/automation/event-wait.sh"
+ ]
+}

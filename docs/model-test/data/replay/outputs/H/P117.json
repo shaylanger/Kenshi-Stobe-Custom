@@ -1,0 +1,20 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no command: the event is only the completed 'Restart event waker' background task (bjikfnh8e, exit code 0)",
+   "why": "The batch carries no new result; the stalled fix15bx05cx was already respawned as imm26-fix15bx05cx2, which is registered and RUNNING, so nothing needs acting on yet."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "imm26-fix15bx05cx2 completion or STOPPED-CONTEXT status, and the next event-wait waker event",
+   "why": "The 05-cx keep regex and 15-bx v3 scene work is still in flight and the next real result is what decides the next step."
+  }
+ ],
+ "checks": [
+  "Get-Content C:\\KenshiTestRuns\\agents\\imm26-fix15bx05cx2.status",
+  "ls C:\\KenshiTestRuns\\respawn",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief"
+ ]
+}

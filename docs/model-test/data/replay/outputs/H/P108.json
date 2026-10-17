@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash, run_in_background)",
+   "why": "The waker exited when it delivered this batch, and something must stay in flight while the i5 and i4 lanes run."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-abandon.ps1 imm26-5090-i3op21 'stopped at context limit, no runnable scripted row; i3 game stopped by coordinator; successor only when new row scripts exist'",
+   "why": "The relay is already delivered and the 5090-i3 lane has no runnable row, so the stopped marker is dropped on purpose instead of respawning an operator with nothing to do (tail-ack would fail for this non-ledger agent)."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "New row scripts for 5090-i3 (22-b tick driver and checker, 25-b native, 08-d rerun with the 23-a v2 walk) from the coordinator; then a fresh imm26-5090-i3op22 via lane-brief.ps1 5090-i3 -Name imm26-5090-i3op22 -Predecessor imm26-5090-i3op21.",
+   "why": "The i3 lane stays down until there is a row to run; a successor now would only burn context."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-ids.ps1 list -Live",
+  "ls C:/KenshiTestRuns/inbox/coordinator/delivered | tail -5"
+ ]
+}

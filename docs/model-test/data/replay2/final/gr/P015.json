@@ -1,0 +1,46 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (background Bash task)",
+   "why": "The event-wait task exited on this event, so nothing watches for lane or agent events and the waker guard would block the Stop hook."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now' checkpoint and the program ledger: imm26-compose2 DONE, composed tree and compose.patch pass (93 pass, 5 known fails, none new), next = install on private lane sites, then rerun failing rows with fresh operators. The ledger file name is not given in this batch, so find it with session-start.ps1 before writing.",
+   "why": "The coordinator records every agent report in HANDOFF and the ledger before acting on it."
+  },
+  {
+   "type": "commit",
+   "exact_command_or_message": "git add testing/HANDOFF.md; git commit -m 'HANDOFF: imm26-compose2 DONE, composed build ready for lane install' (with the Co-Authored-By line); git push origin HEAD:main",
+   "why": "Pattern used for every HANDOFF checkpoint in this session; push right after each commit."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "tools/automation/lane-isolation-check.ps1 on both rigs after the install",
+   "why": "Each lane must pass isolation before any row runs on it."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the install result and the lane-isolation-check result on each lane (the waker wakes the coordinator)",
+   "why": "Row operators start only once the composed build is confirmed on each private lane."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-4080-op2c2, tag [case:generate]: fresh row operator for 4080 lane i3, rows 06-e, 08, 12, 13 on the composed build. Brief: read C:\\KenshiTestRuns\\agents\\imm26-4080-op2c.status and its handoff, and testing/NPC_IMMERSION_26_TESTS.md; write one RESULT <row> PASS|FAIL line per row; keep the status file current.",
+   "why": "The previous operator died with the old coordinator and its FAILs were on the old code, so the rows need a fresh operator on the composed build."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-5090-i4op2, tag [case:generate]: fresh row operator for 5090 lane i4 rows 18-a, 18-c, 15-a, 15-b, 21-a. Brief: read C:\\KenshiTestRuns\\agents\\imm26-5090-i4op.status and its handoff (testing/live-stobe-queue/5090-i4-imm26-lib.sh).",
+   "why": "The i4 rows died with the old coordinator and need a rerun on the composed build."
+  }
+ ],
+ "checks": [
+  "ls -la /mnt/c/KenshiTestRuns/agents/out/imm26-compose2/ (the event text reads 'C:\\KenshiTestRunsgents\\out\\imm26-compose2\\latest.md', which looks like a typo, so verify the real path first)",
+  "tail -c 3000 /mnt/c/KenshiTestRuns/agents/out/imm26-compose2/latest.md",
+  "tail -3 /c/KenshiTestRuns/agents/imm26-compose2.status",
+  "tail -c 1500 /c/KenshiTestRuns/agents/imm26-travel-investigate.status"
+ ]
+}

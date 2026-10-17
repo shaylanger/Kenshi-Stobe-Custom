@@ -1,0 +1,36 @@
+{
+ "id": "P076",
+ "session": "bea16970",
+ "ts": "2026-10-16T07:27:40.127Z",
+ "class": "agent-stopped",
+ "outcome": {
+  "label": "bad",
+  "why": "abandoned an agent spawned in the point"
+ },
+ "actions": [
+  {
+   "type": "run",
+   "exact_command_or_message": "cd /c/KenshiTestRuns/agents; sed -n 1,6p imm26-4080-i4op10.status | cut -c1-400; tail -c 1800 imm26-4080-i4op10.handoff.md; cd /c/KenshiModding; git status --short testing/live-stobe-queue | head -5; powershell -NoProfile -ExecutionPolicy Bypass -File tools/automation/lane-brief.ps1 4080-i4 -Out C:/KenshiTestRuns/agents/imm26-4080-i4op11.brief.md -Name imm26-4080-i4op11 -Predecessor imm26-4080-i4op10 2>&1 | grep -i \"brief size\"",
+   "why": ""
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "description: [case:generate] 4080-i4 operator op11 unblock rows\nprompt: You are 4080-i4 operator imm26-4080-i4op11. Read C:\\KenshiTestRuns\\agents\\imm26-4080-i4op11.brief.md (self-contained) and the predecessor handoff agents\\imm26-4080-i4op10.handoff.md (End state + Helpers). Shay ordered every blocked row unblocked; the one-call scripts are ready in C:\\KenshiModding\\testing\\live-stobe-queue\\imm26-assert\\rowtools\\ (unblock*; exact commands and order in C:\\KenshiTestRuns\\inbox\\operators\\u-rowsA.txt, u-rowsB.txt, u-rowsC.txt, u2-fix03b2.txt). Run ON 4080-i4 only, in this order, one row at a time (write evidence, mark each result with tools/automation/mark-row.py; a SETUP-FAIL must say needs: and the exact cause): (1) 13-b via ko13b.sh (runs now, includes healthy-partner control); (2) 03-b live rerun (director cast now accepts hand_<serial>, row-85 scene; also grep stobeserver.log for DLL 'cancelled' states after the first scene); (3) 27-a: stop the i4 game, powershell install-harness-4080-i4.ps1 -Action Plan then Apply (eeed8c93), relaunch, run unblockrun_b.sh 27-a; (4) 08-e, 08-d (+--neg), 11-b via unblockrun_a.sh (imm26-u-rowsA2 may still be fixing selftest issues in those files: if a script fails with a script error, fix the script yourself minimally and commit); (5) 13-c and 13-c-neg, then 10-e (real restart); (6) 15-bx, 20-a, 10-b via unblockdefs_c.sh. The first live run of a script may hit unverified guesses (spawn-reply #handle parse, teleport A B dist N, gift item names, in_combat key): fix the script and rerun rather than marking SETUP-FAIL for a script bug. Do NOT edit hunt26a-scene.sh, unblock_a_selftest.sh, unblockcheck_a.py (other agents' uncommitted edits). Keep game speed <= 5. Status every 10 min, checkpoint + handoff at WARN-120k (PI-30: operators hit 120-200k in ~20 min, so commit evidence marks after every row), short tool steps. Final report <= 8 lines: per row PASS/FAIL/SETUP-FAIL.",
+   "why": ""
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "cd /c/KenshiModding; python3 - <<'EOF'\np='testing/HANDOFF.md'\ns=open(p,encoding='utf-8').read()\nk='**COORDINATOR #12 (00:05 Oct 16):**'\nadd=r'''**#12 02:35 i4op10 STOPPED (handoff read): 13-g 14-e 13-f 17-bx 18-cx 13-ax PASS; 16-bx 02-ax FAIL; 03-b 27-a 08-e 15-bx SETUP-FAIL. imm26-4080-i4op11 RUNNING (a4830adc9...): unblock rows in order 13-b, 03-b live, 27-a (harness install eeed8c93), 08-e 08-d 11-b, 13-c 10-e, 15-bx 20-a 10-b. Tail kenshimodding-41 holds i4op10's relay: tail-ack.ps1 -Agent imm26-4080-i4op10 when it arrives.**\n\n'''\nassert k in s\ns=s.replace(k,add+k,1); open(p,'w',encoding='utf-8').write(s); print('ok')\nEOF\npowershell -NoProfile -File tools/automation/tail-ack.ps1 -Agent i...[truncated 31 chars]",
+   "why": ""
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 726
+}

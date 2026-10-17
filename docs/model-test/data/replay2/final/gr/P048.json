@@ -1,0 +1,20 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none: no ack, spawn, message, commit or run",
+   "why": "The imm26-pi15 DONE event repeats a completion the coordinator already handled: the PI-15 SubagentHandback report arrived earlier, PI-15 was committed as 34c156c and recorded done in process-ideas, and no open alert or inflight marker for imm26-pi15 is left to close."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "keep the existing Monitor bdlp28p66 event-stream waker running; re-arm it only if it has expired",
+   "why": "The waker is the only standing piece needed, and this event does not change any in-flight work that needs a new action; imm26-pi1920 and the other running builds are still reported by their own events."
+  }
+ ],
+ "checks": [
+  "read the last line of C:/KenshiTestRuns/agents/out/imm26-pi15/latest.md and confirm it reads DONE",
+  "confirm C:/KenshiTestRuns/inflight/imm26-pi15 does not exist",
+  "grep PI-15 in docs/PROCESS_IDEAS.md and confirm it is marked done"
+ ]
+}

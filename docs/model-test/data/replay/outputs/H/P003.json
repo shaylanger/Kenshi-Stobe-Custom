@@ -1,0 +1,19 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- python3 /mnt/c/KenshiTestRuns/invest/suite/tools/extract.py adb8565711c29f920 /mnt/c/KenshiTestRuns/invest/suite/A3/report.md",
+   "why": "Save the A3 investigator hand-back to the round folder first, the same way A2 was saved, so the report is kept before anything else runs."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent subagent_type kenshi-generator, description '[case:patch] [ticket:SUITE-A3] restore NPC travel-candidate producer'. Brief: Read the A3 report at /mnt/c/KenshiTestRuns/invest/suite/A3/report.md. Restore the NPC travel-candidate producer (LocalTravel::CandidatesJson in LocalTravel.cpp) from the workspace snapshot into the Stobe build tree so the built DLL writes travel_destinations into each NPC context. Phase 1 only: do not change the walk to the chosen place (Phase 2) or the wording (Phase 3). Build in an isolated lane, run the portable checks, report the DLL SHA256 and the diff. Do not install to Shay's live Kenshi install and do not touch the live server tree or DB.",
+   "why": "The investigation found the root cause is a missing producer in the built DLL, a small fix that one generator should write now rather than report as blocked."
+  }
+ ],
+ "checks": [
+  "grep -rn CandidatesJson over the Stobe snapshot (components/STOBE) and the Stobe build tree, to confirm the producer is absent from the build and present in the snapshot",
+  "grep -n travel_destinations in the latest context_sent_to_llm.log to confirm the candidate list is empty on the post-2026-10-13 prompts"
+ ]
+}

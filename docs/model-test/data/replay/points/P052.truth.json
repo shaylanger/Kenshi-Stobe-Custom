@@ -1,0 +1,23 @@
+{
+ "id": "P052",
+ "session": "6d1f3011",
+ "ts": "2026-10-16T02:47:21.454Z",
+ "class": "stop-hook",
+ "outcome": {
+  "label": "corrected",
+  "why": "coordinator self-correction: ...\") while the stored quote wasn't. So no apology is recorded. The location is `lib/soci"
+ },
+ "actions": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "",
+   "why": "Waiting on the background wait for my five agents."
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [
+  "Waiting on the background wait for my five agents."
+ ],
+ "event_text_chars": 1557
+}

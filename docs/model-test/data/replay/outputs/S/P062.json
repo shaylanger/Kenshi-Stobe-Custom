@@ -1,0 +1,29 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description '[case:investigate] imm26-sf13g 13-g price.txt empty on 4080-i4'. Brief: You are imm26-sf13g, one investigator for SETUP-FAIL row 13-g on lane 4080-i4 (inbox msg 20261015-220022-setupfail-13-g.msg): the row script could not read the GIVE_CATS price of deal-99fa2f6efec25f5083602a42 because price.txt was empty. Find the ROOT cause (row script reading price.txt too early or from the wrong path, deal not yet priced by the wpR2 server code deployed 5 lanes ef4d82f, a lane-tree difference, or a real server bug), using grep/tail/line ranges only on the 4080-i4 lane tree and the row 13-g rowtool/run output; never find /, never touch Shay's live install, server tree or DB, no 5090 use. Output: a short unblock plan (exact recipe fix or server fix, with a candidate patch path, an offline test, and the rerun command for the 4080-i4 operator). Keep your status file C:\\KenshiTestRuns\\agents\\imm26-sf13g.status current with agent-status.ps1 and write your report with save-report.ps1. Do not restart or edit the lane or any script a running batch uses.",
+   "why": "A SETUP-FAIL row needs an unblock plan and the tools say assign an agent; an empty price.txt is odd behaviour so investigate first, and I do not know the cause from this file."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 assign 13-g imm26-sf13g",
+   "why": "Records the owner of the unblock plan so the SETUP-FAIL is no longer unassigned (plan_path is unknown at this point, so it is omitted)."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append a line to C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': '#11 22:05: SETUP-FAIL 13-g on 4080-i4 (GIVE_CATS price.txt empty, deal-99fa2f6efec25f5083602a42) assigned to imm26-sf13g (investigate); 4080-i4 operator imm26-4080-i4op8 continues its other rows.'",
+   "why": "State file must reflect the new agent and the open SETUP-FAIL the moment it starts."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Keep the event-stream Monitor armed; wait for imm26-sf13g DONE and the TAIL-RELAY from i4op8/op2jc/rowtools44.",
+   "why": "Nothing else to do on this event; the operator is not steered because it is a running arm, the result arrives by status and event."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\setupfail.ps1 list",
+  "head -5 /c/KenshiTestRuns/agents/imm26-4080-i4op8.status | cut -c1-300"
+ ]
+}

@@ -1,0 +1,70 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-ack.ps1 -Agent imm26-5090-i4op3",
+   "why": "The TAIL-RELAY is a result to act on, not an order; acking it lets the old tail session close."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Check that C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.status shows RUNNING (launched in the preceding conversation, agentId ab44ec9769f258fd8). Only if it does not, spawn the next-number successor imm26-5090-i4op33 from C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md; never reuse imm26-5090-i4op3.",
+   "why": "The successor is already launched, so a second spawn would duplicate lane 5090 i4; the status check decides whether a respawn is needed."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiTestRuns\\lane-owners.json: read its layout first (tools\\automation\\lane-idle.ps1 reads it), then change only the 5090-i4 owner from imm26-5090-i4op3 to imm26-5090-i4op32 and keep every other lane entry.",
+   "why": "lane-idle.ps1 still maps 5090-i4 to the stopped imm26-5090-i4op3, which causes the LANE NO-OPERATOR alert; this must land before the waker restarts so the event does not re-fire at once."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "background Bash: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep -v SWEEP",
+   "why": "The waker exited on the LANE NO-OPERATOR event while lanes i3, i4, i5 and 4080 are still in flight, so something must keep watching them."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-inv-provenwild; subagent_type kenshi-debugger; description '[case:investigate] imm26-inv-provenwild ProvenWild rejects harness-spawned wild animals'; brief: You are imm26-inv-provenwild, a diagnosis-only investigator for the imm26 NPC immersion program (isolated 5090 lane i4 only; never Shay's live install, server or DB). Do not edit code. Problem: native ActivityPolicySupport.cpp line 23 ProvenWild rejects harness-spawned animals (squads 'wild goats', faction Wildlife) with animal_ownership_not_proven_wild, so Hunt rows 25-a and 26 are SETUP-FAIL. The NC5 actor-cache fix already works (observedSource.candidates shows kind=Hunt), so ProvenWild is the remaining blocker. Shay's standing rule (memory hunt-wild-animals-pass): animals in no real faction must pass ProvenWild for sure; template-ref clauses may be relaxed. Read C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md KEY FINDING and LESSONS first. Read source only through the codemap (bash tools/automation/codemap.sh, grep -n in the map, sed -n a,bp on the file), never whole files. Deliver the exact file, line range, proposed change, evidence and risk to the other ProvenWild callers. Keep C:\\KenshiTestRuns\\agents\\imm26-inv-provenwild.status current via agent-status.ps1; final report at most 8 lines.",
+   "why": "Shay's standing rule makes ProvenWild a bug to diagnose before any patch (investigate first); rows 25-a and 26 are blocked on it."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-inv-13b; subagent_type kenshi-debugger; description '[case:investigate] imm26-inv-13b row 13-b AbandonTracker gap resets (lane 5090 i4)'; brief: You are imm26-inv-13b, a diagnosis-only investigator for the imm26 NPC immersion program (isolated 5090 lane i4 only; never Shay's live install, server or DB). Do not edit code. Problem: row 13-b FAILs on lane 5090 i4. Hypothesis from the operator: AbandonTracker GapSeconds=10 is in game seconds, but the scan runs every 2 real seconds; at game speed 0.5 that is about 25 game seconds per scan, so farSince resets on every scan and N2_ABANDON never fires (hypothesis at N2Policy.h:172). Verify or refute it in the source through the codemap (bash tools/automation/codemap.sh, grep -n in the map, sed -n a,bp on the file) and against the 13-b evidence in C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md. Propose the smallest fix (real-time gap or wider game-time gap) and the rerun plan for row 13-b. Keep C:\\KenshiTestRuns\\agents\\imm26-inv-13b.status current via agent-status.ps1; final report at most 8 lines.",
+   "why": "13-b is a FAIL with an unverified hypothesis; CLAUDE.md requires investigating a bug before a fixer, and the diagnosis lets the fix land when lane i4 is free."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\program-ledger.ps1 (run it with no arguments first for the exact ack/route/state syntax, then record: imm26-5090-i4op3 result acked and stopped with successor imm26-5090-i4op32; lane 5090 i4 work package of program imm26 (live-rows) running as imm26-5090-i4op32; imm26-inv-provenwild and imm26-inv-13b running)",
+   "why": "The ledger is updated after every agent report, not only at the context limit."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 <id or subject of the open LANE NO-OPERATOR 5090-i4 alert, copied from the session-start.ps1 OPEN ALERTS list> 'lane-owners.json maps 5090-i4 to imm26-5090-i4op32, operator RUNNING'",
+   "why": "Closes the lane alert with the action taken; only after lane-idle.ps1 stops reporting NO-OPERATOR and the successor shows RUNNING, since the condition can also clear by itself."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': relay from imm26-5090-i4op3 acked; lane 5090 i4 successor imm26-5090-i4op32 running with lane-owners.json updated; ProvenWild investigator imm26-inv-provenwild running for rows 25-a and 26; 13-b investigator imm26-inv-13b running (fixer only after its diagnosis); 13-b FAIL still open; i4 window refused on DISPLAY2 (overlap) left as a tooling item; waker restarted.",
+   "why": "HANDOFF Right now must match the state after every agent report."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No respawn of imm26-5090-i4op3, no second spawn for lane 5090 i4, and no message to imm26-5090-i4op32 or any i4 test arm.",
+   "why": "The successor is already launched, and isolated test arms get no coordinator input; the successor reads its handoff file itself."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No action on imm26-5090-i3op3 and imm26-5090-ctxop322.",
+   "why": "The relay says both are still owned by the live tail session, and the new coordinator never respawns or steers tail-owned agents."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i4op32.status",
+  "type C:\\KenshiTestRuns\\agents\\imm26-5090-i4op3.handoff.md",
+  "type C:\\KenshiTestRuns\\lane-owners.json",
+  "Get-Content C:\\KenshiModding\\tools\\automation\\lane-idle.ps1 | Select-String -Pattern 'lane-owners|5090-i4'",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Status",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-mode.ps1 status",
+  "Get-ChildItem C:\\KenshiTestRuns\\inflight"
+ ]
+}

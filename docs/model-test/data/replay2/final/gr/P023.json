@@ -1,0 +1,18 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh 2>&1 | grep --line-buffered -v SWEEP (background Bash task)",
+   "why": "The waker task bjjwra6y5 has completed, so nothing watches the agents and lanes until a new background waker is running; restart it first, as the handoff's waker rule requires."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "the next event-wait.sh event, after reading the events bjjwra6y5 printed (tail of its output file) and acting on each one that needs action",
+   "why": "The events printed by bjjwra6y5 are not in this file, so the coordinator cannot act on them yet; the read-only check below comes first."
+  }
+ ],
+ "checks": [
+  "tail -c 3000 \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/5720e5b8-42a8-4aaf-9e29-db0072586324/tasks/bjjwra6y5.output\" | cut -c1-400"
+ ]
+}

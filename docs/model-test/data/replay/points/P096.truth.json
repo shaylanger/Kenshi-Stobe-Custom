@@ -1,0 +1,21 @@
+{
+ "id": "P096",
+ "session": "48b778a7",
+ "ts": "2026-10-16T18:08:28.769Z",
+ "class": "build-compose",
+ "outcome": {
+  "label": "corrected",
+  "why": "Shay mild correction: can we do the pilot on the 5090 on a new 3rdf lane so we dont slow anything down it just allows us t"
+ },
+ "actions": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-relay.ps1 -Agent imm26-sfS -Kind DONE -Report C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md -Summary \"imm26-sfS DONE (a85c7b7a): 05-cx v2: hxrun_cx2.sh 05-cx <lane> --allow-retry (distinct names, pinned, conditional E check, sed fixed, infonpc people column), selftest 23/23. 08-d v2: unblockrun_sfs.sh 08-d 4080-i4 --allow-retry (attn={in_combat:false}, ask check only after tick 1), selftest 18/18. Caveats: 05-cx H may still FAIL roster_has_sleeper; if 08-d is still not retired with attn, deploy sfT (compose) via lane-deploy.sh. Operator note inbox/operators/sfS.txt. Queue 08-d on 4080-i4 now.\" | Sel...[truncated 239 chars]",
+   "why": ""
+  }
+ ],
+ "actions_truncated": 0,
+ "reads": [],
+ "narration": [],
+ "event_text_chars": 3271
+}

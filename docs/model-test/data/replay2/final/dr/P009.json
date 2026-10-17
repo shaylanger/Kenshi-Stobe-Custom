@@ -1,0 +1,14 @@
+{
+ "event_class": "agent-stopped",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "Do not spawn imm26-nativecomp2 now: the coordinator is in its context-limit handoff (meter says start NOTHING new) and has already told all agents to stop. imm26-nativecomp STOPPED-CONTEXT 14:44 is the expected result of that stop order and is already listed in HANDOFF 'Stopped at the limit' (respawn fresh from agents\\imm26-nativecomp.handoff.md as imm26-nativecomp2). Keep waiting for the remaining RUNNING agents (claude-md-reviewer, imm26-4080-op2, imm26-wpA3, imm26-wpB3, program-ledger) to report STOPPED-CONTEXT, up to the ~10 min window, then stop stragglers, run handoff-ready.ps1 and open the next coordinator, which spawns the successors.",
+   "why": "The nativecomp stop is the ordered handoff stop; successors are spawned by the new coordinator, and the successor's own agent-status call (not the coordinator) marks it RUNNING."
+  }
+ ],
+ "checks": [
+  "sed -n 1p C:/KenshiTestRuns/agents/imm26-nativecomp.status",
+  "ls C:/KenshiTestRuns/agents/imm26-nativecomp.handoff.md"
+ ]
+}

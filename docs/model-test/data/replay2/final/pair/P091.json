@@ -1,0 +1,26 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (no --batch flag: no batch is named in this batch)",
+   "why": "The waker-guard hook sees live work (Kenshi running, inflight markers from imm26-4080-i3op21 and imm26-4080-i4op13 are 0 and 2 min old) with no waker, so the session must run event-wait.sh in the background and restart it on every wake."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "do not spawn imm26-4080-i3op20b; do not run agent-abandon.ps1 or delete any inflight marker",
+   "why": "The hook's respawn request for imm26-4080-i3op20 is already superseded: the coordinator spawned imm26-4080-i3op21 as its successor (11:19), so a second respawn would duplicate the lane, and the markers belong to live operators."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for event-wait.sh to wake on an inbox message, an agent DONE/FAILED/STOPPED-CONTEXT status, a batch or rig problem, or the 10-minute backstop",
+   "why": "Nothing else in this batch is actionable; the stale-marker release path does not apply because the marked work is live."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- pgrep -af event-wait.sh",
+  "head -3 C:/KenshiTestRuns/agents/imm26-4080-i3op21.status C:/KenshiTestRuns/agents/imm26-4080-i4op13.status",
+  "grep -n imm26-4080-i3op21 C:/KenshiTestRuns/programs/*.json (confirm op21 is recorded as the successor of imm26-4080-i3op20)",
+  "ls -la C:/KenshiTestRuns/inflight (look for markers older than 6 h with no live owner; do not delete any without checking)"
+ ]
+}

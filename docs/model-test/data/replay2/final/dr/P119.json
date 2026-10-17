@@ -1,0 +1,42 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:/KenshiModding/tools/automation/tail-ack.ps1 20261016-140902-tail-imm26-5090-i4-hk2",
+   "why": "The relay is a DONE result from the 5090-i4 hk2 agent (a result, not an order); acknowledge it after its report is read (see checks)."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:check] imm26-5090-i4op33 operator for lane 5090-i4. Brief: You are the fresh row operator for lane 5090-i4 in the imm26 program. Your predecessor imm26-5090-i4-hk2 finished DONE; its report is C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md. Row 12-d is SETUP-FAIL (PREFLIGHT-FAIL dist_to_target=112.3 >= 80 for Cind): do not re-run 12-d until its setup recipe is repaired. Read testing/HANDOFF.md and the 5090-i4 operator handoffs, then take the next queued runnable row for 5090-i4 under the standard batch and row rules; if no runnable row remains (everything needs recipe/server/native/fixture), run nothing, set your status DONE with that reason and say so in your first report. Keep your status current with tools/automation/agent-status.ps1 imm26-5090-i4op33. Do not install DLLs, edit product code, or touch other lanes; send one RESULT line per row.",
+   "why": "Lane 5090-i4 has no RUNNING operator and (per the last lanes.held read) is not parked, so a fresh operator is respawned from the handoff with the next number after op32; it self-stops if only blocked rows remain."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 add imm26-5090-i4op33 <agentId from the spawn result> 3a21a7b9-2954-4145-be31-079880e2e887; powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 imm26-5090-i4op33 RUNNING \"5090-i4 operator\" \"spawned by coordinator after hk2 DONE\" \"\" \"next queued runnable row\"",
+   "why": "Same registration the coordinator did for imm26-inv22b; the agentId only exists after the spawn returns."
+  },
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 lane-no-operator-5090-i4 \"hk2 DONE; respawned imm26-5090-i4op33 fresh from handoff; 12-d held for setup recipe\"",
+   "why": "Alert id follows the lane-no-operator-<lane> pattern seen for 4080-i3; ack only after the operator is spawned, recording the action taken."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': add imm26-5090-i4op33 RUNNING on 5090-i4, hk2 DONE, 12-d SETUP-FAIL awaiting recipe.",
+   "why": "HANDOFF 'Right now' must be updated the moment an agent starts or finishes."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (run in background)",
+   "why": "The waker just woke the coordinator and must be restarted so the in-flight agents (inv22b, new operator) keep being watched."
+  }
+ ],
+ "checks": [
+  "tail -c 3000 C:/KenshiTestRuns/agents/out/imm26-5090-i4-hk2/out-20261016-140851.md",
+  "cat C:/KenshiTestRuns/agents/imm26-5090-i4-hk2.status",
+  "grep -n 5090-i4 C:/KenshiTestRuns/lane-owners.json",
+  "cat C:/KenshiTestRuns/lanes.held",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief"
+ ]
+}

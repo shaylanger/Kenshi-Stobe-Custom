@@ -1,0 +1,36 @@
+{
+ "event_class": "shay-message",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 status, run per instance with KAH_INSTANCE=3,4,5 and KAH_OWNER=rig5090-imm26, rig5090-imm26-i4, rig5090-imm26-i5 (read-only: confirm no kenshi_x64 left on D:/KenshiInst/3..5 before the next steps)",
+   "why": "The stop in the preceding conversation reported success, but confirming the three 5090 game instances are really down is the first step of Shay's stop order."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 release, run per instance with KAH_INSTANCE=3 KAH_OWNER=rig5090-imm26, KAH_INSTANCE=4 KAH_OWNER=rig5090-imm26-i4, KAH_INSTANCE=5 KAH_OWNER=rig5090-imm26-i5 (only after the status check shows the game is down); leave C:/KenshiTestRuns/urgent_live_5090 alone (not a lane lock) and leave game-2.lock untouched (instance 2 has no process)",
+   "why": "The game-3/4/5.lock files were still present after stop, so the rigs stay marked busy until the lock owners release them."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 idle \"Shay 2026-10-15: stopped all 5090 testing (kenshi 3,4,5, lane backends, locks released); no new 5090 sessions until he says otherwise\"",
+   "why": "With the 5090 idle by Shay's order and nothing running there, the idle reason is true and lets the waker guard stop blocking the turn; the 4080 lanes keep running."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "SendMessage to Shay's relay session: 5090 stopped as ordered: Kenshi on instances 3, 4 and 5 stopped, 5090 lane backends stopped, game locks released, 5090 queue has no batch. 4080 lanes untouched. Question: what does 'size 3' refer to, and is it the 'size work packages' task or something else? I will do it if it is not too large once you tell me which item it is.",
+   "why": "The inbound message 'size 3 and do it if it isnt too large' does not say which item it means, so Shay has to name it, and the 5090 stop report goes with it so he has one update."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no action on 'size 3' until Shay names the item",
+   "why": "Its target is unknown, so starting any work on it now would guess at Shay's request."
+  }
+ ],
+ "checks": [
+  "grep -H RUNNING /c/KenshiTestRuns/agents/*.status | grep -i 5090  (any 5090-lane agent still RUNNING must be stopped via agent-status.ps1 or agent-abandon.ps1 before the rig is called idle)",
+  "powershell -NoProfile -Command \"Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select Id,Path\"",
+  "ls /c/KenshiTestRuns/queue/ (5090.next must still say none; no run-batch list for rig 5090)",
+  "ps -eo pid,args | grep -E 'php -S 127.0.0.1:1808|stobe-goal-watch|run-batch|rig-runner' | grep -v grep (in WSL, after the lane-backend stops; must be empty for the 5090 ports)"
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\rearm-waker.ps1 -KillOnly",
+   "why": "The waker task that delivered this batch has exited, so clear any stray event-wait before arming exactly one new waker (the tools\\automation path is assumed from the handoff's script name)."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background; never a bare & or disown)",
+   "why": "Nothing is armed now, and the 08-d unblock, the 05-cx and 08-d v2 rows and ctxfix3 all need the waker to wake the coordinator on their results."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append to the 4080-i4 operator inbox file, whose name is taken from the inbox digest in lane-brief.ps1 4080-i4 (checked first): '08-d UNBLOCK (SETUP-FAIL 20261016-121056): at the next row boundary, never mid-row, run lane-deploy-4080.sh once for bundle ba83148e5fa0. Then the one allowed attempt: unblockrun_a.sh 08-d --back 120. The native walk already finished (NATIVE_TRAVEL_FINISH phase=completed), so only the setup failed. Report one RESULT 08-d PASS or FAIL line with evidence. On FAIL stop and hand it to case:debug; no fourth run.'",
+   "why": "The SETUP-FAIL allows one more attempt on 4080-i4 only with the new bundle, and operator op13 owns that lane, so the operator runs it at a row boundary through its inbox, as earlier routing was done."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "Append to C:\\KenshiTestRuns\\inbox\\operators\\coordinator16-server-fixes.txt: 'sfS DONE (commit a85c7b7a): 05-cx v2 = hxrun_cx2.sh 05-cx <lane> --allow-retry ''05-cx v2 sfS'' (distinct names). 08-d v2 = the command in C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md. The 4080-i4 unblock attempt stays unblockrun_a.sh 08-d --back 120 (one attempt only). 4080 lanes run these only between rows.'",
+   "why": "sfS's new row tooling reaches the lane operators only through the note they read, the same way sfX and sfP were routed."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-ctxfix3; Agent description starts with [case:investigate] (odd behaviour goes to investigate first). Brief: 'imm26-ctxfix3 lane-brief idle-file leak. ctxfix2 (commit 49c78cf9) reports that a test run of tools/automation/lane-brief.ps1 rewrote C:\\KenshiTestRuns\\rig5090.idle, the automatic 15-minute idle reason. Until this is fixed, nobody counts that file as an idle reason. Find the code path that writes it during lane-brief runs or their selftests (ctxfix-selftest.sh, lane-brief-selftest.ps1). Stop the write, add an assert that the selftests never change rig5090.idle or rig4080.idle, commit with the shaylanger identity, push, and report the commit. Do not delete or rewrite rig5090.idle. Before editing, check that no queued or running batch uses the script. Keep your status current with tools/automation/agent-status.ps1.'",
+   "why": "ctxfix2 reports a test run wrote the 5090 idle file, which could falsely quiet the waker-guard hook, so the leak is fixed at its root; record the new agent's id with agent-ids.ps1 right after the spawn (PI-36)."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md, section Right now: record sfX DONE (0df01a48, offline selftest 28/28, no live row yet), sfS DONE (a85c7b7a, 05-cx v2 and 08-d v2 routed), ctxfix2 DONE (49c78cf9, lane-brief 13.5-14.5 KB), the 08-d SETUP-FAIL unblock plan for 4080-i4 op13 (bundle ba83148e5fa0, one attempt), ctxfix3 spawned for the rig5090.idle leak, and the waker re-arm time.",
+   "why": "The handoff rule is to update live state after every agent report, not only at the context limit."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No tail-ack or SendMessage for the three TAIL-RELAY imm26-sfS messages (120823, 120826, 120834) or for the sfX and ctxfix2 DONE(quiet) lines.",
+   "why": "The three sfS relays repeat one report, tail-ack fails for agents that are not in a program ledger, and sfS, sfX and ctxfix2 are not in a ledger, so there is nothing to close."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "The RESULT 08-d line from the 4080-i4 operator (op13), the 05-cx v2 and 08-d v2 results from the lane operators or a free 5090 lane, and the ctxfix3 commit.",
+   "why": "Those results are the next events; the re-armed waker wakes the coordinator on each one."
+  }
+ ],
+ "checks": [
+  "Read C:\\KenshiTestRuns\\inbox\\coordinator\\20261016-121056-setupfail-08-d.msg in full (the recipe, the bundle and the one-attempt rule)",
+  "grep -n -i 'ba83148e5fa0\\|NC2\\|unblockrun' the 08-d recipe named in that message (confirm which DLL the bundle carries; do not install NC22 unless the recipe names it)",
+  "grep -n 'hxrun_cx2\\|08-d\\|a85c7b7a' C:\\KenshiTestRuns\\agents\\out\\imm26-sfS\\latest.md",
+  "git -C C:\\KenshiModding show --stat a85c7b7a",
+  "grep -n -i 'idle' C:\\KenshiTestRuns\\agents\\out\\imm26-ctxfix2\\out-20261016-120904.md",
+  "Read C:\\KenshiTestRuns\\rig5090.idle (timestamp and text only; do not act on it)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-brief.ps1 4080-i4 (operator inbox file name and lane state), then the same for 5090-i5 and 5090-i3 to see whether a lane is free for the v2 rows",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (WAKER STATUS line after the re-arm)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 (SWEEP line only; imm26-nc3 is 18.6 h old, so judge it or record -Keep <path> '<reason>' before it passes 24 h)"
+ ]
+}

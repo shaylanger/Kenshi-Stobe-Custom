@@ -1,0 +1,25 @@
+{
+ "event_class": "setup-fail",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent subagent_type kenshi-debugger, name imm26-fx15bx, description \"[case:investigate] 15-bx SETUP-FAIL unblock plan\", prompt: \"You are imm26-fx15bx. Investigate SETUP-FAIL 15-bx (lane 5090-i3): 'no reply of Cind within 150s in P1'. Read C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt, the 15-bx row in testing/NPC_IMMERSION_26_TESTS.md, and C:/KenshiTestRuns/agents/out/imm26-fxA/latest.md (fxA already recorded 15-bx test defects and sfU/sfU2 are building asserter v2 for 15-bx and 16-bx: check whether this failure is already covered before proposing anything new). Decide whether the cause is a test defect, setup/tooling, or product, and write a short unblock plan (runner/recipe to use, deploy step, rerun command) to C:/KenshiTestRuns/agents/out/imm26-fx15bx/plan.md via save-report.ps1. Then run: powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 assign 15-bx imm26-5090-i3op21 C:/KenshiTestRuns/agents/out/imm26-fx15bx/plan.md only if the plan is a runner/recipe change the lane operator can apply between rows. Do not edit rows, do not touch the running lane or other lanes, do not start Kenshi. Keep status current with agent-status.ps1 imm26-fx15bx; final report <= 8 lines via save-report.ps1, then SubagentHandback.\"",
+   "why": "The SETUP-FAIL names no unblock plan or agent; bug-like behaviour goes to an investigate agent first, which also checks it against the already-running sfU2 15-bx asserter work."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\agent-ids.ps1 add imm26-fx15bx <agentId returned by the spawn call>",
+   "why": "PI-36: record the agent id right after every spawn; the id is unknown until the Agent call returns."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "bash run_in_background: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh",
+   "why": "The waker just completed and an agent is in flight, so it must be restarted."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/setupfail.ps1 list",
+  "cat C:/KenshiTestRuns/imm26-5090-hx/15-bx/P1/reply.txt | head -20",
+  "grep -n '15-bx' /c/KenshiModding/testing/NPC_IMMERSION_26_TESTS.md | head -5"
+ ]
+}

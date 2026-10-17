@@ -1,0 +1,24 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "Record in the program ledger and HANDOFF 'Right now': agent imm26-compose-fix-usermsg (task ace5a8d0d55b08800) DONE. user_message fix is in the compose tree, commit 070c795 pushed to origin main, php -l clean, targeted stobe-tests 4 suites passed, full run 93 passed / 5 FAILED (the expected ones per the agent) / 7 known pre-existing. No successor needed.",
+   "why": "An agent result changes program state, and the checkpoint must reflect it at once."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for agent imm26-inv-trust (still running, at 16-c) to finish; then spawn the single fixer, which applies the user_message fix already in tree, the inv-c1 patches (06-c, 08-a), the travel patches and the trust fixes.",
+   "why": "Two agents editing the same composed tree collide on compose.patch, so only one editor may run at a time."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "Answer to your question: not yet. The user_message bug is fixed and pushed (070c795; full stobe-tests 93 passed, the 5 failures are the known expected ones). The trust fixes are still being diagnosed (imm26-inv-trust). The inv-c1 and travel patches wait for the single fixer, which starts when trust finishes. Nothing is re-queued for testing yet. Still open for your decision: 20-a (replacing a trip mid-way: keep the code and change the row, or make the code wait for your confirmation) and 24-a (where would you take me: accept a proposal of a known place, or stop proposing a trip when no destination was named).",
+   "why": "Shay asked whether every bug has a fix in place and is re-queued; the honest answer is no, and the two open decisions must reach him."
+  }
+ ],
+ "checks": [
+  "cd /c/KenshiTestRuns/agents; grep '^latest' imm26-compose-fix-usermsg.status | cut -c1-300",
+  "cd /c/KenshiTestRuns/agents; grep '^latest' imm26-inv-trust.status | cut -c1-300"
+ ]
+}

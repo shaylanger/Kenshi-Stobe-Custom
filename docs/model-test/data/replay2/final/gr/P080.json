@@ -1,0 +1,19 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "none (no message, ack or spawn); confirm with the read-only check below",
+   "why": "Exit 15 is SIGTERM from the coordinator's own pkill of the earlier event-wait.sh waker before the replacement bp0tqjyzv was started, so the failed notification is the old waker dying, not a new fault."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "Only if the check finds no live event-wait.sh: Bash run_in_background with MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (never a bare &, and never a second copy while one is live)",
+   "why": "Imm26 work is in flight (imm26-u5-nc16 and imm26-u6-fix08d RUNNING, 11-b investigator running), so the Stop-hook waker guard needs one live waker."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c \"pgrep -fa 'event-wait.sh' | grep -v pgrep\"",
+  "tail -n 3 C:\\Users\\Shay\\AppData\\Local\\Temp\\claude\\C--KenshiModding\\bea16970-1102-47a3-b183-46101095930c\\tasks\\bp0tqjyzv.output"
+ ]
+}

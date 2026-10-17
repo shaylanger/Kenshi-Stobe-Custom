@@ -1,0 +1,23 @@
+{
+ "id": "L13",
+ "batch_id": 13,
+ "class": "agent stopped/dead",
+ "window": [
+  "2026-10-16T22:08:04.519Z",
+  "2026-10-16T22:08:27.606Z"
+ ],
+ "outcome": {
+  "label": "unknown",
+  "evidence": "no correction wording found in the real coordinator's text turns inside this batch window; not verified further"
+ },
+ "truth_noop": true,
+ "real_action_count": 6,
+ "action_types": [
+  "read",
+  "read",
+  "read",
+  "read",
+  "read",
+  "read"
+ ]
+}

@@ -1,0 +1,41 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 <listing or dry-run switch named in its param block>",
+   "why": "List the full stale set (87 stale, 1 older than 24 h) with path, machine and age before judging anything, because a bare run may delete without judging; the switch comes from checks[0] and is not in this file."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "ssh 4080 \"<rig-side testruns-sweep listing command, taken from the rig's own usage output>\"",
+   "why": "The one old24 entry (4080:C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch) lives on the 4080 rig, so the 5090 sweep cannot judge or remove it; the rig-side invocation is not in this file."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "If grep finds a citation of 20261015-110406: corpus.sh add <cited item> (usage line first), then on the rig: <rig-side testruns-sweep> -Keep C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch \"cited by <check or Misses row id>\"",
+   "why": "Shay's rule: a cited item is kept with a recorded reason (keep lasts 7 days); the -Keep runs on 4080 because -Keep on this PC cannot name a 4080: path, and only after confirming no rig4080 operator is using that path."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "If not cited: & C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 <removal switch named in its param block> (5090, uncited stale candidates from the listing only) and the same removal on the rig for 4080:C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch",
+   "why": "Shay's rule is to clean up after every batch; deletion only follows the listing judgement, and the sweep never touches corpus\\, inflight\\, game.lock or C:\\KenshiTestFixtures\\."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 (listing again) and ssh 4080 with the same rig-side listing; confirm old24=0 on both before ending the turn",
+   "why": "The Stop hook blocks while any artifact is older than 24 h, so the re-run on both rigs is the proof the block is cleared."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no change to lanes, operators, agents or the waker",
+   "why": "This block concerns only disk leftovers; work is in flight and no lane or agent event arrived, so the waker stays up."
+  }
+ ],
+ "checks": [
+  "grep -n -i -E \"param|Keep|DryRun|List|Remove|corpus\" C:\\KenshiModding\\tools\\automation\\testruns-sweep.ps1 | head -30",
+  "grep -rln \"20261015-110406\" C:\\KenshiModding\\testing C:\\KenshiModding\\docs C:\\KenshiModding\\archive",
+  "ssh 4080 \"dir C:\\KenshiTestRuns\\logs\\20261015-110406-before-launch\" (and confirm from handoff/4080-test-rig.md that the rig4080 lock owner is not using that path)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (confirm no inflight marker or running operator points at any path about to be removed)"
+ ]
+}

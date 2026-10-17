@@ -1,0 +1,42 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "testing/HANDOFF.md 'Right now': add a dated line '#9 <HH:MM Win clock> imm26-inv19d DONE (agents/out/imm26-inv19d/latest.md): 19-d resume WORKS (post-load OWNED_TRAVEL accepted, stobe.log:18445); the FAIL is the arrival half (14.6 km teleport during a live MOVE order, pair lands near y~950 and falls ~620 u, native order list empties, Cind >8 u from stored point -> FAILED native_order_ended_before_goal). Row recipe fix goes to imm26-fix19; 19-d stays FAIL, no TESTS change, 8 u gate and assertions unchanged.'",
+   "why": "CLAUDE.md requires HANDOFF to be updated after every agent report, and both coordinators proposed this same checkpoint line."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "program-ledger.ps1 with its own usage line (read it first): set the imm26 ledger entry for imm26-inv19d to DONE, output agents/out/imm26-inv19d/latest.md, note 'resume works; FAIL = arrival-half recipe defect; row 19-d FAIL unchanged'",
+   "why": "The program ledger must match the agent report so the supervisor and any successor coordinator see the investigation as finished."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-fix19, only if its status file shows RUNNING: 'Coordinator: imm26-inv19d root cause is in C:\\KenshiTestRuns\\agents\\out\\imm26-inv19d\\latest.md. The resume works (post-load OWNED_TRAVEL accepted, stobe.log:18445). The FAIL is the arrival half: the row teleports the pair about 14.6 km during a live MOVE order, they land near y~950 and fall about 620 u, the native order list empties, and Cind ends more than 8 u (3D) from the stored point, so FAILED native_order_ended_before_goal. Fix the 19-d row recipe only, as that report's recipe section recommends. Do not change the 8 u gate, any assertion or product code. Do not edit a row script while a queued or running list or batch uses it. 19-d stays FAIL until a rerun on the fixed recipe PASSes. Run the rowtools selftest and report the diff path.'",
+   "why": "The 19-d FAIL is a row-recipe artifact (the product fails correctly after a live-order teleport), so the existing row-19 tooling owner must fix the recipe and hear the cause."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "ONLY if imm26-fix19 is DONE or STOPPED (fresh successor, never SendMessage a stopped agent). Agent name imm26-fix19b, tag [case:generate]. Brief: 'Fix the row-19 setup for 19-d per C:\\KenshiTestRuns\\agents\\out\\imm26-inv19d\\latest.md (its recipe section). Change only the test setup. Do NOT loosen the 8 u arrival gate or any assertion, and do not change product code. Edit a row script only when no queued or running list or batch uses it. Run the rowtools selftest, report the diff path, keep your status file current.'",
+   "why": "If the row-19 fixer has already stopped, a fresh successor takes the same recipe fix so the 19-d repair does not stall."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to a0220684160339b7b (the 5090-i3 19-d lane operator): 'Coordinator correction: the full 19-d report is C:\\KenshiTestRuns\\agents\\out\\imm26-inv19d\\latest.md (read its recipe section). Follow that version over my earlier summary. Do not rerun or mark 19-d on the old setup; 19-d stays FAIL until a rerun on the fixed recipe PASSes. Keep your other queued rows running.'",
+   "why": "My earlier forward was sent before the full report was read, so the operator must not run 19-d on the wrong setup, and the lane keeps its other rows moving."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "Wait for the imm26-inv19d status to read DONE, for the row-19 fixer's report (imm26-fix19 or imm26-fix19b), and for the next 5090-i3 19-d rerun to emit one RESULT 19-d line. Keep the event-wait waker running meanwhile.",
+   "why": "Row 19-d stays FAIL until a rerun on the fixed recipe passes; this investigation marks no rows and changes no TESTS state."
+  }
+ ],
+ "checks": [
+  "sed -n 1,80p C:\\KenshiTestRuns\\agents\\out\\imm26-inv19d\\latest.md (read the recipe section before any message text is sent)",
+  "tail -2 C:\\KenshiTestRuns\\agents\\imm26-inv19d.status (DONE expected; if still RUNNING, wait for it and do not mark it by hand)",
+  "ls C:\\KenshiTestRuns\\inflight\\ (the imm26-inv19d marker must be gone once its status is DONE)",
+  "tail -2 C:\\KenshiTestRuns\\agents\\imm26-fix19.status (RUNNING: message it; DONE or STOPPED: spawn imm26-fix19b)",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief (waker status, open alerts, orphaned agents, respawn list)"
+ ]
+}

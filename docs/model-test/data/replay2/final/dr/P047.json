@@ -1,0 +1,25 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i4 \"operator imm26-5090-i4-hard2b reported: preflight was blocked by i3/i4 window overlap and i5 on the Samsung display, windows moved, preflight OK, 402 fixed, 03-b running\"",
+   "why": "The LANE IDLE 5090-i4 alert (16.7 min) has a stated cause and the lane is working again, so close it with the action taken (subject taken from the lane-idle output; the alert id is not in the input)."
+  },
+  {
+   "type": "message-shay",
+   "exact_command_or_message": "5090-i4 follow-up: the lane was not stuck on its own work. Its operator imm26-5090-i4-hard2b was blocked in preflight by overlapping i3/i4 game windows, with the i5 window on the Samsung display. It moved the windows and preflight is OK. A live chat works, so the DeepInfra 402 is fixed on this lane, and no 402 FAILs were marked there. 03-b is running (waiting at speed 10 for the natural bored tick). Next on this lane: 18-a, then the 13-ax/15-bx/16-bx/17-bx/18-cx/02-ax reruns with --allow-retry. Still open on other lanes: the 19-a failures (5090-i3, 4080-i3, 4080-i4) need a fixer.",
+   "why": "The coordinator told Shay it would report what it found on the 5090-i4 operator, and this is that finding."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for the RESULT line of row 03-b on lane 5090-i4 (operator imm26-5090-i4-hard2b) in C:/KenshiTestRuns/row-timing.log; send no message to the operator",
+   "why": "The operator reports preflight OK, the 402 fixed and 03-b running, so its report is a result to read, not an order to act on."
+  }
+ ],
+ "checks": [
+  "tail -5 /c/KenshiTestRuns/row-timing.log | cut -c1-140",
+  "grep -c 402 /tmp/stobe-imm26-5090-i4/site/log/stobeserver.log",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\lane-idle.ps1"
+ ]
+}

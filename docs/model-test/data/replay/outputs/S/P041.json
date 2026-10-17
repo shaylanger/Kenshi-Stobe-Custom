@@ -1,0 +1,15 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "ignore",
+   "exact_command_or_message": "No new action: this TAIL-RELAY for imm26-5090-i3-hard (STOPPED-CONTEXT) duplicates the monitor INBOX event already handled. The brief was generated (lane-brief.ps1 5090-i3 -Name imm26-5090-i3-hard2 -Predecessor imm26-5090-i3-hard, 20839 bytes under the 25600 limit), operator-warn.ps1 -Register put imm26-5090-i3-hard2 on lane 5090-i3, tail-ack.ps1 -Agent imm26-5090-i3-hard printed 'acked', and fresh agent imm26-5090-i3-hard2 (agentId ae381b64fa7651050) was spawned. Spawning again would put two operators on one lane.",
+   "why": "The relay asks for a fresh i3 operator, a tail-ack and a lane-owners.json entry; the preceding conversation shows all three done, so a second spawn would be a duplicate."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -Command \"Get-Content C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2.status -TotalCount 3\"",
+  "powershell -NoProfile -Command \"Test-Path C:\\KenshiTestRuns\\agents\\imm26-5090-i3-hard2.brief.md; Select-String -Path C:\\KenshiTestRuns\\lane-owners.json -Pattern 'imm26-5090-i3-hard2'\"",
+  "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\session-start.ps1 -Brief  (confirm no 'NO SUCCESSOR' line remains for imm26-5090-i3-hard and the inbox\\coordinator relay file is acked)"
+ ]
+}

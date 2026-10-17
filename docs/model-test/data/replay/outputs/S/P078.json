@@ -1,0 +1,30 @@
+{
+ "event_class": "waker-digest",
+ "decision": [
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent name imm26-u4b-routerebind (work package U4b), description '[case:patch] activity accept route re-bind fix'. Brief: Server fix for imm26 rows 26-a/22-a/26-b/26-c. Predecessor imm26-u4-ground (commit b320c66) fixed ACCEPT grounding of the Hunt candidate, but operator imm26-5090-i5-op9i reports (row 26-a note and its status latest, 02:28) that accept still fails because the persisted route candidate (travel_destinations rows, valid ~300 s) is no longer valid at accept time and needs a re-bind. Read C:\\KenshiTestRuns\\agents\\imm26-5090-i5-op9i.handoff.md / the 26-a row evidence for the exact ACTIVITY_REJECT_REASON and log lines first (grep/tail only), then use the code maps (bash tools/automation/codemap.sh) for lib/activity/ActivityService.php and ActivityAgreementAdapter.php. At ACCEPT only, re-resolve the route candidate against the current native route facts (same kind/sourceId/resourceId) without rebinding the stored record/digest; keep propose/resume/Mine/ClearGroup exact-ref rules and requester/willingness/expiry/one-active-record checks. Add offline tests incl. negatives (no route candidate, wrong requester, expired offer). Patch compose tree and the 5 lane trees only (never Shay's live tree or ss-merge): backup, stage, php -l, test, deploy, commit and push (identity shaylanger). Checkpoint and commit every milestone, target <=120k tokens. Write a note to C:\\KenshiTestRuns\\inbox\\operators\\u4b-routerebind.txt for the operators when deployed. Status via agent-status.ps1 imm26-u4b-routerebind.",
+   "why": "26-a/22-a/26-b/26-c are still SETUP-FAIL after the grounding fix and the operator names a route re-bind at accept as the remaining server blocker; the work is server code with no operator input needed."
+  },
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "SendMessage to imm26-4080-i4op11 (agent id not given in this file, resolve via its status file): Coordinator -> op11: your status is stale since 02:13. Update your status file now with agent-status.ps1 and reply with the current row (08-e / 08-d / 11-b) and ETA; the lane-stall watchdog flags silence over 12 min.",
+   "why": "Its status line is 17 min old at 02:30 while op9i updated at 02:28, so a ping is due per the stall procedure (ping at 10 min, TaskStop at 20)."
+  },
+  {
+   "type": "edit-file",
+   "exact_command_or_message": "C:\\KenshiModding\\testing\\HANDOFF.md 'Right now': prepend '#12 02:35 op9i: 26-a family still SETUP-FAIL after u4-ground b320c66 (route re-bind at accept needed); imm26-u4b-routerebind spawned to fix; op9i continues 12-d rerun, 19-e, 19-f (do not touch 26-a family until u4b notes); op11 on 08-e 08-d 11-b, pinged for stale status.' and update the program ledger entry for the 26-a work package (C:\\KenshiTestRuns\\programs\\ ledger, name not in this file)",
+   "why": "HANDOFF and ledger must be updated after every agent report, and the 26-a family now has a new work package and owner."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh (Bash run_in_background)",
+   "why": "The waker that just fired a backstop has exited and agents are in flight, so it must be re-armed."
+  }
+ ],
+ "checks": [
+  "sed -n 1,5p C:/KenshiTestRuns/agents/imm26-5090-i5-op9i.status",
+  "grep -n -E 'route|26-a' C:/KenshiTestRuns/agents/imm26-5090-i5-op9i.handoff.md | tail -20",
+  "sed -n 1,3p C:/KenshiTestRuns/agents/imm26-4080-i4op11.status"
+ ]
+}

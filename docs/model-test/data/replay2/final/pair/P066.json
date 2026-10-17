@@ -1,0 +1,38 @@
+{
+ "event_class": "stop-hook",
+ "decision": [
+  {
+   "type": "wait",
+   "exact_command_or_message": "C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b3.status: wait while its first line is RUNNING and fresh (under 45 min old); its launch of Kenshi or its next RESULT line ends the idle state. No game commands from the coordinator.",
+   "why": "imm26-5090-i4-hard2b3 was spawned at 22:40 as the one allowed 5090 lane operator and may be between its predecessor wait and its first launch, so the idle 5090 may be normal startup, not an empty lane."
+  },
+  {
+   "type": "restart-waker",
+   "exact_command_or_message": "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-stream.sh --as event-wait 2>&1 | grep -v --line-buffered SWEEP",
+   "why": "Only if the checks show no waker is armed, since the waker guard blocks ending a turn while the 5090 lane has work in flight without one."
+  },
+  {
+   "type": "run",
+   "exact_command_or_message": "cd C:/KenshiModding/tools/automation && powershell -NoProfile -File lane-brief.ps1 5090-i4 -Out C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b4.brief.md -Name imm26-5090-i4-hard2b4 -Predecessor imm26-5090-i4-hard2b3",
+   "why": "Only if hard2b3 is DONE, STOPPED-CONTEXT or FAILED with no successor; writes the successor brief the spawn below reads, and is not run while hard2b3 is alive."
+  },
+  {
+   "type": "spawn",
+   "exact_command_or_message": "Agent description: [case:generate] imm26-5090-i4-hard2b4 lane operator | brief text: You are imm26-5090-i4-hard2b4, operator for ISOLATED lane 5090-i4 only (never 5090-i3 or 5090-i5, the live install, live server tree, DB or Shay's saves). Read C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b4.brief.md (PREDECESSOR HANDOVER section), then the predecessor handoff it names, then start the next open row listed there (16-bx first if still open). The 4080 is one lane (4080-i4).",
+   "why": "Only when hard2b3 is dead with no successor; a fresh successor keeps the one permitted 5090 lane busy instead of leaving it idle."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "no kenshi-ctl.ps1 idle reason recorded; no queue drop; no lane launch from the coordinator",
+   "why": "Recording an idle reason would hide open 5090-i4 rows, and the rules forbid recording one just to quiet the hook."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/session-start.ps1 -Brief",
+  "head -n 3 C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b3.status",
+  "ls -la C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b2.handoff.md C:/KenshiTestRuns/agents/imm26-5090-i4-hard2b3.handoff.md",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/lane-idle.ps1 -NoMemory",
+  "powershell -NoProfile -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 idle",
+  "tasklist /FI \"IMAGENAME eq kenshi.exe\""
+ ]
+}

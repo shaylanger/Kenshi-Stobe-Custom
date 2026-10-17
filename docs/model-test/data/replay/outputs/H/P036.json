@@ -1,0 +1,19 @@
+{
+ "event_class": "relay",
+ "decision": [
+  {
+   "type": "message-agent",
+   "exact_command_or_message": "To imm26-fix-batch3 (server 08-b): operator af494f7d420e43327 (4080 i3, NC5 installed, commit c0f7bdd) reports 08-b still FAIL. Cause: stobeSocialFollowupsClaim needs stobeSocialAttentionOptionalSpeechAllowed, which needs in_combat===false (lib/social_attention.php:33-38). Natural DLL bored URIs carry no attn= and Cind has no fresh native_ai snapshot, so in_combat is null and the director bored follow-up claim is denied. NC5 proximity turn (optional=1&attn=) scans squad members only, so non-squad Cind never gets it. Preferred fix: add attn= to natural bored URIs so the in_combat gate stays intact; do not relax the combat gate for unknown attention. Patch live tree and ss-merge (anchor script, php -l, offline stobe-tests), then send a checkpoint. Do not touch any lane.",
+   "why": "The root cause is server-side and the fixer owns the 08-b director-mode claim, so the fix goes to the fixer while the operator keeps running its other rows."
+  },
+  {
+   "type": "wait",
+   "exact_command_or_message": "wait for imm26-fix-batch3 checkpoint, then rerun 08-b on the 4080 i3 lane after the server patch is deployed to that lane site",
+   "why": "08-b needs the fixed claim before a rerun is meaningful, and the operator is still working 15-a, 16-c, 03-b, 03-cx and 04-ax."
+  }
+ ],
+ "checks": [
+  "MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'grep -n stobeSocialAttentionOptionalSpeechAllowed\\|in_combat /root/stobe-work/ss-merge/lib/social_attention.php | head -20'",
+  "tail -5 C:/KenshiTestRuns/agents/imm26-fix-batch3.status"
+ ]
+}

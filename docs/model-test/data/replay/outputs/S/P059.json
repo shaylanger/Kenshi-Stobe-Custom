@@ -1,0 +1,18 @@
+{
+ "event_class": "lane-alert",
+ "decision": [
+  {
+   "type": "ack",
+   "exact_command_or_message": "powershell -NoProfile -File C:\\KenshiModding\\tools\\automation\\alert-ack.ps1 5090-i4 \"5090 lanes HELD by Shay order (no new 5090 testing, memory no-new-5090-sessions): no operator on purpose, game/backend/locks stopped; 4080 lanes continue. Resume only when Shay lifts the hold (brief source imm26-5090-i4-hard2b2.handoff.md)\"",
+   "why": "Shay's current order holds all 5090 lanes with no operator, and HANDOFF says 5090 lane alerts get alert-ack with that reason; the alert id is not in the file so the lane subject is used."
+  },
+  {
+   "type": "ignore",
+   "exact_command_or_message": "Do not spawn or respawn an imm26-5090-i4 operator and do not run lane-brief.ps1 for 5090-i4.",
+   "why": "The alert's suggested spawn would violate the 5090 hold, and this session is a tail that spawns nothing; a ledger-owning new coordinator handles any spawns."
+  }
+ ],
+ "checks": [
+  "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\alert-scan.ps1 (confirm the 5090-i4 NO-OPERATOR alert is acked and not re-opened for other lanes)"
+ ]
+}
