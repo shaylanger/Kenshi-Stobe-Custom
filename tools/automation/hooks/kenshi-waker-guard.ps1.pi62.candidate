@@ -1,0 +1,335 @@
+# kenshi-waker-guard (PowerShell): Claude Code hooks for the Kenshi modding workspace (Shay, 2026-10-08).
+# Why: on 2026-10-08 the coordinator sat "waiting" for ~10 min on subagent notifications with no waker running, so
+# peer messages (which only arrive between tool rounds) went unread, and the 5090 sat idle after the sword agent
+# released the lock. CLAUDE.md rules alone did not prevent it; this hook enforces them.
+#
+#   Stop hook  (kenshi-waker-guard.ps1 stop):
+#     Only acts when cwd is under C:\KenshiModding and only once per turn (stop_hook_active => allow).
+#     1. Work in flight (Kenshi running, game lock held, or a marker in C:\KenshiTestRuns\inflight\ newer than 6 h)
+#        and no <=120 s waker process (sleep / Start-Sleep / batch-health / rig-health) => BLOCK: start a waker.
+#     2. 5090 idle (no Kenshi, lock free) and C:\KenshiTestRuns\rig5090.idle absent or older than 60 min
+#        => BLOCK once: launch the next 5090 batch or write the reason into that file.
+#   PreToolUse hook (kenshi-waker-guard.ps1 pre), matcher Bash|PowerShell|ScheduleWakeup:
+#     Denies a top-level `sleep N` / `Start-Sleep N` / `timeout /t N` with N > 120, and ScheduleWakeup delays > 120 s.
+#
+#   Agent statuses (agent-guard-lib.ps1, 2026-10-15): the Stop hook also BLOCKS while an agents\*.status is STOPPED-CONTEXT/FAILED
+#   (updated < 18 h ago) with no successor and not abandoned (it prints the exact respawn text); every RUNNING status updated < 45 min
+#   ago counts as in-flight work (so a running event wait is required). Fails open: any error in this part is ignored.
+#   Rule (e) (PI-11): a STOPPED-CONTEXT/FAILED agent whose ledger wp / lane has a fresh RUNNING agent under another name is not blocked;
+#   the accepted pair is printed ("accepted successor S for X via ledger wp W") on stderr and appended to a block message.
+#   Lane locks (PI-16, 2026-10-15; lane-lock-lib.ps1): game-<N>.lock + a kenshi_x64 from D:\KenshiInst\<N> = a live lane game (counts as in-flight work;
+#   a lock with no such process is stale and ignored). If only the default slot is IDLE-GAME while lanes run, the hook does not block unless
+#   lane-idle.ps1 reports one of the live lanes idle / without operator. Switches: KAH_GUARD_TEST_LANE_PROCS, KAH_GUARD_TEST_STATE5090, KAH_GUARD_TEST_STOP_AFTER_GAME.
+#   Test switches: KAH_RUNS_DIR (root), KAH_GUARD_TEST_ONLY_AGENTS=1 (run only the agent checks, print INFLIGHT:/exit); see agent-guard-selftest.ps1.
+# Markers: scripts/agents `touch C:\KenshiTestRuns\inflight\<name>` when they start a batch, subagent or rig job,
+# delete it when done. Idle reason: `kenshi-ctl.ps1 idle "<reason>"` or write the text into rig5090.idle.
+$mode = $args[0]
+$raw = [Console]::In.ReadToEnd()
+try { $in = $raw | ConvertFrom-Json } catch { exit 0 }
+$cwd = if ($in.cwd) { [string]$in.cwd } else { $PWD.Path }
+if ($cwd -notmatch '^[A-Za-z]:[\\/]KenshiModding') { exit 0 }
+$runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
+$MAX = 120
+# The one correct waker (Shay 2026-10-15): a background event wait, never sleep+batch-health/rig-health.
+$WAKER = 'the background command (Bash run_in_background) "bash tools/automation/event-wait.sh [--batch <out-dir>]" in WSL (from Git Bash: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh [--batch /mnt/c/<out-dir>]); it ends on an inbox message, an agent status DONE/FAILED/STOPPED-CONTEXT, a batch/rig problem or the 10-minute backstop; restart it every time it wakes you'
+
+function Block-Stop([string]$reason) {
+    @{ decision = 'block'; reason = $reason } | ConvertTo-Json -Compress | Write-Output
+    exit 0
+}
+
+if ($mode -eq 'pre') {
+    $tool = [string]$in.tool_name
+    $ti = $in.tool_input
+    if ($tool -eq 'ScheduleWakeup') {
+        if ($ti.delaySeconds -and [double]$ti.delaySeconds -gt $MAX) {
+            [Console]::Error.WriteLine("kenshi-waker-guard: ScheduleWakeup delay $($ti.delaySeconds)s > $MAX s. Do not use ScheduleWakeup for waiting: run $WAKER.")
+            exit 2
+        }
+        exit 0
+    }
+    $cmd = [string]$ti.command
+    if (-not $cmd) { exit 0 }
+    # PI-48 (pilot 2): while a pilot is ACTIVE (pilot\ACTIVE, pilot\<x>\ACTIVE or pilot\<x>\<y>\ACTIVE touched < 12 h ago) a BARE `stobe-auto` (command position, no KAH_DIR= /
+    # KAH_INSTANCE= / --dir / rig-env.sh in the same command) talks to the LIVE install, not the lane: deny it. Fails open on any error. Selftest: tools\automation\stobe-auto-guard-selftest.ps1.
+    try {
+        $pil = Join-Path $runs 'pilot'
+        if (Test-Path -LiteralPath $pil) {
+            $act = @(Get-ChildItem -LiteralPath $pil -Filter ACTIVE -Recurse -Depth 2 -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-12) })
+            if ($act.Count -gt 0 -and $cmd -match '(?m)(?:^|[;&|(`{]\s*|\$\(\s*|\b(?:then|do)\s+|(?:\s-c|\s--)\s+["'']?)(?:\w+=\S*\s+)*(?:/usr/local/bin/)?stobe-auto(?=\s|$)' -and $cmd -notmatch 'KAH_DIR=|KAH_INSTANCE=|--dir\s|rig-env\.sh') {
+                [Console]::Error.WriteLine("kenshi-waker-guard: bare 'stobe-auto' denied while a pilot is ACTIVE ($($act[0].FullName)): it talks to Shay's LIVE install, not your lane (PI-48). Use the lane-scoped tools (go-row / row scripts / lane-setup.sh / preflight.sh / ab2-run.sh), or for a by-hand query prefix KAH_DIR='<lane game dir>\mods\AutomationHarness' (e.g. D:\KenshiInst\4\mods\AutomationHarness).")
+                exit 2
+            }
+        }
+    } catch { }
+    $hits = @()
+    foreach ($m in [regex]::Matches($cmd, '(?m)(?:^|[;&|({]\s*)(?:sleep|Start-Sleep)\s+(?:-Seconds\s+|-s\s+)?(\d+)(?![\d.]*[mh])')) {
+        if ([int]$m.Groups[1].Value -gt $MAX) { $hits += $m.Value.Trim() }
+    }
+    foreach ($m in [regex]::Matches($cmd, '(?im)timeout\s+/t\s+(\d+)')) {
+        if ([int]$m.Groups[1].Value -gt $MAX) { $hits += $m.Value.Trim() }
+    }
+    if ($hits.Count -gt 0) {
+        [Console]::Error.WriteLine("kenshi-waker-guard: '$($hits -join ', ')' waits longer than $MAX s. Never wait with a long sleep or a sleep+batch-health/rig-health loop. Use $WAKER (Shay 2026-10-15).")
+        exit 2
+    }
+    exit 0
+}
+
+if ($mode -ne 'stop') { exit 0 }
+# TAIL session (overlap handoff, docs/TAIL_HANDOFF_CONTRACT.md, Shay 2026-10-15): a session with C:\KenshiTestRuns\tail\<session>.flag has
+# handed the coordinator role to a new session and only waits for its own agents. It may end only when every owned agent is done AND
+# acknowledged by the new coordinator (ledger acked_by_new_coordinator); until then its Stop is blocked EVERY time (no stop_hook_active
+# escape) with a clear message, but it is never blocked from working. It is exempt from the idle-rig, ready-queue, alert, handoff-marker
+# and agent-respawn rules (those belong to the live coordinator). Fails open on any error. See tail-mode.ps1 / tail-hooks-selftest.ps1.
+if (-not $env:KAH_AGENT_NAME -and [string]$in.session_id) {
+    try {
+        $tr = $runs; $ts = [string]$in.session_id   # the lib's param block would reset $runs inside the dot-sourcing scope
+        # PI-18 (Shay 2026-10-15): the verdict no longer waits for the explicit ack (relay delivered or 5 min grace is enough), and the block
+        # count is capped: from the 4th unchanged block the message says to use ONE long background wait; after the 6th the tail is let end
+        # (logged in <runs>\tail\cap-ends.log). A changed pending set restarts the count. See Register-TailBlock in tail-mode.ps1.
+        $tv = & {
+            . (Join-Path $PSScriptRoot '..\tail-mode.ps1')
+            $v = Get-TailStopVerdict $tr $ts
+            if ($v.Tail -and $v.Block) {
+                # PI-28 (Shay 2026-10-15): the tail's own wait (tail-wait.ps1, heartbeat file <runs>\tail\<session>.wait) is provably ALIVE and ARMED
+                # (pid + process start + command line + fresh heartbeat, tail-wait-lib.ps1) and the tail has nothing to do (only running agents / relays
+                # awaiting delivery) -> the turn may END (the session idles; the wait's completion notification wakes it). FAIL CLOSED: any error or
+                # doubt = not armed = the block + PI-18 cap below, exactly as before.
+                $armedNow = $false
+                try {
+                    . (Join-Path $PSScriptRoot '..\tail-wait-lib.ps1')
+                    $fl = Read-TailFlag (Get-TailFlagPath $tr $ts)
+                    if ($fl) {
+                        $w = Test-TailWaitArmed $tr $ts $fl
+                        if ($w.Armed -and -not [string](Get-TailWaitAction $tr $fl)) { $armedNow = $true; $v['WaitArmed'] = [string]$w.Why }
+                    }
+                } catch { $armedNow = $false; $v.Remove('WaitArmed') }
+                if (-not $armedNow) { try { $v['Cap'] = Register-TailBlock $tr $ts ([string]$v.Sig) } catch { } }
+            }
+            $v
+        }
+        if ($tv.Tail) {
+            if ($tv.Block -and $tv.WaitArmed) { exit 0 }   # PI-28: armed wait -> end the turn quietly (no cap count, no close attempt: the tail is not finished)
+            if ($tv.Block -and -not ($tv.Cap -and $tv.Cap.Allow)) {
+                $extra = ''
+                if ($tv.Cap -and $tv.Cap.Quiet) { $extra = " You have now been blocked $($tv.Cap.Count) times in a row with nothing changed: wait with ONE long background wait (bash tools/automation/event-wait.sh in the background, or a single wait on the agent); do not reply per block. After 6 unchanged blocks this hook lets you end." }
+                $extra += " TO STOP THESE BLOCKS (PI-28): start ONE background wait over your own agents, powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\tail-wait.ps1 -Session $ts (run_in_background; it keeps a heartbeat file and exits when an owned agent finishes or needs a relay), then end your turn: while it is alive and armed this hook lets you end and the session wakes on the wait's completion. Never reply to this block message."
+                Block-Stop ('kenshi-waker-guard: ' + $tv.Message + $extra + ' Keep the waker running: ' + $WAKER)
+            }
+            # The tail may end = it is FINISHED (all agents done + acknowledged): close it (Shay 2026-10-15). tail-close.ps1 re-checks everything
+            # (flag, agents, claude pid name/start time, never the current coordinator), sends TAIL-DONE to the current coordinator, and a detached
+            # worker ends this session's process ~20 s later (log: <runs>\tail\closed.log). Fail closed + silent: any error = nothing is closed.
+            if (-not $env:KAH_TAIL_NO_CLOSE) {
+                try { & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\tail-close.ps1') -Session $ts -Source hook -Runs $tr *> $null } catch { }
+            }
+            exit 0
+        }
+    } catch { }
+}
+if ($in.stop_hook_active) { exit 0 }
+# Independent agent session (spawn-wp-session.ps1 sets KAH_AGENT_NAME; Shay 2026-10-15): an AGENT, not the coordinator. Only its
+# own status file counts: it may end only when agents\<name>.status is DONE/FAILED/STOPPED-CONTEXT. No event-wait, idle-rig,
+# in-flight, other-agent or handoff.ready rules (those belong to the coordinator). The `pre` sleep > 120 s rule above still applies.
+if ($env:KAH_AGENT_NAME) {
+    $an = [string]$env:KAH_AGENT_NAME
+    $sf = Join-Path (Join-Path $runs 'agents') "$an.status"
+    $st = ''
+    if (Test-Path -LiteralPath $sf) {
+        $l1 = ((Get-Content -LiteralPath $sf -TotalCount 1 -ErrorAction SilentlyContinue) -as [string]).TrimStart([char]0xFEFF)
+        $pp = @($l1 -split '\|' | ForEach-Object { $_.Trim() })
+        if ($pp.Count -ge 2) { $st = $pp[1] }
+    }
+    if ($st -in 'DONE', 'FAILED', 'STOPPED-CONTEXT') { exit 0 }
+    Block-Stop ("kenshi-waker-guard: you are the independent agent session '$an' and your status file $sf is " + $(if ($st) { "'$st'" } else { 'missing' }) + ", not DONE/FAILED/STOPPED-CONTEXT. Write your final status with: powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\agent-status.ps1 $an DONE|FAILED|STOPPED-CONTEXT ""<task>"" ""<latest step>"" ""<output paths>"" ""<next step>"" (and your report/handoff file), then end the turn.")
+}
+# Context-limit handoff done (handoff-ready.ps1 wrote the marker in the last 30 min): the next session owns the
+# in-flight work, so this one may end without a waker.
+$hr = Join-Path $runs 'handoff.ready'
+if ((Test-Path -LiteralPath $hr) -and ((Get-Item -LiteralPath $hr).LastWriteTime -gt (Get-Date).AddMinutes(-30))) { exit 0 }
+
+# Only the live coordinator (heartbeat owner, coordinator-heartbeat.ps1) is held to the in-flight/no-successor rules: a retired
+# session that handed off must be able to end (peer report 2026-10-15). Heartbeat line = '<epoch> <session_id> <time>'.
+try {
+    $hb = Join-Path $runs 'coordinator.heartbeat'
+    if ((Test-Path -LiteralPath $hb) -and [string]$in.session_id) {
+        $hp = (Get-Content -LiteralPath $hb -TotalCount 1) -split '\s+'
+        if ($hp.Count -ge 2 -and $hp[1] -ne [string]$in.session_id -and ((Get-Date) - (Get-Item -LiteralPath $hb).LastWriteTime).TotalMinutes -lt 30) { exit 0 }
+    }
+} catch { }
+
+# --- open-alert ledger (PI-21, Shay 2026-10-15; alert-lib.ps1): the waker's urgent events (LANE IDLE / NO-OPERATOR, AGENT STALL / ORPHANED / DEAD /
+# KILLED, failed or stopped agents without a successor, LLM-HEALTH FAIL) stay OPEN until alert-ack.ps1 <id> "<action>" or the condition clears. Only the
+# live COORDINATOR reaches this point (tail sessions, agent sessions and retired coordinators exited above). An alert older than 5 min and unacked blocks the
+# stop; after 3 consecutive blocks with the same alert set the 4th stop is let through once and logged (alerts\cap-ends.log). Fails open on any error.
+# Test seam: KAH_ALERT_NO_SCAN=1 skips the fresh scan (the selftests plant alert files and check the verdict). ---
+try {
+    . (Join-Path $PSScriptRoot '..\alert-lib.ps1')
+    if (-not $env:KAH_ALERT_NO_SCAN) { [void](Invoke-AlertScan -Runs $runs -Force) }
+    $av = Get-AlertStopVerdict $runs
+    if ($av.Capped) { [Console]::Error.WriteLine('kenshi-waker-guard: open alerts unchanged after 3 blocks, letting this stop through once (logged): ' + ($av.Ids -join ', ')) }
+    if ($av.Block) { Block-Stop ('kenshi-waker-guard: ' + $av.Message) }
+} catch { }
+
+# --- agent statuses (agent-guard-lib.ps1; fails open) ---
+$agentFly = @()
+$agentAccepted = @()
+try {
+    . (Join-Path $PSScriptRoot '..\agent-guard-lib.ps1')
+    $ar = Get-AgentReport
+    $agentFly = @($ar.InFlight | ForEach-Object Name)
+    $agentAccepted = @($ar.Accepted)      # rule (e), PI-11: successors accepted via the program ledger / lane table (one line each: which and why)
+    if ($agentAccepted.Count) { [Console]::Error.WriteLine('kenshi-waker-guard: ' + ($agentAccepted -join '; ')) }
+    if ($ar.OpenRecent.Count) {
+        $lines = @($ar.OpenRecent | Select-Object -First 8 | ForEach-Object { Get-AgentRespawn $_ })
+        $accTxt = if ($agentAccepted.Count) { ' (' + ($agentAccepted -join '; ') + ')' } else { '' }
+        Block-Stop ('kenshi-waker-guard: ' + $ar.OpenRecent.Count + ' agent(s) stopped or failed with no successor, so their work would be lost: ' + ($lines -join ' || ') + $accTxt + ' -- Spawn each as a FRESH agent (Agent tool) from its handoff/status file now (never SendMessage the old agent); the new agent writes its own status and the old one stops being reported. If one was dropped on purpose: powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-abandon.ps1 <name> "<why>".')
+    }
+} catch { }
+if ($env:KAH_GUARD_TEST_ONLY_AGENTS) { 'INFLIGHT: ' + ($agentFly -join ','); foreach ($l in $agentAccepted) { $l }; exit 0 }
+
+# --- what is in flight ---
+$kenshi = $null -ne (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue)
+$lockFile = Join-Path $runs 'game.lock'
+$lock = if (Test-Path -LiteralPath $lockFile) { (Get-Content -LiteralPath $lockFile -Raw -ErrorAction SilentlyContinue).Trim() -replace '\s+', ' ' } else { $null }
+$markers = @()
+$inflightDir = Join-Path $runs 'inflight'
+if (Test-Path -LiteralPath $inflightDir) {
+    $markerFiles = @(Get-ChildItem -LiteralPath $inflightDir -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) } | Sort-Object LastWriteTime -Descending)
+    $markers = @($markerFiles | ForEach-Object { $_.Name })
+}
+# Quiet block text (Shay order #5, 2026-10-15): a COUNT plus only the 2 newest markers (name + age), never the whole list. The
+# blocking conditions are unchanged; only the wording is shorter.
+function Format-Newest($items, [string]$what, [string]$tag = 'newest 2') {
+    $a = @($items)
+    if ($a.Count -le 2) { return "${what}: $($a.Count) ($($a -join ', '))" }
+    "${what}: $($a.Count) ($tag`: $(($a | Select-Object -First 2) -join ', '))"
+}
+function Format-MarkerAge($f) { $m = [int]((Get-Date) - $f.LastWriteTime).TotalMinutes; "$($f.Name) ($(if ($m -ge 120) { [string][int]($m / 60) + ' h' } else { "$m min" }) old)" }
+# Lane games (PI-16, 2026-10-15): game-<N>.lock + a kenshi_x64 running from D:\KenshiInst\<N>; a lock without that process is stale and ignored.
+$liveLanes = @()
+try { . (Join-Path $PSScriptRoot '..\lane-lock-lib.ps1'); $liveLanes = @(Get-LiveLaneGames $runs) } catch { }
+$inflight = @()
+if ($kenshi) { $inflight += 'Kenshi running' }
+if ($lock) { $inflight += "game.lock=$lock" }
+if ($liveLanes.Count) { $inflight += ('lane games running: ' + (($liveLanes | ForEach-Object { "game-$($_.N).lock=$($_.Lock)" }) -join ', ')) }
+if ($markers.Count) { $inflight += (Format-Newest @($markerFiles | ForEach-Object { Format-MarkerAge $_ }) 'inflight markers') }
+$agentOnly = @($agentFly | Where-Object { $markers -notcontains $_ })
+if ($agentOnly.Count) { $inflight += (Format-Newest $agentOnly 'RUNNING agents (status < 45 min old)' 'first 2') }
+
+# --- is a waker running? (a background sleep/Start-Sleep or a health check chained after one) ---
+$me = $PID
+# A waker is a sleep of >= 30 s (short polling sleeps don't count) or a health check chained after one, and it must belong
+# to THIS session: another session's waker wakes that session, not this one. The session root is the nearest claude.exe
+# (or node.exe) above this hook; a candidate counts only if that root is among its ancestors.
+$procs = @{}
+foreach ($p in (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) { $procs[[int]$p.ProcessId] = $p }
+$root = $null; $cur = $me; $hops = 0
+while ($cur -and $procs.ContainsKey($cur) -and $hops -lt 20) {
+    if ($procs[$cur].Name -match '^(claude|node)\.exe$') { $root = $cur; break }
+    $cur = [int]$procs[$cur].ParentProcessId; $hops++
+}
+function Under-Root([int]$pid0) {
+    if (-not $root) { return $true }   # cannot tell (hook run by hand): accept any waker
+    $c = $pid0; $n = 0
+    while ($c -and $procs.ContainsKey($c) -and $n -lt 30) {
+        if ($c -eq $root) { return $true }
+        $next = [int]$procs[$c].ParentProcessId
+        if ($next -eq $c) { break }
+        $c = $next; $n++
+    }
+    return $false
+}
+$wakerProc = $procs.Values | Where-Object {
+    if ($_.ProcessId -eq $me -or $_.Name -notmatch '^(sleep|wsl|bash|sh|powershell|pwsh|timeout)\.exe$') { return $false }
+    $cl = [string]$_.CommandLine
+    $isWaker = $false
+    if ($cl -match 'batch-health|rig-health|lane-waker|event-wait') { $isWaker = $true }
+    else {
+        # matches `sleep 120; ...` inside a bash -c string and `"C:\...\sleep.exe" 120` (Git Bash spawns sleep as its own process)
+        $m = [regex]::Match($cl, '(?:^|[;&|(\s"\\/])(?:sleep|Start-Sleep)(?:\.exe")?\s+(?:-Seconds\s+|-s\s+)?(\d+)(?!\S)')
+        $isWaker = $m.Success -and [int]$m.Groups[1].Value -ge 30
+    }
+    $isWaker -and (Under-Root ([int]$_.ProcessId))
+} | Select-Object -First 1
+
+if ($env:KAH_GUARD_TEST_NO_WAKER) { $wakerProc = $null }   # selftest switch: can only make the block fire, never skip it
+if ($inflight.Count -gt 0 -and -not $wakerProc) {
+    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Next action: start ' + $WAKER + ' (add --batch <out-dir> when a batch runs). If nothing is really in flight, release the lock / delete the stale marker C:\KenshiTestRuns\inflight\<name> (agents: agent-abandon.ps1 <name> "<why>") and say so.')
+}
+
+# --- 5090 idle? ---
+# rig-runner's own "no changed work" (Shay 2026-10-10 22:05: nothing real queued, every filler row passed on this build with
+# unchanged scripts) is an allowed idle: the runner keeps rig<rig>.idle fresh with that text and writes no ALERT, so neither
+# this check, the 4080 check (rig4080-state.ps1 IDLE-OK) nor the IDLE-GAME check blocks; a new list starts at once.
+if (-not $kenshi -and -not $lock -and -not $liveLanes.Count) {
+    $idleFile = Join-Path $runs 'rig5090.idle'
+    $fresh = (Test-Path -LiteralPath $idleFile) -and ((Get-Item -LiteralPath $idleFile).LastWriteTime -gt (Get-Date).AddMinutes(-60))
+    if (-not $fresh) {
+        Block-Stop ('kenshi-waker-guard: the 5090 is idle (Kenshi closed, game lock free) and no reason is recorded. Shay''s rule: when the 5090 finishes its work, don''t stop; run the next open rows there (viewmodel/FP/STOBE/PG). Either start the next work there now (imm26/queue rows: both rigs are allowed; drop a list into C:\KenshiTestRuns\queue\5090\ or queue\any\ or launch the batch), or record a one-line reason with: & C:\KenshiModding\tools\automation\kenshi-ctl.ps1 idle "<reason>"  (e.g. "Shay playing", "nothing testable left", "chat-only session"); it is good for 60 min, "idle" shows it, "idle clear" removes it.')
+    }
+}
+
+# --- rig-runner alerts (rig-runner.ps1: a rig idle >= 2 min with an empty queue, a stuck/killed row, a dead batch) ---
+# A TDR alert (ALERT-<lane>-tdr.txt) stays until Shay clears the cause, so it would block every Stop forever: once the
+# coordinator stopped that rig and told Shay, it writes TDR-REPORTED-<rig>.txt (newer than the alert, what Shay was told);
+# then that alert no longer blocks (m103 2026-10-11: the 5090 TDR at 16:35 locked the hook).
+$alerts = @(Get-ChildItem -LiteralPath $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | Where-Object {
+    if ($_.Name -notmatch '^ALERT-(.+)-tdr\.txt$') { return $true }
+    $ack = Join-Path $runs ('TDR-REPORTED-' + ($Matches[1] -replace '[bc]$', '') + '.txt')
+    -not ((Test-Path -LiteralPath $ack) -and (Get-Item -LiteralPath $ack).LastWriteTime -ge $_.LastWriteTime)
+} | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw).Trim() })
+if ($alerts.Count) { Block-Stop ('kenshi-waker-guard: ' + ($alerts -join ' | ') + ' Shay''s rule (2026-10-10): no rig idle or paused > 2 min. The rig runners (rig-runner.ps1 -Status) run whatever list files are in C:\KenshiTestRuns\queue\<rig>\ or queue\any\: put the next batch list there now (or record kenshi-ctl.ps1 idle/idle4080 "<reason>"); for a stuck/dead batch read the owner note and the batch SUMMARY. The ALERT clears itself once the rig works again.') }
+
+# --- 5090 game slot idle while Kenshi is open / the lock is held? (Shay 2026-10-10: op-b4 had written DONE, the
+# marker still pointed at it, and everything read BUSY for 5 min) ---
+if ($kenshi -or $lock -or $liveLanes.Count) {
+    $g = if ($env:KAH_GUARD_TEST_STATE5090) { $env:KAH_GUARD_TEST_STATE5090 } else { (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\rig5090-state.ps1') | Select-Object -First 1) -as [string] }
+    if ($g -like 'IDLE-GAME*') {
+        # PI-16: the default slot (instance 1) is idle. If lane games are running (live lock + process) the 5090 is working through them, so the
+        # default slot's idleness is not the alert; the lanes themselves must be active: lane-idle.ps1 (operator RUNNING + activity < 6 min) for each live lane.
+        # An idle lane / a lane with no operator still blocks; a stale lane lock (dead game) never counts as a live lane.
+        if ($liveLanes.Count) {
+            $lp = @(); try { $lp = @(Get-LaneIdleProblems $liveLanes $runs) } catch { }
+            if ($lp.Count) {
+                Block-Stop ('kenshi-waker-guard: lane game(s) running but a lane is idle: ' + (($lp | Select-Object -First 4) -join ' | ') + ' (default slot: ' + $g + '). Ask/respawn the lane operator or fix the root, or record a reason with kenshi-ctl.ps1 idle "<reason>".')
+            }
+            [Console]::Error.WriteLine('kenshi-waker-guard: default 5090 slot idle but ' + $liveLanes.Count + ' lane game(s) active (' + (($liveLanes | ForEach-Object { $_.Lane }) -join ',') + '): not blocking.')
+        } else {
+            Block-Stop ('kenshi-waker-guard: the 5090 game slot is idle: ' + $g + '. Queue the next list in C:\KenshiTestRuns\queue\5090\ (rig-runner.ps1 starts it within 2 min and takes the lock over), or record a reason with kenshi-ctl.ps1 idle "<reason>".')
+        }
+    }
+}
+if ($env:KAH_GUARD_TEST_STOP_AFTER_GAME) { 'PASSED-5090-GAME'; exit 0 }   # selftest switch (waker-lanes-selftest.ps1): stop before the 4080/queue/sweep checks
+
+# --- 4080 idle? (Shay 2026-10-10: it sat idle a whole day while the 5090 worked; nothing looked at it) ---
+$r4 = & powershell -NoProfile -File (Join-Path $PSScriptRoot '..\rig4080-state.ps1') 2>$null | Select-Object -First 1
+if ($r4 -like 'IDLE kenshi=no*' -or $r4 -like 'IDLE-GAME*') {
+    Block-Stop ('kenshi-waker-guard: the 4080 is idle (Kenshi closed there, no C:\KenshiTestRuns\inflight\4080-* marker, no reason recorded). Shay''s rule: use BOTH rigs, in parallel, without being told. Start a 4080 job now (PG rows, harness rows, KenshiFP combat/viewmodel rows, or split off part of the current 5090 work) via the 4080 operator agent and touch C:\KenshiTestRuns\inflight\4080-<job> while it runs; or record a one-line reason with: & C:\KenshiModding\tools\automation\kenshi-ctl.ps1 idle4080 "<reason>" (good for 60 min). State: tools\automation\rig4080-state.ps1 -Fresh.')
+}
+
+# --- ready queue per rig (Shay 2026-10-10: a rig must go straight on to its next job, not wait for planning) ---
+# Since rig-runner.ps1 (2026-10-10): a ready batch = a *.list file in C:\KenshiTestRuns\queue\<rig>\ or queue\any\ (the
+# rig's runner takes it the moment the current batch ends). Nothing queued: queue\<rig>.next whose FIRST line is
+# "none: <reason>" (< 6 h old) records why.
+$qdir = Join-Path $runs 'queue'
+$miss = @()
+$anyN = @(Get-ChildItem -LiteralPath (Join-Path $qdir 'any') -Filter '*.list' -File -ErrorAction SilentlyContinue).Count
+foreach ($rig in '5090', '4080') {
+    if ($anyN -or @(Get-ChildItem -LiteralPath (Join-Path $qdir $rig) -Filter '*.list' -File -ErrorAction SilentlyContinue).Count) { continue }
+    $q = Join-Path $qdir "$rig.next"
+    if ((Test-Path -LiteralPath $q) -and (Get-Item -LiteralPath $q).LastWriteTime -gt (Get-Date).AddHours(-6) -and ((Get-Content -LiteralPath $q -TotalCount 1) -as [string]) -match '^\s*none:') { continue }
+    $miss += $rig
+}
+if ($miss.Count) {
+    Block-Stop ('kenshi-waker-guard: no ready batch queued for rig(s) ' + ($miss -join ', ') + '. Shay''s rule (2026-10-10): the next batch for each rig is queued BEFORE the current one ends, so the rig runner goes straight on. Put the next run-batch.sh list file into C:\KenshiTestRuns\queue\<rig>\ (or queue\any\ for work either rig can do; header comments: owner/launch/needs, see rig-runner.ps1), or write C:\KenshiTestRuns\queue\<rig>.next with first line "none: <reason>" if there is truly nothing (< 6 h old).')
+}
+
+# --- test leftovers (Shay 2026-10-10: "stuff ... is left around and never cleaned up; we need it cleaned or it will never go away") ---
+# testruns-sweep.ps1 check: exit 1 when an item in C:\KenshiTestRuns / 4080 C:\KAH + C:\KenshiTestRuns / WSL /root/animlab-work
+# or a leaked /tmp/animlab-* dir is off the keep-list, not named by running work and older than 24 h.
+$sw = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\testruns-sweep.ps1') check -Auto 2>$null
+if ($LASTEXITCODE -eq 1) {
+    Block-Stop ('kenshi-waker-guard: test/automation leftovers older than 24 h are lying around (' + (($sw | Select-Object -First 8) -join ' | ') + '). Shay''s rule: clean up after every batch/review. Delete what is judged (corpus.sh add anything a lab check or Misses row cites first), or record why it stays: & C:\KenshiModding\tools\automation\testruns-sweep.ps1 -Keep <path> "<reason>" (good 7 days). Full list: testruns-sweep.ps1.')
+}
+exit 0
