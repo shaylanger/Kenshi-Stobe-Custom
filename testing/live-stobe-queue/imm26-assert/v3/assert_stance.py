@@ -12,6 +12,8 @@ What changed against v2, and why (evidence: 3 replicates on 4080-i4, rows/16-bx-
      (HOSTILE_V3).  A cold one-word answer, or a hostile answer that happens to contain "friend", still FAILS.
   3. (imm26-fix16bxengage) ENGAGE widened: 'how about you', 'you tell me', 'your turn', "what's the story", 'what happened', 'you look (like you|tired|rough|...)'
      -> real i4 op21 reps 2/3 control replies ("...what's the story?", "You look like you've had a rougher night than me") were false negatives. Hostile wording still vetoes.
+  4. (imm26-fix16bx2) 'walk away' veto no longer fires on the concern question "did you walk away clean?" (still on "walk away now", "just walk away", "or walk away");
+     ENGAGE gained "what was/'s that about", "what's going on", "you ok/alright", "are you all right/fine/well", "did you (get|walk|manage|see|...) ...?".
 Everything else (trait, tier, gush, exclamation, parrot, 3..40 words, pairwise similarity, foreign action, tier of control, give/gift, inventory) is the v2 logic unchanged."""
 import os
 import re
@@ -26,10 +28,15 @@ ENGAGE = re.compile(r"(what about you|and you\b|\byou\?|how('?s| is| are) (the |
                     r"walk with you|glad|good to|pleased|nice to|welcome|"
                     # fix16bxengage: return questions / invitations to carry on the talk, and attention paid to the player's state
                     r"how about you|you tell me|your turn|what('?s| is) (the|your) story|what happened|"
-                    r"you look (like you|tired|rough|worn|beat|pale|well|hurt)|you'?ve got the look of)", re.I)
+                    r"you look (like you|tired|rough|worn|beat|pale|well|hurt)|you'?ve got the look of|"
+                    # fix16bx2: generic return / curiosity / concern questions (op22 rep2 "...What was that about?")
+                    r"what('?s| is| was) (that|this|it) (all )?about|what('?s| is) going on|\byou (ok|alright)\b|are you (all right|fine|well)|"
+                    r"\bdid you (get|walk|manage|see|hurt|make|find|escape|survive|come|win|lose|take)\b[^.!?]*\?)", re.I)
 HOSTILE_V3 = re.compile(r"(state your (business|name)|what do you want|stay back|keep (back|away|your)|back off|get lost|move along|"
                         r"i don'?t know you|who are you|your kind|enem(y|ies)|not (a )?friend of|no friend of|leave me|piss off|"
                         r"i'?ll (kill|cut|gut)|or else|walk away|go away|don'?t (talk|speak) to me)", re.I)
+# fix16bx2: "did you walk away clean?" is a concern question, not a dismissal; "walk away now", "just walk away", "or walk away" still veto.
+CONCERN_WALK = re.compile(r"\bdid you (?:just |manage to |get to |still )?walk away\b(?! (?:now|or)\b)", re.I)
 
 
 def reply_to_player(b):
@@ -51,7 +58,7 @@ def reply_to_player(b):
 
 
 def friendly_v3(rep):
-    if HOSTILE_V3.search(rep):
+    if HOSTILE_V3.search(CONCERN_WALK.sub('', rep)):
         return False
     return bool(OPEN.search(rep)) or rep.count('!') >= 1 or bool(ENGAGE.search(rep))
 

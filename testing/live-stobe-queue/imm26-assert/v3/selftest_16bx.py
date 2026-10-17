@@ -11,6 +11,7 @@ Part 2: mutations of rep1 (copied to a temp dir) that MUST FAIL or must NOT chan
   ctl-gives-item (inv_after differs)                         -> FAIL
   noise-npc-npc (huge NPC-to-NPC monologue appended)         -> verdict unchanged (PASS)
   no-reply (all replies to the player removed)               -> FAIL (words 3..40, no fallback to NPC-NPC chat)
+  fix16bx2: did-you-walk-away-clean / what-was-that-about / you-ok PASS; walk-away-now / or-walk-away / hostile+question / refusal / empty FAIL; real op22 reps PASS
 Prints SELFTEST fix16bx-<name> PASS|FAIL and SELFTEST FIX16BX ALL PASS|FAIL n/m."""
 import os, re, shutil, subprocess, sys, tempfile
 
@@ -115,6 +116,28 @@ def main():
         d = mut('n-' + k); replace_reply(d, 'O2', [t] if t else [], npc='Malzin'); l = run(d); chk('mut-engage-neg-' + k, verdict(l) == 'FAIL' and 'O2:ctl_friendly_words!' in l, l[:90])
     d = mut('n-longtarget'); replace_reply(d, 'R2', ['I am doing well and I thought a great deal about where we last parted and what the road has been like since then, with all the weather and the bandits and the long dull marches between towns, so there is a lot to say about it all. How about you?'])
     l = run(d); chk('mut-engage-neg-long-target-still-fails', verdict(l) == 'FAIL' and 'R2:words 3..40!' in l)
+    # --- imm26-fix16bx2: narrowed 'walk away' veto + generic return/curiosity/concern questions ---
+    pos2 = {'did-walk-away-clean': 'Alive and fed. Saw Zelvia swing at you - did you walk away clean?',
+            'did-you-get-away': 'Not bad at all. Did you get away from her in one piece?',
+            'what-was-that-about': "You're still standing, I see. What was that about?",
+            'whats-that-about': 'Fed and dry. What is that about, with the swords out?',
+            'whats-going-on': "Breathing. What's going on with the guards today?",
+            'you-ok': 'Breathing, same as ever. You ok?',
+            'are-you-alright': 'Fed and in one piece. Are you alright after that?'}
+    for k, t in pos2.items():
+        d = mut('p2-' + k); replace_reply(d, 'O2', [t], npc='Malzin'); l = run(d); chk('mut-fix2-' + k, verdict(l) == 'PASS', l[:90])
+    neg2 = {'walk-away-now': 'Just walk away now.', 'or-walk-away': 'Pay up or walk away, traveler.', 'walk-away-bare': 'Walk away. What was that about?',
+            'did-you-walk-away-now': 'Did you walk away now or what, stranger, back off.', 'what-about-hostile': 'What was that about? Get lost.',
+            'refusal': 'I would rather not discuss it.', 'cold-what': 'Whatever.', 'empty': ''}
+    for k, t in neg2.items():
+        d = mut('n2-' + k); replace_reply(d, 'O2', [t] if t else [], npc='Malzin'); l = run(d); chk('mut-fix2-neg-' + k, verdict(l) == 'FAIL' and 'O2:ctl_friendly_words!' in l, l[:90])
+    d = mut('n2-longtarget'); replace_reply(d, 'R2', ['I am doing well and I thought a great deal about where we last parted and what the road has been like since then, with all the weather and the bandits and the long dull marches between towns, so there is a lot to say about it all. What was that about? You ok?'])
+    l = run(d); chk('mut-fix2-neg-long-target-still-fails', verdict(l) == 'FAIL' and 'R2:words 3..40!' in l)
+    # real op22 reps (copies of the failing i4 dirs): control must now pass ctl_friendly_words (whole row PASS)
+    for r in (1, 2):
+        o = os.path.join(ROOT, f'16-bx-op22rep{r}')
+        if os.path.isdir(o):
+            lo = run(o); chk(f'real-op22rep{r}-passes', verdict(lo) == 'PASS' and 'ctl_friendly_words!' not in lo, lo[:90])
     # real op21 reps (if present): rep1 fails only on length, rep2/3 pass
     o1 = os.path.join(ROOT, '16-bx-op21rep1')
     if os.path.isdir(o1):
