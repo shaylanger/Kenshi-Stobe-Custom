@@ -31,17 +31,39 @@ if ($cwd -notmatch '^[A-Za-z]:[\\/]KenshiModding') { exit 0 }
 $runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 $MAX = 120
 # The one correct waker (Shay 2026-10-15): a background event wait, never sleep+batch-health/rig-health.
-$WAKER = 'the background command (Bash run_in_background) "bash tools/automation/event-wait.sh [--batch <out-dir>]" in WSL (from Git Bash: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh [--batch /mnt/c/<out-dir>]); it ends on an inbox message, an agent status DONE/FAILED/STOPPED-CONTEXT, a batch/rig problem or the 10-minute backstop; restart it every time it wakes you'
+$WAKER = 'the background command (Bash run_in_background) "bash tools/automation/event-wait.sh [--batch <out-dir>]" in WSL (from Git Bash: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh [--batch /mnt/c/<out-dir>]); it ends on an inbox message, an agent status DONE/FAILED/STOPPED-CONTEXT, a batch/rig problem or the 10-minute backstop; restart it every time it wakes you ; PREFERRED (PI-51, one waker for the whole session, no restart per wake): Monitor tool, command MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch [--batch /mnt/c/<out-dir>] (idempotent, never a second daemon; actionable events are lines in C:\KenshiTestRuns\waker\events.log; waker-persist.sh set-batch <dir> changes the batch)'
 
 function Block-Stop([string]$reason) {
     @{ decision = 'block'; reason = $reason } | ConvertTo-Json -Compress | Write-Output
     exit 0
 }
 
+# PI-51: the persistent waker (tools/automation/waker-persist.sh) rewrites waker\<me>.hb ('pid=.. epoch=<unix s> me=.. child=..') every ~2 s FROM ITS OWN LOOP, which
+# only runs while the daemon (and its inner event-wait) is alive and holds the single-instance flock; a heartbeat older than 150 s therefore means dead. $null = not alive.
+function Get-PersistWaker {
+    try {
+        $me0 = if ($env:KAH_WAKER_ME) { $env:KAH_WAKER_ME } else { 'coordinator' }
+        $hb = Join-Path (Join-Path $runs 'waker') ($me0 + '.hb')
+        if (-not (Test-Path -LiteralPath $hb)) { return $null }
+        $t = (Get-Content -LiteralPath $hb -TotalCount 1 -ErrorAction Stop)
+        $pm = [regex]::Match([string]$t, 'pid=(\d+)'); $em = [regex]::Match([string]$t, 'epoch=(\d+)')
+        if (-not $pm.Success -or -not $em.Success) { return $null }
+        $age = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [int64]$em.Groups[1].Value
+        if ($age -lt -60 -or $age -ge 150) { return $null }
+        return ('persistent waker pid ' + $pm.Groups[1].Value + ', heartbeat ' + $age + ' s old')
+    } catch { return $null }
+}
+
 if ($mode -eq 'pre') {
     $tool = [string]$in.tool_name
     $ti = $in.tool_input
     if ($tool -eq 'ScheduleWakeup') {
+        # Shay 2026-10-17: a self-wake (reason starts with "self-wake", <= 30 min) is allowed: it restarts a stalled coordinator; it is not for polling.
+        # It is recorded (selfwake.json) so the Stop hook's open-work block accepts a turn that ends with work left but a wake-up scheduled.
+        if ($ti.delaySeconds -and [string]$ti.reason -match '^\s*self-wake' -and [double]$ti.delaySeconds -le 1800) {
+            try { @{ session = [string]$in.session_id; until = (Get-Date).AddSeconds([double]$ti.delaySeconds + 600).ToString('o'); reason = [string]$ti.reason } | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $runs 'selfwake.json') -Encoding ASCII } catch { }
+            exit 0
+        }
         if ($ti.delaySeconds -and [double]$ti.delaySeconds -gt $MAX) {
             [Console]::Error.WriteLine("kenshi-waker-guard: ScheduleWakeup delay $($ti.delaySeconds)s > $MAX s. Do not use ScheduleWakeup for waiting: run $WAKER.")
             exit 2
@@ -62,6 +84,14 @@ if ($mode -eq 'pre') {
             }
         }
     } catch { }
+    # PI-51: a second event-wait.sh next to the persistent waker would eat its inbox messages and produce duplicate EVENT lines: deny (test runs with KAH_RUNS= are exempt).
+    if ($cmd -match '(?m)(?:^|[;&|(\s"''])(?:bash|sh)\s+(?:\S*[\\/])?event-wait\.sh(?=\s|$|["''])' -and $cmd -notmatch 'KAH_RUNS=') {
+        $pw = Get-PersistWaker
+        if ($pw) {
+            [Console]::Error.WriteLine("kenshi-waker-guard: not starting a second waker: the $pw is running (PI-51). Its events are lines in C:\KenshiTestRuns\waker\events.log; watch them with the Monitor tool (waker-persist.sh watch) instead of event-wait.sh. Change batch: waker-persist.sh set-batch <dir>.")
+            exit 2
+        }
+    }
     $hits = @()
     foreach ($m in [regex]::Matches($cmd, '(?m)(?:^|[;&|({]\s*)(?:sleep|Start-Sleep)\s+(?:-Seconds\s+|-s\s+)?(\d+)(?![\d.]*[mh])')) {
         if ([int]$m.Groups[1].Value -gt $MAX) { $hits += $m.Value.Trim() }
@@ -124,6 +154,80 @@ if (-not $env:KAH_AGENT_NAME -and [string]$in.session_id) {
                 try { & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\tail-close.ps1') -Session $ts -Source hook -Runs $tr *> $null } catch { }
             }
             exit 0
+        }
+    } catch { }
+}
+# --- OPEN WORK + NO ONE WORKING (Shay 2026-10-17: the 5090 sat idle ~8 h because a recorded idle reason let the coordinator stop while rows were still open) ---
+# While real work remains (an open setupfail.ps1 ticket, or a row of testing\NPC_IMMERSION_26_TESTS.md whose status cell is FAIL / SETUP-FAIL) and nothing is handling it
+# (no kenshi_x64, no fresh inflight marker, no fresh RUNNING agent, no live self-wake from the pre hook), Stop is blocked and a recorded idle reason
+# (kenshi-ctl.ps1 idle / idle4080, rig5090.idle) does NOT count. Ways out: do the work; schedule ScheduleWakeup "self-wake ..." <= 30 min; or a Shay stop order:
+# <runs>\shay-stop-order.json {"quote":"<his words>","at":"<time>"} whose quote must occur in a REAL user line of this session's transcript (never a tool result or assistant text)
+# and the file must be < 12 h old. Blocks every time (no stop_hook_active escape), but at most 3 in a row within 10 min: the 4th is let through and logged in alerts\cap-ends.log.
+# Fails open on any error. Switch: KAH_GUARD_NO_WORKLEFT=1. Test seam: KAH_GUARD_TEST_WORKLEFT_ROWS=<file> replaces the row file. Selftest: worklock-selftest.ps1.
+if (-not $env:KAH_AGENT_NAME -and -not $env:KAH_GUARD_NO_WORKLEFT) {
+    try {
+        $wlSkip = $false
+        $hrw = Join-Path $runs 'handoff.ready'
+        if ((Test-Path -LiteralPath $hrw) -and ((Get-Item -LiteralPath $hrw).LastWriteTime -gt (Get-Date).AddMinutes(-30))) { $wlSkip = $true }
+        $hbw = Join-Path $runs 'coordinator.heartbeat'
+        if ((Test-Path -LiteralPath $hbw) -and [string]$in.session_id) {
+            $hpw = (Get-Content -LiteralPath $hbw -TotalCount 1) -split '\s+'
+            if ($hpw.Count -ge 2 -and $hpw[1] -ne [string]$in.session_id -and ((Get-Date) - (Get-Item -LiteralPath $hbw).LastWriteTime).TotalMinutes -lt 30) { $wlSkip = $true }
+        }
+        if (Test-Path -LiteralPath (Join-Path (Join-Path $runs 'tail') ([string]$in.session_id + '.flag'))) { $wlSkip = $true }
+        if (-not $wlSkip) {
+            $left = @()
+            if (-not $env:KAH_GUARD_TEST_WORKLEFT_TICKETS) {
+                $sfl = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\setupfail.ps1') list 2>$null
+            } else { $sfl = @(Get-Content -LiteralPath $env:KAH_GUARD_TEST_WORKLEFT_TICKETS -ErrorAction SilentlyContinue) }
+            foreach ($l in @($sfl)) { if ([string]$l -match '^(\S+)\s+age=\S+\s+needs=\S+\s+owner=\S+\s+state=(open|planned|building|ready)\b') { $left += ('ticket ' + $matches[1]) } }
+            $tf = if ($env:KAH_GUARD_TEST_WORKLEFT_ROWS) { $env:KAH_GUARD_TEST_WORKLEFT_ROWS } else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'testing\NPC_IMMERSION_26_TESTS.md' }
+            if (Test-Path -LiteralPath $tf) {
+                foreach ($l in [System.IO.File]::ReadLines($tf)) {
+                    if ($l -match '^\| (IMM-[0-9A-Za-z-]+) \|' ) {
+                        $rid = $matches[1]
+                        if ($l -match '\| (FAIL|SETUP-FAIL) \|') { $left += ('row ' + $rid + ' ' + $matches[1]) }
+                    }
+                }
+            }
+            $left = @($left | Select-Object -Unique)
+            if ($left.Count -gt 0) {
+                $handled = $false
+                if (-not $env:KAH_GUARD_TEST_WORKLEFT_TICKETS -and (Get-Process -Name kenshi_x64 -ErrorAction SilentlyContinue)) { $handled = $true }
+                foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) })) { $handled = $true }
+                foreach ($sf2 in @(Get-ChildItem -LiteralPath (Join-Path $runs 'agents') -Filter '*.status' -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-45) })) {
+                    $l1 = ((Get-Content -LiteralPath $sf2.FullName -TotalCount 1 -ErrorAction SilentlyContinue) -as [string]).TrimStart([char]0xFEFF)
+                    if ($l1 -match '\|\s*RUNNING\s*\|') { $handled = $true }
+                }
+                $swf = Join-Path $runs 'selfwake.json'
+                if (Test-Path -LiteralPath $swf) {
+                    $sw0 = Get-Content -LiteralPath $swf -Raw | ConvertFrom-Json
+                    if ([string]$sw0.session -eq [string]$in.session_id -and [datetime]$sw0.until -gt (Get-Date)) { $handled = $true }
+                }
+                $ordered = $false
+                $so = Join-Path $runs 'shay-stop-order.json'
+                if ((Test-Path -LiteralPath $so) -and ((Get-Item -LiteralPath $so).LastWriteTime -gt (Get-Date).AddHours(-12)) -and $in.transcript_path -and (Test-Path -LiteralPath ([string]$in.transcript_path))) {
+                    $q = [string]((Get-Content -LiteralPath $so -Raw | ConvertFrom-Json).quote)
+                    if ($q.Length -ge 4) {
+                        $qj = ($q | ConvertTo-Json -Compress).Trim('"')
+                        foreach ($tl in [System.IO.File]::ReadLines([string]$in.transcript_path)) {
+                            if ($tl.Contains($qj) -and $tl -notmatch 'tool_result|tool_use|"type":"assistant"' -and ($tl -match '"operation":"enqueue"' -or $tl -match '"type":"user"')) { $ordered = $true; break }
+                        }
+                    }
+                }
+                if (-not $handled -and -not $ordered) {
+                    $cf = Join-Path $runs 'worklock.count'
+                    $n = 1
+                    if ((Test-Path -LiteralPath $cf) -and ((Get-Item -LiteralPath $cf).LastWriteTime -gt (Get-Date).AddMinutes(-10))) { $n = [int](Get-Content -LiteralPath $cf -TotalCount 1) + 1 }
+                    if ($n -gt 3) {
+                        Remove-Item -LiteralPath $cf -Force -ErrorAction SilentlyContinue
+                        try { $ad = Join-Path $runs 'alerts'; New-Item -ItemType Directory -Force -Path $ad | Out-Null; Add-Content -LiteralPath (Join-Path $ad 'cap-ends.log') -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm') + ' worklock: stop let through after 3 blocks; open work: ' + (($left | Select-Object -First 8) -join ', ')) } catch { }
+                    } else {
+                        Set-Content -LiteralPath $cf -Value $n
+                        Block-Stop ('kenshi-waker-guard: ' + $left.Count + ' item(s) of work remain and nothing is running on them (' + (($left | Select-Object -First 6) -join '; ') + '). A recorded idle reason does not count here (Shay 2026-10-17: the 5090 sat idle ~8 h that way). Do one of: (1) start the next ready item NOW on the lane/rig the standing orders allow, using the stated default instead of asking; (2) a row-rework-gate denial is a procedure, not a stop: spawn the [case:escalate] agent with the ESCALATE / METHOD-QUESTION / PREV-REPORT / WHAT IS DIFFERENT / REPLAY-EVIDENCE lines; (3) if you must end the turn with work left, first call ScheduleWakeup with a reason starting "self-wake" and a delay of 1200-1800 s; (4) only if Shay just ordered a stop: write C:\KenshiTestRuns\shay-stop-order.json {"quote":"<his exact words>","at":"<time>"}; the hook checks the quote against his real messages. Block ' + $n + ' of 3.')
+                    }
+                }
+            }
         }
     } catch { }
 }
@@ -253,9 +357,11 @@ $wakerProc = $procs.Values | Where-Object {
     $isWaker -and (Under-Root ([int]$_.ProcessId))
 } | Select-Object -First 1
 
+if ($env:KAH_GUARD_TEST_NO_PROCWAKER) { $wakerProc = $null }   # selftest switch (waker-persist-hook-selftest.ps1): ignore process wakers so only the heartbeat decides; can only make the block fire
+if (-not $wakerProc) { $wakerProc = Get-PersistWaker }   # PI-51: the persistent waker counts (fresh heartbeat); the old process checks above are unchanged
 if ($env:KAH_GUARD_TEST_NO_WAKER) { $wakerProc = $null }   # selftest switch: can only make the block fire, never skip it
 if ($inflight.Count -gt 0 -and -not $wakerProc) {
-    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Next action: start ' + $WAKER + ' (add --batch <out-dir> when a batch runs). If nothing is really in flight, release the lock / delete the stale marker C:\KenshiTestRuns\inflight\<name> (agents: agent-abandon.ps1 <name> "<why>") and say so.')
+    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Next action: start ' + $WAKER + ' (add --batch <out-dir> when a batch runs; a persistent waker whose waker\coordinator.hb is older than 150 s counts as dead). If nothing is really in flight, release the lock / delete the stale marker C:\KenshiTestRuns\inflight\<name> (agents: agent-abandon.ps1 <name> "<why>") and say so.')
 }
 
 # --- 5090 idle? ---
@@ -328,7 +434,7 @@ if ($miss.Count) {
 # --- test leftovers (Shay 2026-10-10: "stuff ... is left around and never cleaned up; we need it cleaned or it will never go away") ---
 # testruns-sweep.ps1 check: exit 1 when an item in C:\KenshiTestRuns / 4080 C:\KAH + C:\KenshiTestRuns / WSL /root/animlab-work
 # or a leaked /tmp/animlab-* dir is off the keep-list, not named by running work and older than 24 h.
-$sw = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\testruns-sweep.ps1') check 2>$null
+$sw = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\testruns-sweep.ps1') check -Auto 2>$null
 if ($LASTEXITCODE -eq 1) {
     Block-Stop ('kenshi-waker-guard: test/automation leftovers older than 24 h are lying around (' + (($sw | Select-Object -First 8) -join ' | ') + '). Shay''s rule: clean up after every batch/review. Delete what is judged (corpus.sh add anything a lab check or Misses row cites first), or record why it stays: & C:\KenshiModding\tools\automation\testruns-sweep.ps1 -Keep <path> "<reason>" (good 7 days). Full list: testruns-sweep.ps1.')
 }
