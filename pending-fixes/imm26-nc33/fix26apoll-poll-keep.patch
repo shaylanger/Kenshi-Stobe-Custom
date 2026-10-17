@@ -1,0 +1,52 @@
+--- a/src/ActivityNativeExecutor.cpp
++++ b/src/ActivityNativeExecutor.cpp
+@@ -276,9 +276,22 @@
+  try {
+   Character* actor=KenshiAi::ResolveCharacter(world_,op.request.actor);
+   Target current=op.destination.facts; std::string reason;
+-  if(now_>=op.agreement.expiresAt || !AliveActor(actor,op.request.actor) || !SameHand(actor->getHandle(),op.actorIdentity) ||
+-     !policy_.Revalidate(op.agreement,op.request,current,reason))
+-   return op.receipt=Result(Receipt::Interrupted,reason.empty()?"agreement_or_actor_unavailable":reason);
++  if(now_>=op.agreement.expiresAt || !AliveActor(actor,op.request.actor) || !SameHand(actor->getHandle(),op.actorIdentity))
++   return op.receipt=Result(Receipt::Interrupted,"agreement_or_actor_unavailable");
++  if(!policy_.Revalidate(op.agreement,op.request,current,reason)) {
++   // fix26apoll (row 26-a NC32): one tick with reachable=0 (Revalidate -> "current_native_path_unconfirmed") used to Interrupt a dispatched Attack/Travel,
++   // Goal::Replan then added the goat to attempted_ and the next empty scan stopped the Hunt. A transient path-unconfirmed reading is not a reason to drop
++   // an order the engine still owns: keep it Pending ONLY for that exact reason and only while our owned order is still the single live order.
++   // Every other Revalidate failure (scope, authorization, hunt_source_mismatch, target_not_observed, ...) still Interrupts as before.
++   const bool unconfirmedOnly=reason=="current_native_path_unconfirmed";
++   const bool keepPending=unconfirmedOnly && (op.request.command==Attack || op.request.command==Travel) && CaptureOwned(actor,op,false);
++   if(unconfirmedOnly) {
++    try { static unsigned pollKeepCount=0; if((pollKeepCount++%10)==0) { std::ostringstream d; d<<"ACTIVITY_POLL_DIAG id="<<op.request.id<<" cmd="<<static_cast<int>(op.request.command)
++     <<" revalidate_path_unconfirmed keepPending="<<(keepPending?1:0)<<" n="<<pollKeepCount; ::Log(d.str()); } } catch (...) { /* diagnostics never change the outcome */ }
++   }
++   if(!keepPending) return op.receipt=Result(Receipt::Interrupted,reason.empty()?"agreement_or_actor_unavailable":reason);
++   current=op.destination.facts; reason.clear();
++  }
+   OrdersReceiver* orders=actor->getOrdersReciever();
+   // Natural task completion can remove the order before this frame's poll.
+   if(op.request.command==Travel) {
+--- a/src/ActivityRuntimeBindings.cpp
++++ b/src/ActivityRuntimeBindings.cpp
+@@ -408,10 +408,13 @@
+    CharMovement* mv=actor?actor->getMovement():NULL; HavokCharacter* av=mv?mv->havokCharacter:NULL;
+    const bool onMesh=av && av->isOnNavmesh();
+    int rawPath=99; float d2=-1.0f; std::string prot="na"; int sees=-1;
++   int tOnMesh=-1; float ddx=0.0f,ddz=0.0f,ddy=0.0f; // fix26apoll: is the goat itself on/near mesh, and where is it relative to the actor
+    if(actor && animal) {
+     const Ogre::Vector3 ap=animal->getPosition(); d2=actor->getPosition().squaredDistance(ap);
+     sees=(actor->getSensoryData() && actor->getSensoryData()->canISeeThisGuy(animal))?1:0;
+     if(onMesh && world_->navmesh) rawPath=world_->navmesh->pathExists(av,ap);
++    ddx=ap.x-actor->getPosition().x; ddz=ap.z-actor->getPosition().z; ddy=ap.y-actor->getPosition().y;
++    if(world_->navmesh) { Ogre::Vector3 snap; try { tOnMesh=(world_->navmesh->getClosestPoint(ap,Stobe::ActivityReach::kTargetSnapRadius,1.0f,false,snap)==1)?1:0; } catch(...) { tOnMesh=-2; } }
+     std::string pr; prot=IsProtectedActivityTarget(actor,animal,pr)?("1:"+pr):std::string("0");
+    }
+    std::ostringstream d; d<<"ACTIVITY_SCAN_DIAG id="<<a.id<<" stage=discover candRegistered="<<(source!=candidates_.end()?1:0)
+@@ -419,6 +422,7 @@
+     <<" serialMatch="<<((source!=candidates_.end() && source->second.point.facts.serial==a.discoveryTargetSerial)?1:0)
+     <<" resolved="<<(animal?1:0)<<" sameInstance="<<((source!=candidates_.end() && animal && animal==source->second.identity)?1:0)
+     <<" sees="<<sees<<" onMesh="<<(onMesh?1:0)<<" rawPath="<<rawPath<<" d2="<<d2<<" protected="<<prot
++    <<" targetOnMesh="<<tOnMesh<<" dx="<<ddx<<" dz="<<ddz<<" dy="<<ddy
+     <<" vis="<<(agreed.facts.visible?1:0)<<" reach="<<(agreed.facts.reachable?1:0)<<" why="<<reason;
+    Log(d.str());
+   } catch(...) { /* Diagnostics never change the scan outcome. */ }
