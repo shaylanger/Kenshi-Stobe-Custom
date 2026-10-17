@@ -6,11 +6,43 @@
   SETUP-FAIL (Shay 2026-10-15): the text MUST contain `needs: recipe|server-fix|native|design|fixture` and say what exactly; a bare SETUP-FAIL is
   REFUSED (exit 2, nothing written). PREFLIGHT-FAIL text (llm/lane down: the row never ran) is exempt. A SETUP-FAIL mark creates/updates the unblock
   ticket (<runs>/setupfail/<row>.json, inbox note for the coordinator); PASS / FAIL closes it (GATED is a note only, the ticket stays open). See setupfail.py / setupfail.ps1.
+  PI-52: a SETUP-FAIL 'bundle dirs missing under <bd>: ..' is REFUSED when run.log (in the evidence dir named in the text) is empty and the dirs exist.
 Env: KAH_TESTS_MD (file), KAH_RUNS_DIR (ticket + inbox dir), KAH_LANE (default lane).
 """
-import sys, os, io, datetime
+import sys, os, io, re, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import setupfail as sf
+
+
+def _winpath(p):
+    """/c/x and /mnt/c/x -> C:/x (the form Windows python opens); other paths unchanged."""
+    m = re.match(r"^/(?:mnt/)?([a-zA-Z])/(.*)$", p)
+    return "%s:/%s" % (m.group(1).upper(), m.group(2)) if m and os.name == "nt" else p
+
+
+def false_bundle_setupfail(status, note):
+    """PI-52: refuse SETUP-FAIL 'bundle dirs missing under <bd>: g:d,..' when the run's run.log is empty AND every listed dir exists
+    (the hxdefs.sh /c/.. path bug made the verdict python miss existing dirs). Narrow: anything else (no evidence dir, non-empty or missing
+    run.log, dirs really missing, other reasons) returns "" and the mark passes unchanged."""
+    if str(status).strip().upper() != "SETUP-FAIL":
+        return ""
+    m = re.search(r"bundle dirs missing under (\S+?):\s+(.+?)(?:\s+\(the row script|\s*\[evidence=|$)", str(note))
+    e = re.search(r"evidence[= ]+([^\]\s;,)]+)", str(note))
+    if not m or not e:
+        return ""
+    ev, bd = _winpath(e.group(1)), _winpath(m.group(1))
+    dirs = [x.strip().split(":")[-1].strip() for x in m.group(2).split(",") if x.strip()]
+    log = os.path.join(ev, "run.log")
+    try:
+        if not dirs or not os.path.isfile(log) or os.path.getsize(log) != 0:
+            return ""
+    except OSError:
+        return ""
+    if not all(os.path.isdir(os.path.join(bd, d)) for d in dirs):
+        return ""
+    return ("REFUSED: false SETUP-FAIL 'bundle dirs missing': %s exist under %s and run.log is empty, so the row script never failed; "
+            "the verdict python could not open the /c/.. path in bundle_dir.txt (hxdefs.sh winpath bug, testing/KNOWN_BLOCKERS.md). "
+            "Workaround: rerun the row with a current hxdefs.sh, or set HX_OUT=C:/KenshiTestRuns/imm26-4080-hx; do not file a ticket." % (",".join(dirs), bd))
 
 
 def main(a):
@@ -28,7 +60,10 @@ def main(a):
     row, status, note = sf.norm_row(pos[0]), pos[1].strip(), pos[2]
     if len(pos) > 3 and pos[3] == "keepold":
         prev = "keep"
-    ok, msg = sf.check_mark(status, note)
+    msg = false_bundle_setupfail(status, note)   # PI-52: checked first so the real cause is named
+    ok = not msg
+    if ok:
+        ok, msg = sf.check_mark(status, note)
     if not ok:
         print("%s (row %s not marked)" % (msg, row)); return 2
     p = sf.tests_md()

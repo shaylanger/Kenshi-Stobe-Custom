@@ -220,7 +220,12 @@ foreach ($fn in 'rowdefs.sh', 'tripdefs.sh') {
 
 # ---- known blockers (only the lines relevant to this lane) -----------------------------------------------
 $kb = Join-Path $Repo 'testing\KNOWN_BLOCKERS.md'
-$kbAll = @(); if (Test-Path -LiteralPath $kb) { $kbAll = @(Get-Content -LiteralPath $kb -Encoding UTF8 | Where-Object { $_ -match '^\s*(-|#{2,})\s+\S' } | ForEach-Object { ($_ -replace '^\s*(-|#+)\s+', '').Trim() }) }
+$kbAll = @(); $kbSnags = @(); $inSn = $false   # PI-52: the '## KNOWN TOOLING SNAGS' section is shown as its own block (always, max 10), not lane-filtered
+if (Test-Path -LiteralPath $kb) { foreach ($kln in @(Get-Content -LiteralPath $kb -Encoding UTF8)) {
+    if ($kln -match '^#{2,}\s+KNOWN TOOLING SNAGS') { $inSn = $true; continue }; if ($kln -match '^#{2,}\s') { $inSn = $false }
+    if ($inSn) { if ($kln -match '^\s*-\s+\S') { $kbSnags += ($kln -replace '^\s*-\s+', '').Trim() } }
+    elseif ($kln -match '^\s*(-|#{2,})\s+\S') { $kbAll += ($kln -replace '^\s*(-|#+)\s+', '').Trim() } } }
+$kbSnags = @($kbSnags | Select-Object -First 10)
 $laneTag = "$rig $id"                                    # e.g. '5090 i4'
 $pickIds = @($pick | ForEach-Object { $_.Id })
 $dllKeys = @(); foreach ($d in $dllLines) { if ($d -match '^[0-9A-F]{8}') { $dllKeys += $d.Substring(0, 8) } }; if ($nc) { $dllKeys += (Sha8 $nc.FullName).Substring(0, 8) }
@@ -387,6 +392,10 @@ function Build([int]$exBudget) {
     $null = $sb.AppendLine("## Known blockers relevant to $Lane (KNOWN_BLOCKERS.md, $kbSkipped other-lane line(s) left out; need not be read)")
     if ($kbl.Count -eq 0) { $null = $sb.AppendLine('- none listed') }
     foreach ($b in $kbl) { $null = $sb.AppendLine('- ' + (Clip $b $kbClip)) }
+    if ($kbSnags.Count) {
+        $null = $sb.AppendLine('## KNOWN TOOLING SNAGS (testing/KNOWN_BLOCKERS.md, every lane)')
+        foreach ($b in $kbSnags) { $null = $sb.AppendLine('- ' + (Clip $b ([Math]::Min($kbClip + 60, 300)))) }
+    }
     $null = $sb.AppendLine('## Essential rules (condensed; the long briefs need NOT be read)')
     $ruleLines = @(
         '- Scope: ONE lane (above). Never the live install, live server tree or DB, Shay''s saves, or another lane. Test only on the lane''s kah-* save copy; PLAYER_NAME=''Shay''; dist_to_target < 80. Windowed launches, never focus the game (go-row runs isolation check + preflight).',
@@ -401,7 +410,8 @@ function Build([int]$exBudget) {
         '- Server/DLL bug: write cause (file+function+evidence) in the row and status `latest`; do not fix it. GATED / needs-native (PI-23): grep the NATIVE sources (C:\KenshiTestRuns\imm26-nc10\src, components/STOBE) for native names, paste grep + result in the row. No `find /` (search a named directory).',
         '- Ending (PI-22): never DONE while runnable non-PASS rows remain; end STOPPED-CONTEXT (successor in the handoff) or DONE with a `lane complete: <why>` line. PI-24: write the steps of a hand-run row without rd_ script into your handoff.',
         '- Status (cut3): NO status calls; hooks write RUNNING, progress (5 min) and DONE/FAILED/STOPPED-CONTEXT from your final message; status-mark.sh logs rows. Successor-visible note: agent-note.ps1 <name> "<step>" "<out>" "<next>" ; <real command>. Silence > 20 min = killed; keep the handoff current. Checkpoint every ~40k tokens; ~120k run the WARN-120k step (checkpoint: patch, handoff, status current); auto-compact fires ~150k, continue from your own status+handoff file; STOPPED-CONTEXT (successor name + 1) only after a failed compaction. Budget <= 120k.',
-        '- Hand-back (SubagentHandback) = AT MOST 8 lines: verdict (+PASS/FAIL counts), files/commits, SHA/paths (report path), one next action, any DECISION/QUESTION for Shay. Save the full report first (save-report.ps1, <= 30 lines); every hand-back line lands in the coordinator context.'
+        '- Hand-back (SubagentHandback) = AT MOST 8 lines: verdict (+PASS/FAIL counts), files/commits, SHA/paths (report path), one next action, any DECISION/QUESTION for Shay. Save the full report first (save-report.ps1, <= 30 lines); every hand-back line lands in the coordinator context.',
+        '- Tooling snag (PI-49): if you hit a tooling snag, run `powershell -NoProfile -File C:\KenshiModding\tools\automation\snag.ps1 <you> <script:line> "<symptom>" "<workaround>"` (bash lane scripts: `bash tools/automation/snag.sh ...`) once, then continue with the workaround; a 2nd operator on the same script:line makes the coordinator open a fixer ticket.'
     )
     $ruleLines = @($ruleLines[0], $banRule) + @($ruleLines | Select-Object -Skip 1)
     if ($Pilot) { $ruleLines = $pilotRules }

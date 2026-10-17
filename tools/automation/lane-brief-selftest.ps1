@@ -46,6 +46,19 @@ rd_99z() {  # unrelated row script
 - Row blocker ZETA-ROWMATCH touches 02-a/b on 5090 i5
 - Wildcard blocker ETA-WILD rows 03-* on 5090 i5
 - DLL blocker THETA-DLL: DLL $want is broken on 4080 i3
+## KNOWN TOOLING SNAGS (x)
+- SNAG-PI52-1 tooling snag line 1 for 4080 i3
+- SNAG-PI52-2 tooling snag line 2
+- SNAG-PI52-3 tooling snag line 3
+- SNAG-PI52-4 tooling snag line 4
+- SNAG-PI52-5 tooling snag line 5
+- SNAG-PI52-6 tooling snag line 6
+- SNAG-PI52-7 tooling snag line 7
+- SNAG-PI52-8 tooling snag line 8
+- SNAG-PI52-9 tooling snag line 9
+- SNAG-PI52-10 tooling snag line 10
+- SNAG-PI52-11 tooling snag line 11 (must be cut by the 10-line cap)
+- SNAG-PI52-12 tooling snag line 12 (must be cut by the 10-line cap)
 "@ | Set-Content "$repo\testing\KNOWN_BLOCKERS.md"
 New-Item -ItemType Directory -Force -Path "$repo\testing\live-stobe-queue\imm26-assert" | Out-Null
 '' | Set-Content "$repo\testing\live-stobe-queue\imm26-assert\go-row.sh"; '' | Set-Content "$repo\tools\automation\save-report.ps1"
@@ -72,6 +85,9 @@ Chk 'blockers: 5090 i3 line with a picked row (03-a) is kept, 4080 i3 line with 
 Chk 'rules block: debug budget, handbacks, PI-06, never live install, status, checkpoints' ($txt -match 'ONE attempt per row' -and $txt -match 'AT MOST 8 lines: verdict.*SHA/paths.*DECISION/QUESTION for Shay' -and $txt -match '--allow-retry' -and $txt -match 'Never the live install' -and $txt -match 'Status discipline' -and $txt -match 'Checkpoint' -and $txt -match 'need NOT be read')
 $rulesN = @(($txt -split "`n") | Where-Object { $_ -match '^- (Scope|Debug budget|PI-06|SETUP-FAIL|LLM health|Alerts|Game speed|A PASS|Batching|Server/DLL|Ending|Status discipline|Handbacks)' }).Count
 Chk 'rules block: SETUP-FAIL needs-keyword rule + setupfail.ps1 list' ($txt -match 'must say needs: recipe\|server-fix\|native\|design\|fixture' -and $txt -match 'never just retry' -and $txt -match 'setupfail\.ps1 list')
+$snagN = @([regex]::Matches($txt, 'SNAG-PI52-\d+')).Count
+Chk "PI-52: KNOWN TOOLING SNAGS block shown on every lane, capped at 10 lines ($snagN)" ($txt -match '## KNOWN TOOLING SNAGS' -and $snagN -eq 10 -and $txt -match 'SNAG-PI52-1 ' -and $txt -notmatch 'SNAG-PI52-11')
+Chk 'PI-52: snag lines appear only in their own block, normal blockers still listed' ($txt -match 'Blocker alpha' -and $txt.IndexOf('SNAG-PI52-1 ') -gt $txt.IndexOf('## KNOWN TOOLING SNAGS'))
 Chk 'rules block: LLM health rule (PI-15)' ($txt -match 'llm-health\.sh' -and $txt -match 'Never mark LLM rows during LLM-HEALTH FAIL')
 Chk "rules block <= 40 lines ($rulesN rule lines)" ($rulesN -ge 10 -and $rulesN -le 40)
 Chk 'helper list: existing files listed with usage, missing ones dropped' ($txt -match '## Helper scripts' -and $txt -match '- go-row.sh: bash go-row.sh' -and $txt -match 'go-row.sh: .*\[R\]' -and $txt -notmatch '- go-batch.sh:')
