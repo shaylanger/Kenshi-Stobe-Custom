@@ -45,14 +45,21 @@ class FrozenRootTests(unittest.TestCase):
         self.assertEqual(self.fs.search("needle")["results"][0]["line"], 2)
         self.assertEqual(self.fs.list("nested")[0]["name"], "fixture.txt")
 
-    def test_missing_search_target_is_typed_rejection_but_missing_root_is_raw_infrastructure_error(self):
-        with self.assertRaises(cf.FrozenAccessError):
+    def test_missing_requested_targets_are_typed_but_missing_root_is_raw_infrastructure_error(self):
+        with self.subTest(tool="list"), self.assertRaises(cf.FrozenAccessError):
+            self.fs.list("missing-directory")
+        with self.subTest(tool="read"), self.assertRaises(cf.FrozenAccessError):
+            self.fs.read("missing.txt")
+        with self.subTest(tool="search"), self.assertRaises(cf.FrozenAccessError):
             self.fs.search("needle", "missing.txt")
         with self.assertRaises(FileNotFoundError):
             cf.FrozenRoot(self.root / "missing-root")
         shutil.rmtree(self.root)
-        with self.assertRaises(FileNotFoundError):
-            self.fs.search("needle", "missing.txt")
+        for tool, call in (("list", lambda: self.fs.list("missing-directory")),
+                           ("read", lambda: self.fs.read("missing.txt")),
+                           ("search", lambda: self.fs.search("needle", "missing.txt"))):
+            with self.subTest(tool=tool, fixture="lost"), self.assertRaises(FileNotFoundError):
+                call()
 
     def test_rejects_traversal_binary_and_oversize(self):
         with self.assertRaises(cf.FrozenAccessError):

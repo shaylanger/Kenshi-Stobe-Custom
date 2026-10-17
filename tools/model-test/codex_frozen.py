@@ -48,7 +48,15 @@ class FrozenRoot:
         rel = Path(relative)
         if rel.is_absolute() or ".." in rel.parts or not relative or "\x00" in relative:
             raise FrozenAccessError("path must be a nonempty relative frozen path")
-        target = (self.root / rel).resolve(strict=True)
+        try:
+            target = (self.root / rel).resolve(strict=True)
+        except FileNotFoundError as exc:
+            # A missing requested target inside a live fixture is a safe,
+            # typed access rejection. A missing fixture root remains raw
+            # infrastructure failure, including loss after initialization.
+            if not self.root.is_dir():
+                raise
+            raise FrozenAccessError("requested frozen target does not exist") from exc
         try:
             target.relative_to(self.root)
         except ValueError as exc:
