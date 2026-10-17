@@ -118,7 +118,7 @@ Rules:
 - added: 2026-10-16 16:14
 - log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
 
-### PI-59 | open
+### PI-59 | confirmed
 - idea: tail-ack.ps1 must accept agents that are in no program ledger (in-session operators/fixers named imm26-*), e.g. by acking via the inbox/relay file instead of the ledger record, so the new coordinator can ack and the tail closes by ack instead of by timeout.
 - evidence: 2026-10-16 17:12: coordinator 21 reported 'tail-ack could not ack them (agents not in the program ledger)' for nc28, 5090-i5-op14 and 4080-i3op26; the tail cannot close via ack, so the tail keeps burning turns until the 5 min relay timeout.
 - saving: about 3-5 tail turns and a faster tail close per handoff
@@ -126,9 +126,12 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 17:12
+- moment: 18:25 inv26froute tail relay
+- last_review: coordinator-22
 - log: 2026-10-16 17:12 review '05c6207d-b5b1-49c2-904b-6c32d15536f1-tail': added
+- log: 2026-10-16 18:45 review 'coordinator-22': open -> confirmed (applies: 2026-10-16 18:25: tail-ack.ps1 and program-ledger.ps1 ack both refused imm26-inv26froute ('in no program ledger'); the 21 coordinator had to be told to close its tail with tail-close.ps1 instead.)
 
-### PI-60 | open
+### PI-60 | confirmed
 - idea: Row cards (row-card.sh, e.g. 26-f) still print RUN lines with KAH_PF_ISOLATION=0; the classifier denies that bypass, so every operator that copies the card wastes a step or stops (op27 20-d and op18 26-f both did). Print the safe form: run from the lane's CONFIGURED save (--save <lane save>) and state that rw-* start saves fail the npc-world isolation check.
 - evidence: 2026-10-16 17:15 (op27 20-d, blocked for a false 'isolation' reason) and 17:50 (op18 26-f, preflight fail on stale game/marker); 20-d and 22-b PASSED at 17:55/18:00 as soon as they ran from the configured save with no bypass.
 - saving: every operator that copies a row card with the bypass loses 1 spawn (about 60k tokens) before the safe form is tried
@@ -136,7 +139,30 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 18:02
+- moment: 18:35 sfFixC hand-back
+- last_review: coordinator-22
 - log: 2026-10-16 18:02 review 'coordinator-21': added
+- log: 2026-10-16 18:45 review 'coordinator-22': open -> confirmed (applies: 2026-10-16 18:35: the sfFixC and sff (03-b) recipe hand-backs each told operators to run with KAH_PF_ISOLATION=0, which the project forbids; I had to rewrite the commands by hand in three operator ...)
+
+### PI-61 | open
+- idea: Size setup-fail fixer work to ONE ticket per fixer: three-ticket briefs hit the 200k context at ticket 1-2 every time, so each needed a successor with full re-reading.
+- evidence: 2026-10-16 18:00-18:50: imm26-sfFixA (3 tickets) stopped after 03-b, sfFixB (3 tickets) after 13-c/13-c-neg, sfFixA2 stopped before verifying 23-e; three respawns of about 200k tokens each, about 600k tokens of re-reading and a 30+ min delay on 23-e and 11-b.
+- saving: about 400k tokens and 30 min per three-ticket batch
+- risk: low: more agents, but each with a smaller scope; costs nothing extra in coordination if spawned in parallel at once
+- hooks: no
+- weakens: no
+- added: 2026-10-16 18:45
+- log: 2026-10-16 18:45 review 'coordinator-22': added
+
+### PI-62 | open
+- idea: The Stop-hook sweep block should not fire for items whose owning agent is DONE and whose commit is pushed (pi11-stage, b3-report, 4080 launch log dumps, old NC trees): auto-keep them 7 days with a standard reason, or auto-delete after a safety check, instead of costing a coordinator turn each.
+- evidence: 2026-10-16 18:05-18:30: five separate Stop-hook blocks (imm26-nc6, b3-report.txt, two 4080 launch logs, pi11-stage), each a full-context turn of about 5-8k tokens for a delete or -Keep whose answer was obvious from git log.
+- saving: about 5 turns and 30k tokens per session
+- risk: medium: auto-delete must verify the work is committed and no inflight marker names the path; never touch corpus, fixtures or inflight
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 18:45
+- log: 2026-10-16 18:45 review 'coordinator-22': added
 
 ## In progress
 
