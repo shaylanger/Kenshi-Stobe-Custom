@@ -85,6 +85,60 @@ Rules:
 - added: 2026-10-16 20:47
 - log: 2026-10-16 20:47 review 'coordinator-24c (pre-compact, after Shay ordered autoCompact 150k + living handoff)': added
 
+### PI-71 | open
+- idea: Demand-driven lanes: no operator is spawned unless the lane's .next marker names a READY batch; the operator launches the batch detached and ENDS; a model-free waker (choresbot) wakes a fresh short operator only on batch result or problem.
+- evidence: 2026-10-16 creditreview: lane operators 86.54 USD/day (20%), idle-rebuild wakes 36.50 USD/day, housekeeping turns 63.05 USD/day; the wind-down showed spend near zero when nothing runs. Shay asked for it 2026-10-16.
+- saving: about 15-30 USD/day on top of cuts 3 and 4 (estimate, not measured)
+- risk: changes lane behaviour; must keep the lane-stalled and dead-agent catches (the waker still watches the batch)
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 22:33
+
+### PI-72 | open
+- idea: Fixer selftests must replay the REAL lane evidence (coordinates and files from the failing run), not an assumed scene, before any live rerun.
+- evidence: 2026-10-16 21:34 fix23agate passed 62/62 offline but the live rerun never reached the guard (destination 14.5 km, assumed ~410 u); 23-a took 3 fixer rounds.
+- saving: one operator run plus a second fixer (about 1-2 USD) per occurrence
+- risk: none; slower selftests when evidence is large
+- hooks: no
+- weakens: no
+- added: 2026-10-16 22:33
+
+### PI-73 | open
+- idea: WIND_DOWN.flag must be enforced by a script: kenshi-ctl.ps1 launch and lane-brief refuse to start a game or operator while the flag exists.
+- evidence: 2026-10-16 22:10 operator 5090-i3op41 relaunched the i3 game during the wind-down; Shay objected; cost a stray operator plus game (about 10 min) and a kill.
+- saving: no stray lane starts during a wind-down
+- risk: must not block Shay's own manual launches (only agent-launched lane games)
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 22:33
+
+### PI-74 | open
+- idea: Agents and the coordinator commit with explicit pathspecs (git commit -- <paths>), never git add <dir>, in the shared tree.
+- evidence: 2026-10-16 22:12 and 22:16: fix19erecipe's rowtools edits landed in another agent's commit 605c3543; my own git add testing swept in others' in-progress files.
+- saving: reviewable commits and correct blame
+- risk: none
+- hooks: no
+- weakens: no
+- added: 2026-10-16 22:33
+
+### PI-75 | open
+- idea: An operator must relaunch fresh (new save load) after any row that KO'd Shay or left a bad state, before the next row.
+- evidence: 2026-10-16 21:36 i3 op38: 23-a left Shay unconscious; the next row 17-bx in the same session SETUP-FAILed with 'Shay not conscious/selected'.
+- saving: one wasted attempt plus a ticket per occurrence
+- risk: a reload costs a few minutes per such row
+- hooks: no
+- weakens: no
+- added: 2026-10-16 22:33
+
+### PI-76 | open
+- idea: Every new Agent or Bash hook gets a direct stdin smoke call (a real hook JSON) before it is wired into settings.json.
+- evidence: 2026-10-16 rowgate-guard denied [case:read] at the row cap (bug in the reader role check), found only by a smoke call; wired unchecked it would have blocked every reader on capped rows.
+- saving: avoids a coordinator-wide blocked-agent outage per bad hook
+- risk: none
+- hooks: no
+- weakens: no
+- added: 2026-10-16 22:33
+
 ## In progress
 
 ### PI-66 | in-progress
@@ -711,4 +765,3 @@ Rules:
 - retired: 2026-10-16 built
 - log: 2026-10-16 18:45 review 'coordinator-22': added
 - log: 2026-10-16 19:43 review 'coordinator-23': open -> confirmed (applies: 2026-10-16 19:00-20:20: the Stop-hook sweep block fired 5 times for finished-owner leftovers (4080 logs, imm26-nc7, tail-close.ps1.bak-hidden, tripresume-a, agents$2.brief.md), each a full-context ...)
-
