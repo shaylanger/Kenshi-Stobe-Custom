@@ -9,4 +9,14 @@ Set-Content -LiteralPath (Join-Path $dir "$Name.abandoned") -Value "$(Get-Date -
 Remove-Item -LiteralPath (Join-Path $runs "respawn\$Name.todo") -Force -ErrorAction SilentlyContinue
 # also drop its inflight marker so an abandoned agent stops counting as in-flight work (Stop hook)
 Remove-Item -LiteralPath (Join-Path $runs "inflight\$Name") -Force -ErrorAction SilentlyContinue
-"abandoned $Name ($Reason)"
+# PI-50: a 'parked' reason puts the operator's lane on <runs>\lanes.held for 2 h (carries the reason; released by a new operator, see lane-hold-lib.ps1)
+$holdNote = ''
+if ($Reason -match '^\s*parked\b') {
+    try {
+        . (Join-Path $PSScriptRoot 'lane-hold-lib.ps1')
+        $lane = Get-LaneOfOperator $Name $runs
+        if ($lane) { $null = Add-LaneHold $runs $lane "$Reason" $Name 2; $holdNote = " -> lane $lane held 2 h in lanes.held (lane-brief.ps1 -Name <successor> or a new RUNNING operator status releases it)" }
+        else { $holdNote = ' (parked, but no lane known for this agent: lanes.held not changed)' }
+    } catch { $holdNote = " (parked, lanes.held update FAILED: $_)" }
+}
+"abandoned $Name ($Reason)$holdNote"

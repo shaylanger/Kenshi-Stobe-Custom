@@ -42,8 +42,14 @@ function Get-SuccessorText([string]$lane, $cfg) {
     "SUCCESSOR ($ps): 1) powershell -NoProfile -File C:\KenshiModding\tools\automation\lane-brief.ps1 $lane -Out $br -Name $next$pa  2) Agent prompt: `"[case:generate] You are $next, lane $lane. Read $br, then the handoff it names, and start the next row. Hand back AT MOST 8 lines (verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay); full report via save-report.ps1.`"$rest"
 }
 # held lanes: <runs>\lanes.held, one lane per line, '#' comments (e.g. lanes Shay holds); no LANE STALLED for them
+# PI-50 (Shay 2026-10-16): lines written by agent-abandon.ps1 "parked: ..." carry "# auto-hold from=.. until=.. by=.. reason=.."; they expire after 2 h
+# (an expired hold no longer suppresses) and are released when a RUNNING operator status for the lane newer than from= appears (lane-hold-lib.ps1).
 $held = @(); $heldF = Join-Path $Runs 'lanes.held'
-if (Test-Path -LiteralPath $heldF) { $held = @(Get-Content -LiteralPath $heldF -ErrorAction SilentlyContinue | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ }) }
+if (Test-Path -LiteralPath $heldF) {
+    . (Join-Path $PSScriptRoot 'lane-hold-lib.ps1')
+    try { $null = Release-HoldsForNewOperator $Runs $lanes } catch { }
+    $held = @(Get-ActiveHolds $Runs)
+}
 # live 5090 lane games (game-N.lock + kenshi_x64 from D:\KenshiInst\N; lane-lock-lib.ps1); 4080 lanes cannot be checked locally (never excluded by this)
 $liveN = @(); try { . (Join-Path $PSScriptRoot 'lane-lock-lib.ps1'); $liveN = @(Get-LiveLaneGames $Runs | ForEach-Object { [int]$_.N }) } catch { $liveN = @(2..9) }
 $memF = Join-Path $Runs 'lane-idle.mem.json'
