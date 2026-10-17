@@ -51,9 +51,9 @@ opening_sentence = _v2.opening_sentence
 I = re.I
 GUARD = {
     'KEEP_OFF': re.compile(r"keep (your|a) distance|keep (back|away|walking)\b|hands where i can see|stay (back|away|clear)|step aside|move along|back off|get lost|"
-                           r"don'?t linger|keep your (distance|hands)", I),
-    'STRANGER_DISTRUST': re.compile(r"(i )?don'?t (much )?know you|don'?t know you|don'?t (much )?care to|rather keep it that way|(not|never) in the habit of (chatting|talking)|"
-                                    r"don'?t (hand|give) (out )?(those|my name|names?)|don'?t settle into conversation|who'?s asking|you'?re bait|"
+                           r"don'?t linger|keep your (distance|hands)|don'?t stand (so |too )?close|say (it|your piece) from (where|there|here)|from where you are|from a few paces", I),
+    'STRANGER_DISTRUST': re.compile(r"(i )?don'?t (much )?know you|don'?t know you|don'?t (much )?care to|rather keep it that way|(not|never) in the habit of (chatting|talking|handing|giving)|"
+                                    r"don'?t (hand|give) (out )?(those|my name|names?)|(handing|giving) out (my |your )?names?|don'?t settle into conversation|who'?s asking|you'?re bait|"
                                     r"count(ed)? (the |my )?exits|don'?t read more into|(that'?s|it'?s) (enough|all) (for you|you need)|only (answer|one|part) .{0,40}(get|matters|owed)|"
                                     r"not one of (mine|ours)|not exactly friends|aren'?t (exactly )?friends|don'?t have anything for you|before i say anything else|"
                                     r"a thing you earn|decide if it'?s worth my time", I),

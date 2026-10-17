@@ -131,6 +131,19 @@ run('mut-allied-empty', H_OK, [[], [], []], want='FAIL', must='allied_not_guarde
 run('allied-1-of-3-guarded-ok', H_OK, [ALLIED_GUARDED[0], A_OPEN[1], A_OPEN[2]], want='PASS')
 run('mut-allied-2-of-3-guarded', H_OK, [ALLIED_GUARDED[0], ALLIED_GUARDED[1], A_OPEN[2]], want='FAIL', must='allied_not_guarded>=2/3!')
 run('mut-allied-rel-0', H_OK, A_OPEN, arel=0, want='FAIL', must='faction_rel!')
+# ---- fix01cxguard: the two guarded replies of 4080-i3 op31 rep3 savA (H1 "Don't stand so close..." and H3 "not in the habit of handing out names...") are guarded; a friendly reply stays non-guarded
+H_R3A = [["Don't stand so close. If you've got business, say it from where you are."],
+         ["Day's not good or bad yet - it's early. And you're standing close for someone I don't know.", "Say what you want, or keep walking."],
+         ["That's a question with a lot of weight for a first breath.", "I'm not in the habit of handing out names to strangers, so let's start simpler - you're standing in the Hub, same as me, and", "that's all the company I need right now."]]
+run('fix01cxguard-real-r3savA-op31', H_R3A, REAL['r3savA'][1], want='PASS')
+run('fix01cxguard-pos-dont-stand-so-close', [["Don't stand so close, stranger."], H_OK[0], H_OK[1]], REAL['r3savA'][1], want='PASS')
+run('fix01cxguard-pos-habit-handing-out-names', [["I'm not in the habit of handing out names to strangers."], H_OK[0], H_OK[1]], REAL['r3savA'][1], want='PASS')
+run('fix01cxguard-pos-say-it-from-where-you-are', [["Say it from where you are, I'm listening."], H_OK[0], H_OK[1]], REAL['r3savA'][1], want='PASS')
+# negatives: friendly replies stay non-guarded (hostile side FAILs; allied side counts them as not guarded), no marker leak into friendly wording
+run('fix01cxguard-neg-friendly-hostile', FRIENDLY, A_OPEN, want='FAIL', must='hostile_guarded>=2/3!')
+run('fix01cxguard-neg-friendly-names-hostile', [["Happy to give out my name: Brethar. Stand as close as you like."], ["Stand close, friend, I don't bite - what can I do for you?"], ["Say it from your heart, I am all ears. Names are free here."]], A_OPEN, want='FAIL', must='hostile_guarded>=2/3!')
+run('fix01cxguard-neg-friendly-allied-ok', H_R3A, [["Good morning. Come stand close by the fire, I'm happy to give out my name: Brethar."], ["Morning. Say it from the heart - what brings you through the Hub?"], ["Handing out names is easy: Brethar. Yours?"]], want='PASS')
+run('fix01cxguard-neg-guarded-allied-still-fails', H_R3A, [["Don't stand so close. Say it from where you are."], ["I'm not in the habit of handing out names to strangers."], A_OPEN[2]], want='FAIL', must='allied_not_guarded>=2/3!')
 # ---- the opt-in strict-opening option: r3savA hostile replies are guarded as replies, but their opening sentences are not
 h3a, a3a = REAL['r3savA']
 run('strict-opening-off-r3savA', h3a, a3a, want='PASS')
