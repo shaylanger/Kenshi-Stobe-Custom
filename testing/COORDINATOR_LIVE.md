@@ -32,6 +32,8 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 
 - OWED (Shay 2026-10-16): report the REAL cost of the next compact at ~150k. Tool `tools/automation/compact-audit.py compacts --session <id>` (auto-runs 15 min after a compaction via handoff-snapshot.ps1 once the hook is installed; else run it by hand ~15 min after); result in C:\KenshiTestRuns\compact-audit\latest.md + docs/COMPACT_AUDIT.md. Tell Shay when it exists.
 
+- PROPOSED to Shay (waiting for yes): build a headless `claude -p --model haiku` runner for the remaining replay2 calls (no 20-subagent cap, no executor context limit; ~1 h to build, est. 20-30 min for 225 R2 + R3 runs). hpairexec11 keeps running meanwhile.
+
 ## 4. Decisions taken (why)
 - Compact instead of handoff session (Shay): cheaper per turn, keeps reasoning; handoff session costs ~same one-off but adds a tail and relay failure modes (PI-68 loop cost ~190k tokens).
 - 23-a checker: default = report SETUP-FAIL (not n/a) when the agreement never reached ACCEPTED + native start; test-tooling choice, not in SHAY_DECISIONS.
@@ -49,7 +51,7 @@ Registered in `C:\KenshiTestRuns\agents\ids.json` (`agent-ids.ps1 add <name> <id
 | imm26-inv23a | a80058b9dd5461884 | investigates the 23-a arrival tolerance (native C++); result -> native fixer -> op for 5090-i3 rerun |
 | imm26-4080-i3op32 | abd6bf21590043dbe | lane 4080-i3 operator (brief agents\imm26-4080-i3op32.brief.md, 15.7 KB over limit but fine): applies fix02bxsrv apply.py to /tmp/stobe-standalone4080/site then 02-bx n=3, then rows from fix01cxguard/fix02dxroute |
 | imm26-fix01cxguard | ad41638d336c5e23e | DONE 4a88ed78 (v3cx GUARD markers widened, selftest 35/35); op32 told to rerun 01-cx n=3 on 4080-i3 after 02-bx |
-| imm26-fix02dxroute | ab2e97d14c298a4d9 | routes 02-dx through the v3 echo skip; note inbox\operatorsix02dxroute.txt |
+| imm26-fix02dxroute | ab2e97d14c298a4d9 | DONE db092857: v3 row_02dx echo skip + new wrapper rowtools/hxrun_02bd3.sh (old hxrun_02bd.sh defaults to v2); op32 told to rerun 02-dx n=3 with hxrun_02bd3.sh after 02-bx and 01-cx |
 | imm26-5090-i5-op21 | a4d054cf11835817a | lane 5090-i5 operator: NC34 DLL (6E14E686) installed on both i5 Stobe dirs; running 26-a; then 14-d v2 (`unblockrun_14d_v2.sh 14-d i5 --allow-retry "fix14dtool v2" --ask "Hunt 5 bandits."` and again "Hunt the 5 bandits."), then 19-e (`reloadrun-b.sh 19-e 5090-i5 --no-reload ...`, grep "Trip resume wait" in /tmp/stobe-imm26-5090-i5/site/log/stobeserver.log) |
 | imm26-4080-i3op31 | DONE (tail 23 closed 20:47, no tail left) | results: 16-bx v3 FAIL 0/3 (real: reserved NPC >40 words in 4 of 9 replies; prompt has no brevity rule; checker lacks "how about you" in ENGAGE, covered by fix16bxengage); 01-cx v3cx FAIL 2/3 (checker gap -> fix01cxguard); 02-dx FAIL 1/3 (checker gap -> fix02dxroute). Marks b8930534, 4676f94e, 7cf8d45d |
 DONE this session (reports in `C:\KenshiTestRuns\agents\out\<name>\`): fix23arecipe (b67b4b10), fix19ewait a8b1bcdb8cec14367 (59f4916b), fix14dtool2 a1479e6611afc458b (00b89ce6), fix16bx2/fix16bxengage (cafc7a61, 789165d1), fixcindwait (8d57ec16), fixnc34 (NC34 native fix built; DLL 6E14E686), fixctllaunch, pi62sweep, pi51/pi62 swaps. STOPPED by me: imm26-replay2-interim (re-delivery loop).
