@@ -35,12 +35,8 @@ RULE (Shay 2026-10-16): every item that needs a Shay decision is recorded HERE w
 6) PI-66 raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (settings env) - Shay applies (edit by Claude denied as self-modification). Effect: more than 20 subagents at once (replay waves, lane operators + fixers); only from the next session start. Default: not set.
 7) PI-51 / PI-62 hook swaps - PI-51 APPLIED 2026-10-16 20:3x (persistent waker via Monitor, backup C:\KenshiTestRuns\backup\kenshi-waker-guard.ps1.pre-pi51). PI-62 swap pending: cd /c/KenshiModding/pending-fixes/pi62-sweep-auto && powershell -NoProfile -ExecutionPolicy Bypass -File swap.ps1 (Shay runs it; Git Bash needs forward slashes or a cd).
 
-### 16-bx word cap: keep it, or add a brevity line for reserved NPCs (new 2026-10-16, from imm26-4080-i3op31)
-- Problem: the 16-bx row fails 0/3 for a real reason: the reserved (terse) NPC goes over the 40-word cap in 4 of 9 replies (45/50/44/49 words) because the prompt has no brevity rule.
-- Option a (default in use): keep the 40-word cap and fix the prompt: add a trait brevity line so reserved characters answer in <= 40 words. IN GAME: reserved/terse NPCs give short replies, consistent with their personality; code: one prompt line in the trait text + row retest.
-- Option b: leave the prompt alone and let the row allow longer replies (e.g. 60 words). IN GAME: reserved NPCs may talk a bit more than their personality suggests; code: only the checker threshold changes.
-- Recommendation: a (the personality should drive length, not the checker).
-
 ## Decided
 - PI-62 (auto-sweep) and its extra delete patterns (selftest-all*, scratch-*, coordinator.heartbeat.*.tmp, dur_run*.sh): YES, Shay 2026-10-16.
 - PI-66 / PI-51 confirmed by Shay 2026-10-16 (PI-51 applied).
+
+- 2026-10-16 (Shay, "3: a"): 16-bx word cap = option a: add a trait brevity line so reserved/terse NPCs answer in <= 40 words; fixer imm26-fix16bxbrevity.
