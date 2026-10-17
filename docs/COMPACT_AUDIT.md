@@ -31,3 +31,7 @@ Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus th
 - Transcript output tokens are UNDERCOUNTED: /cost Sonnet output 1.5M vs 0.69M in transcripts (~$8 of the gap). All MEASURED per-turn costs here are ~20-25% low (the handoff and compact figures are affected alike).
 - Unexplained: Haiku uncached input 1.6M in /cost vs 2k in transcripts.
 - Procedure from now on: Shay runs /cost before and after each compact (meter warn text says so).
+
+## Compact #3 (first at the 150k threshold) - /cost BEFORE reading
+- Shay pasted at ~03:29Z (wall 1h33m, context ~135k): total $69.42 = Sonnet $66.17 (uncached input 609.8k, output 1.5M, cache read 204.5M, cache write 11.3M) + Haiku $3.25 (unchanged).
+- Next: Shay pastes /cost right after the compact. Real cost = (after - before) minus the normal turns/subagent spend in between (read from transcripts with the same re-pricing); the uncached-input delta should be ~ the pre-compact context (~150k) if the summarizer is billed uncached again.
