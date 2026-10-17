@@ -1,0 +1,394 @@
+[
+ {
+  "name": "bigto-deny-00",
+  "tool": "Bash",
+  "timeout": 1750000,
+  "bg": false,
+  "command": "S=/c/KenshiTestRuns/agents/imm26-fix19erecipe.status; for i in $(seq 1 28); do head -1 $S | grep -qE '\\| (DONE|FAILED|STOPPED-CONTEXT) \\|' && { echo READY; break; }; sleep 60; done; head -5 $S",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-01",
+  "tool": "Bash",
+  "timeout": 900000,
+  "bg": false,
+  "command": "for i in $(seq 1 14); do if grep -q \"^RESULT 02-cx\" /c/KenshiTestRuns/imm26-4080/i3op20/02-cx.out 2>/dev/null; then echo FINISHED; break; fi; sleep 60; done; grep -a \"RESULT\" /c/KenshiTestRuns/imm26-4080/i3op20/02-cx.out | tail -3; ls -la --time-style=full-iso /c/KenshiTestRuns/imm26-4080-hx/02-cx | tail -5; date",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-02",
+  "tool": "Bash",
+  "timeout": 300000,
+  "bg": false,
+  "command": "F=\"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/2a0cfe9b-63fb-4663-b97a-4a00df3b4e02/tasks/by5bjtcks.output\"; until grep -q \"SELFTEST ALL\" \"$F\" || [ $SECONDS -gt 280 ]; do sleep 5; done; tail -4 \"$F\" | cut -c1-200",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-03",
+  "tool": "PowerShell",
+  "timeout": 600000,
+  "bg": false,
+  "command": "$o='C:\\KenshiTestRuns\\imm26-nc12'; & 'C:\\KenshiModding\\pending-fixes\\npc-immersion-26\\NC\\build.ps1' -Out \"$o\\build\" -SrcDir \"$o\\src\" -LegacyDir \"$o\\legacy-v1\" *> \"$o\\build.out.txt\"; Get-Content \"$o\\build.out.txt\" | Select-Object -Last 15",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-04",
+  "tool": "Bash",
+  "timeout": 540000,
+  "bg": false,
+  "command": "export MSYS_NO_PATHCONV=1; wsl.exe -d DwemerAI4Skyrim3 bash -c 'for i in $(seq 1 100); do [ -f /tmp/imm26_b4_full.done ] && break; sleep 5; done; ls /tmp/imm26_b4_full.done; tail -14 /tmp/imm26_b4_full.txt'",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-05",
+  "tool": "Bash",
+  "timeout": 600000,
+  "bg": false,
+  "command": "cd /c/KenshiModding; export MSYS_NO_PATHCONV=1; rm -f /c/KenshiTestRuns/preflight-isolation-5090.txt; bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run.sh 26-d 5090-i3 2>&1 | tail -15",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-06",
+  "tool": "Bash",
+  "timeout": 900000,
+  "bg": false,
+  "command": "until grep -qE \"^RESULT|^ROW-NEEDS\" /c/KenshiTestRuns/imm26-4080/i3op20/03-b.out; do sleep 5; done; tail -6 /c/KenshiTestRuns/imm26-4080/i3op20/03-b.out | cut -c1-900",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-07",
+  "tool": "Bash",
+  "timeout": 620000,
+  "bg": false,
+  "command": "cd /c/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools && bash selftest.sh 2>&1 | tail -3; cd /c/KenshiModding && git diff testing/live-stobe-queue/imm26-assert/rowtools/rowdefs.sh testing/live-stobe-queue/imm26-assert/rowtools/rowcheck.py | head -120; cat /c/KenshiTestRuns/agents/imm26-pi06-09.status | head -5",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-08",
+  "tool": "PowerShell",
+  "timeout": 300000,
+  "bg": false,
+  "command": "$o = & powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\tail-hooks-selftest.ps1 2>&1 | ForEach-Object { \"$_\" }; ($o | Where-Object { $_ -match 'FAIL|PI-2[78]|RESULT' }) -join \"`n\"; \"PASS count: \" + @($o | Where-Object { $_ -match '^PASS' }).Count",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-09",
+  "tool": "Bash",
+  "timeout": 900000,
+  "bg": false,
+  "command": "cd /c/KenshiModding; touch /c/KenshiTestRuns/inflight/5090-imm26; mkdir /c/KenshiTestRuns/claims/23-e; bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run.sh 23-e 5090-i3 --allow-retry \"rerun on NC16 at i3 calm ready save\" 2>&1 | tail -4 | cut -c1-800",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-10",
+  "tool": "Bash",
+  "timeout": 250000,
+  "bg": false,
+  "command": "cd /c/KenshiModding && export KAH_PF_ISOLATION=0 && source /c/KenshiTestRuns/imm26-5090-i5/lib-i5.sh && source /c/KenshiTestRuns/imm26-5090-i5/row-i5.sh && M=$(r_mark); echo \"$M\" > /tmp/m26a2; i3_say \"#2529907200/2\" \"Yes, let's do it.\" 120 | cut -c1-300; r_bundle 26-a-op8b \"$M\" | cut -c1-300",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-deny-11",
+  "tool": "Bash",
+  "timeout": 320000,
+  "bg": false,
+  "command": "cd C:/KenshiModding; timeout 300 bash tools/automation/lane-setup.sh 4080 4 kah-imm26-4080-i4h --no-load --teleport -62030 330 16250 > C:/KenshiTestRuns/imm26-4080-i4/op16/setup.out 2>&1; tail -3 C:/KenshiTestRuns/imm26-4080-i4/op16/setup.out | cut -c1-300",
+  "expect": "deny"
+ },
+ {
+  "name": "bigto-bg-12",
+  "tool": "Bash",
+  "timeout": 600000,
+  "bg": true,
+  "command": "cd /c/KenshiModding/testing/live-stobe-queue/imm26-assert; export KAH_PF_ISOLATION=0; touch /c/KenshiTestRuns/inflight/imm26-4080-i3op22; bash rowtools/sfrrun.sh 22-b 4080-i3 --allow-retry \"sfR recipe v2\" > /c/KenshiTestRuns/agents/i3op22-22b.out 2>&1; tail -15 /c/KenshiTestRuns/agents/i3op22-22b.out | cut -c1-600",
+  "expect": "allow"
+ },
+ {
+  "name": "bigto-bg-13",
+  "tool": "Bash",
+  "timeout": 600000,
+  "bg": true,
+  "command": "until grep -c \"^rc=\" /c/Temp/st-orig.txt | grep -q '^7$' && grep -c \"^rc=\" /c/Temp/st-cand.txt | grep -q '^7$'; do sleep 5; done; echo done",
+  "expect": "allow"
+ },
+ {
+  "name": "bigto-bg-14",
+  "tool": "Bash",
+  "timeout": 1200000,
+  "bg": true,
+  "command": "cd /c/KenshiModding; timeout 1100 bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run.sh --allow-retry \"harness eeed8c93 (has contract-bodyguard) installed on i3; first run was unknown command\" 27-a 4080-i3 --save kah-imm26-4080 2>&1 | grep -E \"^RESULT\" | cut -c1-2000",
+  "expect": "allow"
+ },
+ {
+  "name": "bigto-bg-15",
+  "tool": "Bash",
+  "timeout": 600000,
+  "bg": true,
+  "command": "until grep -qE \"\\| (DONE|FAILED) \\|\" C:/KenshiTestRuns/agents/ab2-haiku-02-cx.status 2>/dev/null; do sleep 5; done; head -4 C:/KenshiTestRuns/agents/ab2-haiku-02-cx.status",
+  "expect": "allow"
+ },
+ {
+  "name": "bigto-bg-16",
+  "tool": "Bash",
+  "timeout": 1800000,
+  "bg": true,
+  "command": "until MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 grep -q \"SELFTEST SFE ALL\" /root/imm26/fix26fcamp-work/sfe-selftest2.out; do sleep 15; done; MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 grep -E \" FAIL|ALL\" /root/imm26/fix26fcamp-work/sfe-selftest2.out | head",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-17",
+  "tool": "PowerShell",
+  "timeout": null,
+  "bg": false,
+  "command": "$env:KAH_INSTANCE='5'; $env:KAH_OWNER='rig5090-imm26-i5'\n& C:\\KenshiModding\\Kenshi-Automation-Harness\\tools\\kenshi-ctl.ps1 stop 2>&1 | Select-Object -Last 5\nStart-Sleep 4\nGet-CimInstance Win32_Process -Filter \"Name='kenshi_x64.exe'\" | Select ProcessId,ExecutablePath",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-18",
+  "tool": "Bash",
+  "timeout": 115000,
+  "bg": false,
+  "command": "sleep 100; tail -5 /c/KenshiTestRuns/agents/out/imm26-5090-i3op27/24-b.out",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-19",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "sleep 100; cat /tmp/sfi1.log | cut -c1-300",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-20",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "sleep 100; cat \"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/efc58758-86f8-4786-a138-4e53f075016d/tasks/b9x93zt8l.output\" | cut -c1-300 | head -40",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-21",
+  "tool": "Bash",
+  "timeout": 130000,
+  "bg": false,
+  "command": "export MSYS_NO_PATHCONV=1; sleep 105; wsl.exe -d DwemerAI4Skyrim3 bash -c 'wc -l /root/hxb_selftest3.log; cut -c1-400 /root/hxb_selftest3.log | grep -v \" PASS \"'",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-22",
+  "tool": "PowerShell",
+  "timeout": null,
+  "bg": false,
+  "command": "Start-Sleep 60; Get-ChildItem C:\\KenshiTestRuns\\shadow\\replay2-interim\\grading\\out | % { $_.Name }",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-23",
+  "tool": "PowerShell",
+  "timeout": null,
+  "bg": false,
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 imm26-hpairexec RUNNING \"replay2 executor\" \"r1 batch 1/12 issued (limit 20 concurrent: 20-call messages only)\" \"C:\\KenshiTestRuns\\shadow\\replay2\" \"collect then gr-01\"; Start-Sleep -Seconds 60",
+  "expect": "allow"
+ },
+ {
+  "name": "sleep-24",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "sleep 100; wsl.exe -d DwemerAI4Skyrim3 bash -c \"tail -1 /tmp/rowfix_b.out; grep -c PASS /tmp/rowfix_b.out; grep FAIL /tmp/rowfix_b.out|head -3; tail -1 /tmp/rowfix_a.out; grep FAIL /tmp/rowfix_a.out | head\"",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-25",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiTestRuns/imm26-5090-hx/05-cx && for f in visible.txt sleeper.txt scene_N_names.txt scene_N_roster.txt scene_H_names.txt scene_H_roster.txt scene_E_roster.txt; do echo \"== $f\"; head -30 $f | cut -c1-300; done; echo; cat N1/meta.txt | head -20; grep -n \"Nearby People\" N1/prompt.txt | head",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-26",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiTestRuns; for f in $(ls */rows/15-bx/S1/sleep_state.txt */15-bx/S1/sleep_state.txt 2>/dev/null); do echo \"== $f\"; cat $f; done; ls -d */rows/15-bx */15-bx 2>/dev/null",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-27",
+  "tool": "Bash",
+  "timeout": 130000,
+  "bg": false,
+  "command": "f=C:/KenshiTestRuns/imm26-5090-hx/18-a/reinstall.out; for i in $(seq 1 55); do grep -qi \"wait-world\\|launched\\|error\\|fail\" $f 2>/dev/null && [ $i -gt 10 ] && break; sleep 2; done; tail -8 $f | cut -c1-250",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-28",
+  "tool": "Bash",
+  "timeout": 130000,
+  "bg": false,
+  "command": "for i in $(seq 1 58); do grep -q \"SELFTEST ALL\" /tmp/st1.out && break; sleep 2; done; tail -n 3 /tmp/st1.out; grep -h \" FAIL\" /tmp/st1.out",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-29",
+  "tool": "Bash",
+  "timeout": 110000,
+  "bg": false,
+  "command": "L=D:/KenshiInst/5/RE_Kenshi/mods/Stobe/stobe.log; for i in $(seq 1 22); do if grep -q \"ACTIVITY_END_DIAG\" <(tail -n 120 $L); then break; fi; sleep 4; done; grep -n \"ACTIVITY_END_DIAG\\|ACTIVITY_PROGRESS_DIAG\" $L | tail -4 | cut -c1-420; tail -n 120 $L | grep -c \"revalidate_path_unconfirmed\"; date",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-30",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "f=\"C:/Users/Shay/AppData/Local/Temp/claude/C--KenshiModding/6d1f3011-2310-4986-85aa-5667f654842c/tasks/b1jauag62.output\"; for i in $(seq 1 55); do pgrep -f \"rowtools/selftest.sh\" >/dev/null || break; sleep 2; done; cat \"$f\" | tail -20; pgrep -f selftest.sh | head -2",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-31",
+  "tool": "Bash",
+  "timeout": 130000,
+  "bg": false,
+  "command": "f=C:/KenshiTestRuns/imm26-5090-hx/03-b/run4.out; for i in $(seq 1 55); do grep -q FINISHED $f 2>/dev/null && break; sleep 2; done; cat $f | cut -c1-350",
+  "expect": "allow"
+ },
+ {
+  "name": "loop-32",
+  "tool": "Bash",
+  "timeout": 115000,
+  "bg": false,
+  "command": "r=/c/KenshiTestRuns/imm26-4080-i4/rows/23-e/result.txt; for i in $(seq 1 55); do [ \"$(stat -c %Y $r)\" -gt \"$(date -d 11:23 +%s)\" ] && break; sleep 2; done; cat $r | cut -c1-400; date +%T",
+  "expect": "allow"
+ },
+ {
+  "name": "tmoN-allow-33",
+  "tool": "Bash",
+  "timeout": 170000,
+  "bg": false,
+  "command": "cd /c/KenshiModding && export KAH_INSTANCE=4 KAH_OWNER=rig5090-imm26-i4 KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KENSHI_MONITOR='\\.\\DISPLAY2'; timeout 150 stobe-auto wait-world 120 2>&1 | tail -5; echo \"rc=$?\"",
+  "expect": "allow"
+ },
+ {
+  "name": "tmoN-allow-34",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "timeout 110 bash -c 'until grep -aq \"RESULT NC-BUILD\" /c/KenshiTestRuns/imm26-nc17/build.out.txt; do sleep 5; done'; tr -d '\\0' < /c/KenshiTestRuns/imm26-nc17/build.out.txt | tail -4 | cut -c1-300",
+  "expect": "allow"
+ },
+ {
+  "name": "tmoN-allow-35",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiModding; timeout 118 bash tools/automation/wait-row.sh /c/KenshiTestRuns/imm26-5090-i3/op23/15bx4.out 110; tail -c 900 /c/KenshiTestRuns/imm26-5090-i3/op23/15bx4.out",
+  "expect": "allow"
+ },
+ {
+  "name": "tmoN-allow-36",
+  "tool": "Bash",
+  "timeout": 125000,
+  "bg": false,
+  "command": "timeout 115 bash -c 'until [ -f /c/KenshiTestRuns/agents/out/imm26-4080-i4op21/16bx.alldone ] || grep -q \"^EXIT=\" /c/KenshiTestRuns/agents/out/imm26-4080-i4op21/16bx.rep2.out 2>/dev/null; do sleep 5; done'; tail -2 /c/KenshiTestRuns/agents/out/imm26-4080-i4op21/16bx.rep2.out 2>/dev/null | cut -c1-500",
+  "expect": "allow"
+ },
+ {
+  "name": "tmoN-allow-37",
+  "tool": "Bash",
+  "timeout": 125000,
+  "bg": false,
+  "command": "cd /c/KenshiModding/tools/automation && export KAH_INSTANCE=3 KAH_OWNER=rig5090-imm26; ls | grep -i stobe-auto; timeout 110 bash stobe-auto.sh wait-world 2>&1 | tail -5",
+  "expect": "allow"
+ },
+ {
+  "name": "tmoN-deny-38",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd C:/KenshiModding/testing/live-stobe-queue/imm26-assert; timeout 300 bash preflight.sh 4080-i4 2>&1 | tail -15; grep -n \"402\\|balance\" preflight.sh | head",
+  "expect": "deny"
+ },
+ {
+  "name": "tmoN-deny-39",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /tmp && rm -rf st19 && cp -r /c/KenshiModding/testing/live-stobe-queue/imm26-assert st19 && cp f19/rowdefs.sh f19/rowcheck.py f19/selftest.sh f19/resume_scen.py st19/rowtools/ && cd st19 && timeout 900 bash rowtools/selftest.sh 2>&1 | grep -v \" PASS\" | tail -20; ",
+  "expect": "deny"
+ },
+ {
+  "name": "tmoN-deny-40",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiModding; sed -n 1,30p tools/automation/setupfail.ps1 | cut -c1-200; (cd /c/KenshiTestRuns/agents/out/fix26tmp2/imm26-assert/rowtools && nohup bash -c 'timeout 1500 bash reload-sfe-selftest.sh > ../../sfe2.log 2>&1; echo EXIT $? >> ../../sfe2.log' >/dev/null 2>&1 &) ; echo started",
+  "expect": "deny"
+ },
+ {
+  "name": "tmoN-deny-41",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiTestRuns/imm26-5090-i5; export KAH_INSTANCE=5 KAH_OWNER=rig5090-imm26-i5 KAH_PF_ISOLATION=0; timeout 300 bash /c/KenshiModding/tools/automation/lane-setup.sh 5090 5 kah-imm26-i5 2>&1 | tail -15 | cut -c1-250",
+  "expect": "deny"
+ },
+ {
+  "name": "tmoN-deny-42",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools && sed -i \"s/before S1 is KO'd')/before S1 is KO ordered')/\" unblockcheck_c_v2.py && python3 -c \"import ast;ast.parse(open('unblockcheck_c_v2.py').read())\" && cd .. && timeout 560 bash rowtools/unblock_c_v4_selftest.sh 2>&1 | grep -v \" PASS\" | tail -20; ",
+  "expect": "deny"
+ },
+ {
+  "name": "tmoN-deny-43",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /tmp/rt && cp /c/KenshiModding/testing/live-stobe-queue/imm26-assert/rowtools/reloaddefs_sfe.sh reloaddefs_sfe.sh && (timeout 300 bash reload-sfe-selftest.sh 2>&1 | tail -1; timeout 300 bash reload-sfi-selftest.sh 2>&1 | tail -1)",
+  "expect": "deny"
+ },
+ {
+  "name": "ew-44",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiTestRuns/shadow/replay/points; grep -n -i \"event-wait\\|EVENT STATUS\\|abandon\\|SPAWNED\" P022.input.md | cut -c1-300 | head -20",
+  "expect": "allow"
+ },
+ {
+  "name": "ew-45",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": true,
+  "command": "bash C:/KenshiModding/tools/automation/event-wait.sh",
+  "expect": "allow"
+ },
+ {
+  "name": "ew-46",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cd /c/KenshiModding/tools/automation; grep -n \"inbox\" event-wait.sh | head; du -sh . ; ls | wc -l; sed -n 1,60p agent-status.ps1 | head -5; grep -n \"tail\\|Overlap\" /c/KenshiModding/testing/AGENT_PROMPTS.md | head -40",
+  "expect": "allow"
+ },
+ {
+  "name": "ew-47",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "sed -n 120,274p tools/automation/event-wait.sh | cut -c1-220",
+  "expect": "allow"
+ },
+ {
+  "name": "ew-48",
+  "tool": "Bash",
+  "timeout": null,
+  "bg": false,
+  "command": "cat alert-scan.ps1 alert-ack.ps1; grep -n -i \"lane-idle\\|LANE IDLE\\|alert\" event-wait.sh event-stream.sh | head -40; grep -n -i \"alert\" hooks/kenshi-waker-guard.ps1 | head -30",
+  "expect": "allow"
+ }
+]
