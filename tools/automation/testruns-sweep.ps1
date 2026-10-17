@@ -24,7 +24,8 @@
 # Auto mode (PI-62). Only items that are already STALE (so: not on the keep-list, not named by a RUNNING/STOPPED-CONTEXT agent status,
 # inflight marker or queue file) AND older than 24 h (age = newest file inside; -AutoMinHours) are touched. Never touched: corpus, inflight,
 # agents, queue, logs, scenarios, game*.lock, KenshiTestFixtures, reparse points, anything outside the top level of the 5090 root.
-#   AUTO-DELETE (5090 root only, every deletion logged to <root>\sweep-auto.log): selftest-run*.txt, pd (dir), *.brief.md strays,
+#   AUTO-DELETE (5090 root only, every deletion logged to <root>\sweep-auto.log): selftest-run*.txt, pd (dir), *.brief.md strays, selftest-all*, scratch-*,
+#     coordinator.heartbeat.*.tmp, dur_run*.sh (Shay 2026-10-16),
 #     imm26-nc<N>[-suffix] trees with N <= newest NC number - 2 that no RUNNING status names (newest = highest imm26-nc<N> tree, or -NewestNC);
 #     the NC rule also needs the workspace repo to have no unpushed commits (work committed and pushed).
 #   AUTO-KEEP 7 days (standard reason, logged, only once per path: an expired auto-keep surfaces as a normal STALE): pi<N>-stage dirs,
@@ -257,6 +258,10 @@ function Invoke-AutoSweep([object[]]$cands) {
         if ($isRoot5090 -and $leaf -like 'selftest-run*.txt' -and -not $isDir) { $action = 'DELETE'; $why = 'allow-list selftest-run*.txt' }
         elseif ($isRoot5090 -and $leaf -ceq 'pd' -and $isDir) { $action = 'DELETE'; $why = 'allow-list pd dir' }
         elseif ($isRoot5090 -and $leaf -like '*.brief.md' -and -not $isDir) { $action = 'DELETE'; $why = 'allow-list stray *.brief.md' }
+        elseif ($isRoot5090 -and $leaf -like 'selftest-all*') { $action = 'DELETE'; $why = 'allow-list selftest-all*' }
+        elseif ($isRoot5090 -and $leaf -like 'scratch-*') { $action = 'DELETE'; $why = 'allow-list scratch-*' }
+        elseif ($isRoot5090 -and $leaf -like 'coordinator.heartbeat.*.tmp' -and -not $isDir) { $action = 'DELETE'; $why = 'allow-list coordinator.heartbeat.*.tmp' }
+        elseif ($isRoot5090 -and $leaf -like 'dur_run*.sh' -and -not $isDir) { $action = 'DELETE'; $why = 'allow-list dur_run*.sh' }
         elseif ($isRoot5090 -and $ncN -ge 0 -and $newestNc -gt 0) {
             if ($null -eq $gate) { $gate = Test-GitPushed }
             if ($gate) {

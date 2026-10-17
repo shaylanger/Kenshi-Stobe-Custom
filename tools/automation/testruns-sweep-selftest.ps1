@@ -1,4 +1,4 @@
-# testruns-sweep-selftest.ps1 (PI-62): selftest for `testruns-sweep.ps1 -Auto`, temp root only (no live state, no WSL, no ssh).
+﻿# testruns-sweep-selftest.ps1 (PI-62): selftest for `testruns-sweep.ps1 -Auto`, temp root only (no live state, no WSL, no ssh).
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\automation\testruns-sweep-selftest.ps1
 # Output: one "SELFTEST testruns-sweep <case> PASS|FAIL" line per case, final "SELFTEST-SUMMARY n pass / m fail"; exit 1 on any FAIL.
 $ErrorActionPreference = 'Stop'
@@ -53,12 +53,13 @@ try {
     $selfFresh = Mk $r 'selftest-run8.txt' 2 # fresh -> untouched
     $unknown = Mk $r 'mystery-dir' 40 -Dir   # unknown name -> stays STALE
     $unknownF = Mk $r 'notes.txt' 40
-    $selfOther = Mk $r 'selftest-all-3.txt' 40  # not in allow-list -> stays
+    $selfAll = Mk $r 'selftest-all-3.txt' 40; $scr = Mk $r 'scratch-op9' 40 -Dir; $hb = Mk $r 'coordinator.heartbeat.123.tmp' 40; $dur = Mk $r 'dur_run3.sh' 40
+    $hbLive = Mk $r 'coordinator.heartbeat' 40; $durLike = Mk $r 'dur_run3.sh.keep' 40; $scrFresh = Mk $r 'scratch-new' 2 -Dir; $scrRun = Mk $r 'scratch-runlane' 40 -Dir
     $pdLike = Mk $r 'pd-keep' 40 -Dir        # only exact 'pd'
     $inflMarked = Mk $r 'selftest-run99.txt' 40  # named by an inflight marker -> protected
     $corp = Mk $r 'corpus\old.txt' 100       # corpus content untouched
     Set-Content -LiteralPath (Join-Path $r 'inflight\selftest-run99.txt') -Value 'marker'
-    Set-Content -LiteralPath (Join-Path $r 'agents\wp1.status') -Value "wp1 | RUNNING | 2026-10-16 20:00`ntask: x`nlatest: y`noutputs: imm26-nc12 tree`nnext: z"
+    Set-Content -LiteralPath (Join-Path $r 'agents\wp1.status') -Value "wp1 | RUNNING | 2026-10-16 20:00`ntask: x`nlatest: y`noutputs: imm26-nc12 tree scratch-runlane`nnext: z"
     $out = Run-Sweep $r
     Check 'del-selftest-run' (-not (Test-Path -LiteralPath $selfTxt))
     Check 'del-pd' (-not (Test-Path -LiteralPath $pd))
@@ -70,7 +71,9 @@ try {
     Check 'running-status-protects-nc' (Test-Path -LiteralPath $ncRun)
     Check 'fresh-protected' ((Test-Path -LiteralPath $ncFresh) -and (Test-Path -LiteralPath $selfFresh))
     Check 'unknown-name-stays-stale' ((Test-Path -LiteralPath $unknown) -and (Test-Path -LiteralPath $unknownF) -and ($out -match 'mystery-dir') -and ($out -match 'notes\.txt'))
-    Check 'selftest-all-not-allowlisted' ((Test-Path -LiteralPath $selfOther) -and (Test-Path -LiteralPath $pdLike))
+    Check 'del-extended-allowlist' (-not ((Test-Path -LiteralPath $selfAll) -or (Test-Path -LiteralPath $scr) -or (Test-Path -LiteralPath $hb) -or (Test-Path -LiteralPath $dur)))
+    Check 'extended-allowlist-negatives' ((Test-Path -LiteralPath $hbLive) -and (Test-Path -LiteralPath $durLike) -and (Test-Path -LiteralPath $scrFresh) -and (Test-Path -LiteralPath $scrRun) -and (Test-Path -LiteralPath $pdLike))
+    Check 'extended-deletions-logged' ((Get-Content -Raw (Join-Path $r 'sweep-auto.log')) -match 'DELETE.*scratch-op9')
     Check 'inflight-named-protected' (Test-Path -LiteralPath $inflMarked)
     Check 'corpus-untouched' ((Test-Path -LiteralPath $corp) -and (Test-Path -LiteralPath (Join-Path $r 'inflight\selftest-run99.txt')) -and (Test-Path -LiteralPath (Join-Path $r 'agents\wp1.status')))
     $log = if (Test-Path (Join-Path $r 'sweep-auto.log')) { Get-Content -Raw (Join-Path $r 'sweep-auto.log') } else { '' }
