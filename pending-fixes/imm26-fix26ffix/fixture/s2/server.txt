@@ -1,0 +1,1 @@
+[2026-10-16 23:52:04] [WARN] Activity decision rejected | {"decision":"ACCEPT","reason":"No currently grounded route candidate","intent":null,"request_id":"req_6ad2b8a064ce0"}

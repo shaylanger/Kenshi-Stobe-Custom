@@ -1,0 +1,57 @@
+faction: Cind [Hungry Bandit] faction Traders Guild -> Nameless now Cind [Hungry Bandit] #272705088/1 [Nameless] pos=-53214.1,956.6,4893.7
+Cind [Hungry Bandit] ordered GET_OUT_OF_BED (in_bed_or_cage=0)
+set every body part of Cind [Hungry Bandit] to 100.0%
+Cind [Hungry Bandit] was not pinned
+Shay was not pinned
+teleported: Shay #971557632/1 [Nameless] pos=-47333.0,730.0,-55600.0 dist=60771.5 moved=1 off_target=0.0 method=teleport
+teleported: Cind [Hungry Bandit] #272705088/1 [Nameless] pos=-47333.0,730.0,-55594.0 dist=6.0 moved=1 off_target=0.0 method=teleport
+selected Shay
+no answer within 20s (Kenshi not running or stuck loading?)
+no answer within 20s (Kenshi not running or stuck loading?)
+WARN no Holy Sentinel id found (set RW_SENTINEL)
+Dust Bandits <-> Nameless: -10.0 -> -100.0 enemy=0->1
+Cind [Hungry Bandit] faces Dust Bandit sees=0 fov=-1.0000 dist=31.0 observer_ko=0 los=1.0000
+peace-wait 1: no Holy Sentinel listed yet
+peace-wait 2: no Holy Sentinel listed yet
+peace-wait 3: no Holy Sentinel listed yet
+peace-wait 4: no Holy Sentinel listed yet
+peace-wait 5: no Holy Sentinel listed yet
+peace-wait 6: no Holy Sentinel listed yet
+peace: sentinels made friendly=0
+Cind [Hungry Bandit] faces Hesik [Dust Bandit] sees=0 fov=-1.0000 dist=32.3 observer_ko=0 los=0.0000
+senses #1337524352/5: Cind [Hungry Bandit] -> Hesik [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=32.3 observer_ko=0
+senses #1912719744/2: Cind [Hungry Bandit] -> Dust Bandit sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.6 observer_ko=0
+senses #2770263552/3: Cind [Hungry Bandit] -> Grenn [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.3 observer_ko=0
+senses #2900390656/4: Cind [Hungry Bandit] -> Pyl [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.6 observer_ko=0
+poll 1 senses sees=1 count=0 of 4 blind=4
+Cind [Hungry Bandit] faces Hesik [Dust Bandit] sees=0 fov=-1.0000 dist=32.3 observer_ko=0 los=0.0000
+senses #1337524352/5: Cind [Hungry Bandit] -> Hesik [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=32.3 observer_ko=0
+senses #1912719744/2: Cind [Hungry Bandit] -> Dust Bandit sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.6 observer_ko=0
+senses #2770263552/3: Cind [Hungry Bandit] -> Grenn [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.3 observer_ko=0
+senses #2900390656/4: Cind [Hungry Bandit] -> Pyl [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.6 observer_ko=0
+poll 2 senses sees=1 count=0 of 4 blind=4
+Cind [Hungry Bandit] faces Hesik [Dust Bandit] sees=0 fov=-1.0000 dist=32.3 observer_ko=0 los=0.0000
+senses #1337524352/5: Cind [Hungry Bandit] -> Hesik [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=32.3 observer_ko=0
+senses #1912719744/2: Cind [Hungry Bandit] -> Dust Bandit sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.6 observer_ko=0
+senses #2770263552/3: Cind [Hungry Bandit] -> Grenn [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.3 observer_ko=0
+senses #2900390656/4: Cind [Hungry Bandit] -> Pyl [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.6 observer_ko=0
+poll 3 senses sees=1 count=0 of 4 blind=4
+Cind [Hungry Bandit] faces Hesik [Dust Bandit] sees=0 fov=-1.0000 dist=32.3 observer_ko=0 los=0.0000
+senses #1337524352/5: Cind [Hungry Bandit] -> Hesik [Dust Bandit] sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=32.3 observer_ko=0
+senses #1912719744/2: Cind [Hungry Bandit] -> Dust Bandit sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=31.6 observer_ko=0
+senses #2770263552/3: Cind [Hungry Bandit] -> Grenn [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.0 fov=0.0000 dist=32.7 observer_ko=0
+senses #2900390656/4: Cind [Hungry Bandit] -> Pyl [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.1 fov=0.0000 dist=35.3 observer_ko=0
+poll 4 senses sees=1 count=2 of 4 blind=2
+Cind [Hungry Bandit] faces Hesik [Dust Bandit] sees=1 fov=0.0000 dist=42.3 observer_ko=0 los=0.0000
+senses #1337524352/5: Cind [Hungry Bandit] -> Hesik [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.8 fov=0.0000 dist=42.3 observer_ko=0
+senses #1912719744/2: Cind [Hungry Bandit] -> Talvik [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.9 fov=0.0000 dist=41.7 observer_ko=0
+senses #2770263552/3: Cind [Hungry Bandit] -> Grenn [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=1.1 fov=0.0000 dist=41.5 observer_ko=0
+senses #2900390656/4: Cind [Hungry Bandit] -> Pyl [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.2 fov=1.0000 dist=41.7 observer_ko=0
+poll 5 senses sees=1 count=4 of 4 blind=0
+Cind [Hungry Bandit] faces Hesik [Dust Bandit] sees=1 fov=1.0000 dist=42.3 observer_ko=0 los=0.9995
+senses #1337524352/5: Cind [Hungry Bandit] -> Hesik [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.5 fov=1.0000 dist=42.3 observer_ko=0
+senses #1912719744/2: Cind [Hungry Bandit] -> Talvik [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.7 fov=1.0000 dist=41.7 observer_ko=0
+senses #2770263552/3: Cind [Hungry Bandit] -> Grenn [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=1.0 fov=1.0000 dist=41.5 observer_ko=0
+senses #2900390656/4: Cind [Hungry Bandit] -> Pyl [Dust Bandit] sees=1 hears=1 aware=1 entry=1 last_seen_s=0.0 fov=1.0000 dist=41.7 observer_ko=0
+poll 6 senses sees=1 count=4 of 4 blind=0
+SCENE-OK
