@@ -11,6 +11,8 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 
 ## 0. (cleared 22:08) LLM balance topped up by Shay; llm-health OK. Operators respawned: imm26-4080-i4op25 (afd2c7df286186938: 01-cx x3, 02-dx x3) and imm26-5090-i5-op22 (a1211dab5b1bd93e3: 14-d v2 rerun now, 19-e after fix19erecipe). fix14dserver DONE def07676. Compact #2 measured ($0.23, in docs/COMPACT_AUDIT.md); tell Shay.
 
+- 22:12 inv26f DONE: camp ClearGroup never resumes (strict campZone equality in ActivityResume.php:115); fixer imm26-fix26fcamp (a4d7e70bf54475471) running; decision on bored-turn activity resume added to SHAY_DECISIONS. Also running: op32, hpairexec12, ab2exec3 (+arms), fix23agate, fix19erecipe, op25(4080-i4), op22(5090-i5).
+
 ## 1. Resume checklist (do these first)
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1 -Brief`; `agent-rollcall.ps1` (one line per agent).
 2. Waker: Monitor tool, command `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch`, timeout_ms 3600000 (expires after 30 min; re-arming is harmless; heartbeat `C:\KenshiTestRuns\waker\coordinator.hb`).

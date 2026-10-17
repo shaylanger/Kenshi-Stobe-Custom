@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """unblockscen_23a2.py <name>   scenario JSON for unblockfake_23a2.py (unblock_23a2_selftest.sh). Base = unblockscen_sfk.py sfk23-pass / sfk23-failed (tripscen 23a-pass steps).
-Names: a2-pass a2-hub-pass a2-reaccept a2-reaccept3 a2-lead a2-proposed-forever a2-notanchored a2-ypre a2-cleared a2-nostart a2-obs0 a2-late-drop a2-air a2-failed"""
+Names: a2-pass a2-hub-pass a2-reaccept a2-reaccept3 a2-lead a2-proposed-forever a2-notanchored a2-ypre a2-cleared a2-nostart a2-obs0 a2-late-drop a2-air a2-failed a2-local-gate a2-stale-y"""
 import json
 import os
 import subprocess
@@ -44,6 +44,10 @@ elif n == 'a2-late-drop':     # alive after the accept, cleared before the stage
     S['native'] = 'drops_late'
 elif n == 'a2-air':           # op35 a2: the stage teleport leaves Cind at y=1570.8
     S['stage_air'] = True
+elif n == 'a2-stale-y':       # op37: after the 14.7 km stage the y read is stale (still high); x/z moved far, so the landing check must be skipped by default
+    S['stage_air'] = True
+elif n == 'a2-local-gate':    # inv23a / fix23agate: the gate is 390 u from Cind at the Hub (a raw +400 x stage landed on an unmeshed hilltop): no stage teleport at all
+    S['start'] = 'hub'; S['destpoint'] = '-52810.9 1369.8 4884.3'
 else:
     raise SystemExit('unknown scenario ' + n)
 print(json.dumps(S))

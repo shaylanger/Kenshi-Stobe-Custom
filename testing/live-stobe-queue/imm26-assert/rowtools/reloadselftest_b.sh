@@ -103,6 +103,9 @@ expect_alone 19-e-wrong-destination 19e-wrongdest 19-e "final_destination_within
 expect_alone 19-e-no-native-order 19e-nostate 19-e "final_first_order_MOVE_CUS_ORDERED"
 expect_has 19-e-chat-without-resume 19e-chat-no-resume 19-e FAIL "chat_turn_resumes_exactly_one_OWNED_TRAVEL_accepted"
 expect_has 19-e-no-pre-start 19e-nostart 19-e SETUP-FAIL "no pre-load OWNED_TRAVEL accepted=1"
+# fix19erecipe: Cind must be teleported next to Shay right before s4 and verified <= 40 u (else SETUP-FAIL with the cause)
+expect_has 19-e-far-at-s4-setup-fail 19e-far-at-s4 19-e SETUP-FAIL "107.6 u from Shay after 2 teleports"
+expect_pass 19-e-near-retry-pass 19e-near-retry 19-e
 # 19E-FIX: the running receipt needs the second post-load line (s5); without a running row after requested the row must still FAIL
 expect_alone 19-e-requested-never-running 19e-requested-never-running 19-e "phase_running_after_requested"
 expect_alone 19-e-receipt-turn-restarts-trip 19e-s5-second-start 19-e "second_post_load_line_starts_no_second_OWNED_TRAVEL"
@@ -150,6 +153,8 @@ scen 10e-pass; run 10-e $L >/dev/null
 grep -a -E 'repairprobe.php' "$F" | grep -q -E 'INSERT|UPDATE|DELETE' && chk 10-e-probe-no-write bad || chk 10-e-probe-no-write ok
 grep -q -i -E "insert into|update stobe|delete from" <(sed -n '/rb:probe/,$p' "$F" | grep -a -v '^###' | head -0) ;
 scen 19e-pass; run 19-e $L >/dev/null
+tl=$(grep -a -n "stobe-auto teleport" "$F" | tail -1 | cut -d: -f1); s4=$(grep -a -n "stobe_say" "$F" | tail -2 | head -1 | cut -d: -f1); wh=$(grep -a -n "rb:near19e" "$F" | tail -1 | cut -d: -f1)
+[ -n "$tl" ] && [ -n "$wh" ] && [ -n "$s4" ] && [ "$tl" -lt "$wh" ] && [ "$wh" -lt "$s4" ] && chk 19-e-teleport-then-where-then-s4 ok || chk 19-e-teleport-then-where-then-s4 bad "tele@$tl where@$wh s4@$s4"
 grep -a -c "stobe_say" "$F" | grep -q '^4$' && chk 19-e-exactly-two-post-load-says ok || chk 19-e-exactly-two-post-load-says bad "$(grep -a -c stobe_say "$F")"
 grep -a -F "stobe_say" "$F" | tail -2 | head -1 | grep -q "Where were we going" && chk 19-e-first-post-load-line-is-the-resume-turn ok || chk 19-e-first-post-load-line-is-the-resume-turn bad
 grep -a -F "stobe_say" "$F" | tail -1 | grep -q "right behind you" && chk 19-e-second-post-load-line-is-the-receipt-turn ok || chk 19-e-second-post-load-line-is-the-receipt-turn bad

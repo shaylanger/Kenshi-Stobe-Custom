@@ -42,6 +42,12 @@ RULE (Shay 2026-10-16): every item that needs a Shay decision is recorded HERE w
 6) PI-66 raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (settings env) - Shay applies (edit by Claude denied as self-modification). Effect: more than 20 subagents at once (replay waves, lane operators + fixers); only from the next session start. Default: not set.
 7) PI-51 / PI-62 hook swaps - PI-51 APPLIED 2026-10-16 20:3x (persistent waker via Monitor, backup C:\KenshiTestRuns\backup\kenshi-waker-guard.ps1.pre-pi51). PI-62 swap pending: cd /c/KenshiModding/pending-fixes/pi62-sweep-auto && powershell -NoProfile -ExecutionPolicy Bypass -File swap.ps1 (Shay runs it; Git Bash needs forward slashes or a cd).
 
+### Should an interrupted clear-group order resume by itself after load? (found by inv26f, 2026-10-16)
+- Problem: after save/load a "clear the camp" order resumes only when the player chats with that NPC again (ChatBox.cpp:4886). Trips resume on any server response, including a bored turn. No activity kind resumes on a bored turn.
+- Option a (default, no change): activities resume on the next player chat. In game: after loading, the NPC stands still until you talk to them, then goes back to the camp.
+- Option b: also resume on a bored turn, like trips. In game: a few seconds after load the NPC walks back to the camp on its own. Code: add the activity ticket to the bored-turn path in ChatBox.cpp plus a server change; new test row.
+- Related: fix26fcamp (running) fixes the real bug that a camp order could never resume at all.
+
 ## Decided
 - PI-62 (auto-sweep) and its extra delete patterns (selftest-all*, scratch-*, coordinator.heartbeat.*.tmp, dur_run*.sh): YES, Shay 2026-10-16.
 - PI-66 / PI-51 confirmed by Shay 2026-10-16 (PI-51 applied).

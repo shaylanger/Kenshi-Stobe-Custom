@@ -56,6 +56,8 @@ if kind == 'h' and tag:
         print('\n'.join(scen.get('turns', [])))
     elif tag == 'money':
         print('ok')
+    elif tag == 'near19e':   # `where <npc>` right before the 19-e resume turn; scen 'near19e' = [dist per call] (default 12.0)
+        print("Cind [Hungry Bandit] #2529907200/2 [Traders Guild] pos=-50970.0,1533.0,2965.0 dist=%s" % nxt('near19e', 12.0))
     sys.exit(0)
 here = os.path.dirname(os.path.abspath(__file__))
 r = subprocess.run([sys.executable, os.path.join(here, 'tripfake.py'), kind, body], capture_output=True, text=True)

@@ -13,7 +13,8 @@
 #   lane-setup.sh --with Cind --teleport does not move 'Cind [Hungry Bandit]': a2_anchor teleports Shay, then Cind/Malzin onto Shay by full name (the pattern tr_quiet uses).
 # Every guard is one line tagged `# a2:guard-<name>`; unblock_23a2_selftest.sh deletes each in turn (mutation test) and requires the scenario that needs it to change.
 # Env: TRIP_HUB ("-53200 960 4860") A2_HUB_DY (120: allowed |y - hub y|) TRIP_A2_ACCEPT_TRIES (3, max 3) A2_NATIVE_TRIES (8 probes x 2.5 s) A2_STAGE_DY (200: allowed Cind y above the gate
-#      y after the stage teleport; 0 disables) A2_ANCHOR=0 (skip the Hub anchor) plus the sfK2 knobs (SFK_23A_BACK/SPEED/TRIES/WAIT, TRIP_GATE). Evidence: a2_setup.txt, a2_native_*.txt.
+#      y after the stage teleport; 0 disables) A2_STAGE_MOVED_SKIP (1000: skip that landing check when the stage teleport moved x/z more than this, the y read is stale, op37; 0 = always check)
+#      A2_NO_STAGE_MAX (1500: no stage teleport when the gate is within this many units of Cind, the live order walks the mesh route, inv23a/fix23agate; only the 14.7 km Squin gate stages) A2_ANCHOR=0 (skip the Hub anchor) plus the sfK2 knobs (SFK_23A_BACK/SPEED/TRIES/WAIT, TRIP_GATE). Evidence: a2_setup.txt, a2_native_*.txt.
 declare -F rd_23a_sfk >/dev/null || { echo "tripdefs_23a2.sh: source tripdefs_sfk.sh and tripdefs_23acheck.sh first" >&2; return 1 2>/dev/null || exit 1; }
 declare -F uf_walk_stage >/dev/null || . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/unblockdefs_f.sh"
 
@@ -113,14 +114,19 @@ a2_trip_setup() {   # s1 propose (three openers), s2 accept with bounded re-say 
   return 0
 }
 a2_stage_walk() {   # a2_stage_walk <quoted-npc> <gate> <back> <speed> <tries> : pre-stage asserts, stage teleport with a landing check, then the walk loop of uf_walk_stage (positive leg). rc 3 = SETUP-FAIL
-  local n="$1" g="$2" back="$3" spd="$4" tries="$5" hub hy dy gy p y k w d t c f stage
+  local n="$1" g="$2" back="$3" spd="$4" tries="$5" hub hy dy gy p pre y k w d t c f stage gd mv
   hub="${TRIP_HUB:--53200 960 4860}"; hy=$(echo "$hub" | awk '{print $2}'); dy="${A2_HUB_DY:-120}"; gy=$(echo "$g" | awk '{print $2}')
+  p=$(a2_pos "$n"); pre="$p"; y=$(echo "$p" | awk '{print $2}'); a2_log "pre-stage Cind=[$p]"
   if [ "${A2_ANCHOR:-1}" != 0 ]; then
-    p=$(a2_pos "$n"); y=$(echo "$p" | awk '{print $2}'); a2_log "pre-stage Cind=[$p]"
     a2_in_band "$y" "$hy" "$dy" || { RL_REASON="Cind is at y='${y:-?}' before the stage teleport, not the Hub band $hy +-$dy (staging from there drops her in the air, op35 a2); needs: recipe/lane (see $EV/a2_setup.txt)"; return 3; }   # a2:guard-ypre
   fi
   a2_native_live "$A2_N0" prestage || return 3   # a2:guard-native-pre-stage
   UF_N0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); UF_N0=${UF_N0:-0}
+  gd=$(echo "$pre $g" | awk 'NF>=6{dx=$1-$4; dz=$3-$6; printf "%.0f", sqrt(dx*dx+dz*dz)}')
+  if [ -n "$gd" ] && [ "$gd" -le "${A2_NO_STAGE_MAX:-1500}" ]; then   # a2:guard-near-gate
+    a2_log "no stage: gate is ${gd} u from Cind (<= ${A2_NO_STAGE_MAX:-1500}); the live order walks the mesh route from the Hub (inv23a: a raw +${back} x teleport landed on an unmeshed hilltop)"
+    echo "no-stage gate_dist=$gd" > "$EV/stage.txt"
+  else
   stage="$g dist $back"; echo "$stage" > "$EV/stage.txt"
   lt_h <<EOT >> "$EV/stage.txt" 2>&1
 stobe-auto teleport $n $stage </dev/null | head -1 | cut -c1-120
@@ -128,9 +134,12 @@ stobe-auto teleport Shay $n </dev/null | head -1 | cut -c1-120
 EOT
   a2_sleep 2
   p=$(a2_pos "$n"); y=$(echo "$p" | awk '{print $2}'); a2_log "post-stage Cind=[$p] gate_y=$gy"
-  if [ "${A2_STAGE_DY:-200}" != 0 ] && [ -n "$gy" ] && [ -n "$y" ] && awk -v y="$y" -v g="$gy" -v d="${A2_STAGE_DY:-200}" 'BEGIN{exit (y - g > d) ? 0 : 1}'; then   # a2:guard-air
+  mv=$(echo "$pre $p" | awk 'NF>=6{dx=$1-$4; dz=$3-$6; printf "%.0f", sqrt(dx*dx+dz*dz)}')   # planar distance the stage teleport moved her
+  if [ "${A2_STAGE_DY:-200}" != 0 ] && [ -n "$gy" ] && [ -n "$y" ] && ! [ "${mv:-0}" -gt "${A2_STAGE_MOVED_SKIP:-1000}" ] && awk -v y="$y" -v g="$gy" -v d="${A2_STAGE_DY:-200}" 'BEGIN{exit (y - g > d) ? 0 : 1}'; then   # a2:guard-air
     RL_REASON="the stage teleport left Cind in the air (y=$y, gate y=$gy, allowed +${A2_STAGE_DY:-200}): she falls and the native order is lost (op35 a2); needs: recipe (stage from the Hub origin, see $EV/a2_setup.txt)"
     UB_WALK_END=SETUP; return 3
+  fi
+  [ "${mv:-0}" -gt "${A2_STAGE_MOVED_SKIP:-1000}" ] && a2_log "landing check skipped: x/z moved ${mv} u (> ${A2_STAGE_MOVED_SKIP:-1000}), the read y is stale (op37)"
   fi
   lt_h <<EOT >> "$EV/walk.txt" 2>&1
 stobe-auto speed $spd </dev/null | head -1

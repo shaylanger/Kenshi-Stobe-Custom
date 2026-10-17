@@ -147,6 +147,23 @@ rd_10e() {   # restitution scope across a REAL load (seeded in-memory agreements
   rb_probe_run scope > "$EV/probe_post.json" 2>&1
 }
 
+rb_19e_close() {   # teleport the NPC to Shay and verify (where) she is <= ${ROW_19E_MAXDIST:-40} u away right before s4; else rc 3 + RL_REASON (SETUP-FAIL). Evidence: $EV/near_s4.txt
+  local max="${ROW_19E_MAXDIST:-40}" n w d try
+  RL_NPC_ID=""; rd_need_npc || return 3
+  n=$(rl_q "$RL_NPC_FULL")
+  for try in 1 2; do
+    echo "try $try: before dist=${RL_DIST:-?}" >> "$EV/near_s4.txt"
+    printf 'stobe-auto teleport %s Shay </dev/null | head -1\n' "$n" | lt_h >> "$EV/near_s4.txt" 2>&1
+    [ -n "${KAH_ROW_FAKE:-}" ] || sleep 2
+    w=$(printf 'stobe-auto where %s </dev/null 2>&1 | head -1 # rb:near19e\n' "$n" | lt_h 2>&1 | head -1)
+    d=$(echo "$w" | sed -nE 's/.* dist=([0-9.]+).*/\1/p' | head -1)
+    echo "try $try: after teleport where=$w" >> "$EV/near_s4.txt"
+    if [ -n "$d" ] && awk -v d="$d" -v m="$max" 'BEGIN{exit !(d+0<=m+0)}'; then echo "near_s4 ok dist=$d (<= $max)" >> "$EV/near_s4.txt"; RL_DIST="$d"; return 0; fi
+  done
+  RL_REASON="19-e recipe: $RL_NPC_FULL is ${d:-unreadable} u from Shay after 2 teleports (limit $max u; the resume needs her inside the 80 u people list at s4); not a product failure, see $EV/near_s4.txt"
+  return 3
+}
+
 rd_19e() {   # visited-town trip, LAZY resume (Shay 2026-10-15): after the reload NOTHING may resume before a chat turn (control), the first chat line then resumes the SAME agreement
   rd19_prep || return $?
   local ROW_19_DEST="${TR_DEST:-Squin}"
@@ -161,6 +178,8 @@ rd_19e() {   # visited-town trip, LAZY resume (Shay 2026-10-15): after the reloa
 " "$((l+1))" "$LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); n=${n:-0}
   echo "quiet_s=${ROW_19E_QUIET_S:-30} owned_travel_accepted=$n" > "$EV/quiet.txt"
   rd19_dump agr_ctl.txt
+  # 19-e recipe fix (fix19erecipe): the 30 s quiet window lets her wander (107.6 u at s4 = beyond the 80 u people-list limit -> 'Trip resume wait' why=not_in_people); put her next to Shay right before s4
+  rb_19e_close || return $?
   # the one chat line: first post-load turn = the resume turn
   rl_say 4 "Where were we going?" || return $?
   [ -n "${KAH_ROW_FAKE:-}" ] || sleep "${ROW_RESUME_WAIT:-8}"

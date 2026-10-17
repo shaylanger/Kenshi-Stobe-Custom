@@ -8,7 +8,7 @@ Names:
   13f-pass 13f-notbreached 13f-nobroken 13f-brokenbig 13f-keptpromise
   10e-pass 10e-samesession 10e-ingestoff 10e-norescope 10e-scopechanged 10e-othersave 10e-older 10e-unmet 10e-control
   19e-pass 19e-pass-noint 19e-early-start 19e-early-rows 19e-chat-no-resume 19e-no-start-on-chat 19e-dup 19e-wrongdest 19e-nostate 19e-nostart
-  19e-requested-never-running 19e-s5-second-start   (19E-FIX)
+  19e-requested-never-running 19e-s5-second-start   (19E-FIX)  19e-far-at-s4 19e-near-retry (fix19erecipe)
   19f-pass 19f-cap-default-fails 19f-capmode-pass 19f-dup-start 19f-wrongcount 19f-newagr 19f-cap-notterminal 19f-cap-newtravel 19f-cap-loop"""
 import json
 import sys
@@ -265,6 +265,10 @@ elif n == '19f-cap-notterminal':
     S = f19({'cap': 2, 'mode': 'cap', 'failed_kind': 'running'})
 elif n == '19f-cap-newtravel':
     S = f19({'cap': 2, 'mode': 'cap', 'newtravel_at': 3})
+elif n == '19e-far-at-s4':       # fix19erecipe: she is still 107.6 u from Shay after both teleports: the recipe must SETUP-FAIL (before the fix this PASSed without looking at the distance)
+    S = dict(e19({}), near19e=[107.6, 107.6])
+elif n == '19e-near-retry':      # fix19erecipe: first teleport leaves her at 55 u, the second brings her to 20 u: PASS
+    S = dict(e19({}), near19e=[55.0, 20.0])
 elif n == '19f-cap-loop':
     S = f19({'cap': 2, 'mode': 'cap', 'loop_at': 3})
 if S is None:

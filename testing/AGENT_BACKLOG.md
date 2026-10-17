@@ -6,7 +6,7 @@ Keep this file current: set state to STARTED (agent name + id) when spawned, DON
 
 | # | item | type | state | spawn spec / notes |
 |---|---|---|---|---|
-| 1 | 26-f post-load ClearGroup resume (a clear-group order must resume after save/load; Shay rule "everything resumes after save/load") | investigate `imm26-inv26f` | STARTED 21:00 `imm26-inv26f` (a4f1d1ac05b34af9f) | Evidence: testing/NPC_IMMERSION_26_TESTS.md row 26-f, KNOWN_BLOCKERS; ask for root cause + patch diff, no edits |
+| 1 | 26-f post-load ClearGroup resume | investigate `imm26-inv26f` | DONE (report agents\out\imm26-inv26f\out-20261016-210817.md); fixer `imm26-fix26fcamp` STARTED 22:12 (a4d7e70bf54475471) then operator reruns reload-run-sfe.sh 26-f | Evidence: testing/NPC_IMMERSION_26_TESTS.md row 26-f, KNOWN_BLOCKERS; ask for root cause + patch diff, no edits |
 | 2 | 23-a: root cause is the RECIPE (inv23a): skip stage teleport when gate < 1500 u | fixer `imm26-fix23agate` | STARTED 22:13 (af4922b8959aebd6b) | then op for 5090-i3 reruns 23-a |
 | 3 | 14-d SCENE-BAD (3 extra serials not near; far bandit lands in the near platoon) | fixer `imm26-fix14dtool3` | WAIT op21 report | fallback `--far-spawnt "<squad template>"`; evidence C:\KenshiTestRuns\inbox\setupfail*14-d* and set_probe.txt in the i5 rows dir |
 | 4 | 13-c-neg (native, SETUP-FAIL ticket, setupfail.ps1 list) | investigate `imm26-inv13cneg` | READY | owner imm26-5090-i3op36 is gone; ticket age 17h+ |
