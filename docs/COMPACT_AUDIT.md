@@ -18,7 +18,7 @@ Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus th
 
 ## Compact #2 (MANUAL /compact, 2026-10-17 03:06 UTC = 21:06 local, at 284k; NOT the 150k threshold)
 - 284,045 -> 14,628 tokens, summarizer 89 s.
-- One-off $0.26 = summarizer ESTIMATE $0.086 + first turn after MEASURED $0.174 (partial: 14 turns after so far).
+- One-off: first turn after MEASURED $0.174. The summarizer call is NOT recorded: UNKNOWN. Assumed cache-read input gives ~$0.09 (input $0.03 + output ~$0.05), but a cache write would be ~$1.2 and uncached ~$0.6. Real number only from /cost before vs after, or the provider usage page.
 - Mean turn cost: before $0.048 (n=15) -> after $0.0326 (n=14).
 - CORRECTION 21:09: an earlier message to Shay quoted $0.23, which was compact #1 (the auto one at 02:34Z), not this one.
 - Comparison caveat: the "$1.84 handoff vs $0.23 compact" ratio is not like-for-like (handoff figure = 25 turns of the new session incl. real work + the tail's 69 turns; compact figure = one-off only). Fair view: after a compact you still pay ~$0.03/turn; the real extra cost of the handoff is the tail's $1.40.

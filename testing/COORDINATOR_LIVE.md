@@ -13,6 +13,8 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 
 - 22:12 inv26f DONE: camp ClearGroup never resumes (strict campZone equality in ActivityResume.php:115); fixer imm26-fix26fcamp (a4d7e70bf54475471) running; decision on bored-turn activity resume added to SHAY_DECISIONS. Also running: op32, hpairexec12, ab2exec3 (+arms), fix23agate, fix19erecipe, op25(4080-i4), op22(5090-i5).
 
+- 22:25 replay2 DONE (hpairexec12): aggregate.md final; report given to Shay. Agree: Haiku 38 / Sonnet 74 / pair 54 / draft-review 67 / guard rails 47. Cost: Haiku $0.81, Sonnet $11.78, pair $6.73, DR $13.29, GR $0.92, graders $4.36. Compact summarizer cost is UNKNOWN (estimate only); get it via /cost before/after the next compact.
+
 ## 1. Resume checklist (do these first)
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1 -Brief`; `agent-rollcall.ps1` (one line per agent).
 2. Waker: Monitor tool, command `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch`, timeout_ms 3600000 (expires after 30 min; re-arming is harmless; heartbeat `C:\KenshiTestRuns\waker\coordinator.hb`).
