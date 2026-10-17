@@ -264,10 +264,35 @@ def t_baseline_parser():
         check('baseline parser: Sonnet harmful = 4, Haiku agree rows sum', b['totals']['S']['harmful'] == 4 and b['totals']['H']['worse'] == 69, b['totals'])
 
 
+def t_collect():
+    """Fake a transcript from a real baseline Haiku transcript (marker rewritten to a replay2 rid) in a temp project root; collect must parse it."""
+    rr = C.replay_run()
+    real = rr.find_transcripts(24 * 60)
+    src = (real.get('P001-ra') or [None])[0]
+    if not src:
+        print('SKIP  collect: baseline transcript P001-ra not found')
+        return
+    proj = tempfile.mkdtemp(prefix='replay2-proj-')
+    d = os.path.join(proj, 'sess', 'subagents')
+    os.makedirs(d)
+    txt = open(src, encoding='utf-8', errors='ignore').read().replace('replay-run: P001-ra', 'replay-run: P001-gr')
+    open(os.path.join(d, 'agent-afake0000000001.jsonl'), 'w', encoding='utf-8').write(txt)
+    C.PROJ_ROOT = proj
+    try:
+        # the baseline agent wrote its answer to the baseline runs dir; collect falls back to the Write content in the transcript
+        RUN.cmd_collect(argparse.Namespace(hours=24, redo=False))
+        r = RUN.read_tsv(RUN.RUNS_TSV()).get('P001-gr')
+        check('collect: fake transcript found by marker, parsed ok, cost > 0, model checked', bool(r) and str(r['status']).startswith('ok') and float(r['usd']) > 0 and int(r['tokens']) > 0, r)
+        check('collect: decision file written for the rid', C.valid_output('P001-gr') is not None)
+    finally:
+        shutil.rmtree(proj, ignore_errors=True)
+
+
 def main():
     try:
         for f in (t_done_list, t_filter, t_sig, t_jobs, t_plan, t_baseline_parser):
             f()
+        t_collect()
         pids = t_pair_and_finalize()
         t_packets_and_agg(pids)
     finally:

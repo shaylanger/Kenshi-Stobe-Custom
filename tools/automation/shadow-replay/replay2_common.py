@@ -17,7 +17,7 @@ REPO = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
 BASE = r'C:\KenshiTestRuns\shadow\replay'
 POINTS = os.path.join(BASE, 'points')
 R2 = os.environ.get('REPLAY2_ROOT', r'C:\KenshiTestRuns\shadow\replay2')
-PROJ_ROOT = r'C:\Users\Shay\.claude\projects\C--KenshiModding'
+PROJ_ROOT = os.environ.get('REPLAY2_PROJ', r'C:\Users\Shay\.claude\projects\C--KenshiModding')
 
 ROUNDS = {
     'r1': dict(suffixes=('pa1', 'pb1'), model='haiku', arm='pair'),
