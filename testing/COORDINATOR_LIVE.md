@@ -143,3 +143,4 @@ Reason key: CAP = held because of the 20-concurrent-subagent cap (only the i4 op
 - Compact #3 cost: +$0.40 upper bound (docs/COMPACT_AUDIT.md). Owed to Shay: hdeepdive result, credit-use review (backlog 22), ab2 COMPARISON when ab2exec3 ends, PI-retire decision.
 - 21:5x spawned imm26-4080-i3op40 (a5eca3fe6703e48d2): 15-bx live rerun on 4080-i3 (ordering fix 5cf0e685); 16-bx/02-bx wait for fix16bxctl/fix02bxregex notes. 4080-i3 now has an operator.
 - 21:5x hdeepdive DONE: no class safe on Haiku; pair cost real Haiku $4.23 (+$2.50 discarded Sonnet = $6.73 reported; my $4.03 estimate was off); only candidate = GR Haiku on stop-hook feedback as live shadow (saving <= ~$5/day, likely less). Report to Shay in the next summary; credit-use review (backlog 22) still to do.
+- 21:5x fix16bxctl DONE 88e4c294 (16-bx control vocabulary; selftest 54/54). imm26-assert selftest.sh = 30/30 on my rerun.
