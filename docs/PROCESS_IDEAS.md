@@ -55,7 +55,7 @@ Rules:
 - added: 2026-10-16 13:35
 - log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
 
-### PI-49 | Open
+### PI-49 | confirmed
 - idea: Tooling snags hit by two or more operators become a fixer ticket automatically: operators append `SNAG <script:line> <symptom> <workaround>` to one file and the waker counts repeats; at the second distinct operator it wakes the coordinator once with the proposed root fix.
 - evidence: 2026-10-16 12:30-13:35: hxdefs.sh:30 writing /c/... (false SETUP-FAIL, hit op9o, op22 and op14's hx runs, each diagnosed alone at about 10-20k tokens); lane-deploy.sh deleting the sfO inject seam (op14 and op9o each rediscovered it); the root fix is still not applied.
 - saving: about 2 x 15k operator tokens per rediscovery and false FAILs on rows; fewer wrong verdict lines
@@ -63,9 +63,12 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 13:35
+- moment: 2026-10-16 21:55 op21 report listed four snags only in prose; I copied them into COORDINATOR_LIVE by hand
+- last_review: coordinator-24d (pre-compact checkpoint 22:05)
 - log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
+- log: 2026-10-16 21:01 review 'coordinator-24d (pre-compact checkpoint 22:05)': Open -> confirmed (applies: 2026-10-16 21:55 imm26-5090-i5-op21 hit four tooling snags in one stretch (KAH_FPS=60 in the brief fails the isolation preflight, unblockrun_14d_v2.sh wants lane 5090-i5 not i5 and a lane-setup bef...)
 
-### PI-52 | Open
+### PI-52 | confirmed
 - idea: Put known tooling snags (e.g. hxdefs.sh:30 /c/ path in bundle_dir.txt giving a false 'bundle dirs missing' SETUP-FAIL, use HX_OUT=C:/KenshiTestRuns/imm26-4080-hx) in the generated lane brief from testing/KNOWN_BLOCKERS.md, and make mark-row.py refuse SETUP-FAIL 'bundle dirs missing' when run.log is empty and the dirs exist.
 - evidence: 11:58-13:34: the same path bug produced false SETUP-FAILs on 01-cx, 16-bx (4080-i3, 5090-i5) and cost two investigator agents (inv01cx 190k tokens) plus two operator rediscoveries before it was named.
 - saving: about 200k tokens and 3 false tickets per occurrence
@@ -73,7 +76,10 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 13:56
+- moment: 2026-10-16 20:50 op21 launched 26-a with the brief's KAH_FPS=60 and failed isolation preflight, then double-launched hunt26a
+- last_review: coordinator-24d (pre-compact checkpoint 22:05)
 - log: 2026-10-16 13:56 review 'coordinator-17': added
+- log: 2026-10-16 21:01 review 'coordinator-24d (pre-compact checkpoint 22:05)': Open -> confirmed (applies: 2026-10-16 21:55 the same four snags cost op21 a contaminated first 26-a run (hunt26a launched twice) and about 25 minutes; they were not in the lane brief)
 
 ### PI-56 | Open
 - idea: tail-autorelay should relay a RESUMED agent's second DONE (agent re-finishes after a SendMessage) as a new result, keyed on the status-file mtime/agentId run counter, instead of treating the name as already relayed.
