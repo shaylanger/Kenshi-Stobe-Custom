@@ -16,9 +16,10 @@ Caveat: the summarizer call is not in the transcript, so its cost is an ESTIMATE
 ## Reading
 Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus the tail's relay turns and the risk of lost relays. Per-turn cost halves after either. My earlier estimate ("a handoff costs about the same") was wrong because the tail kept taking turns at high context and compacted itself anyway.
 
-## Compact #2 (auto, 2026-10-17 02:34 UTC; fired at 299k, NOT the 150k threshold: the setting had not applied to the running session yet)
-- 299,005 -> 13,860 tokens, summarizer 67 s. Cache was warm.
-- One-off cost $0.23 = summarizer ESTIMATE $0.076 (input $0.030 at cache-read + ~4.6k output tokens $0.046) + first turn after MEASURED $0.156.
-- Mean turn cost MEASURED: before $0.0438 (n=15) -> after $0.0288 (n=15); break-even ~15.5 turns.
-- Vs the old overlap handoff ($1.84, compact #1/handoff data above): about 8x cheaper.
-- Clean 150k measurement: still to come (next compaction after Shay runs /autocompact 183000).
+## Compact #2 (MANUAL /compact, 2026-10-17 03:06 UTC = 21:06 local, at 284k; NOT the 150k threshold)
+- 284,045 -> 14,628 tokens, summarizer 89 s.
+- One-off $0.26 = summarizer ESTIMATE $0.086 + first turn after MEASURED $0.174 (partial: 14 turns after so far).
+- Mean turn cost: before $0.048 (n=15) -> after $0.0326 (n=14).
+- CORRECTION 21:09: an earlier message to Shay quoted $0.23, which was compact #1 (the auto one at 02:34Z), not this one.
+- Comparison caveat: the "$1.84 handoff vs $0.23 compact" ratio is not like-for-like (handoff figure = 25 turns of the new session incl. real work + the tail's 69 turns; compact figure = one-off only). Fair view: after a compact you still pay ~$0.03/turn; the real extra cost of the handoff is the tail's $1.40.
+- Clean 150k measurement: still to come (after /autocompact 183000).
