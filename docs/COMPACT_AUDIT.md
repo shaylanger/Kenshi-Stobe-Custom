@@ -57,3 +57,8 @@ Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus th
 - BEFORE (3 s into the compact call): $94.94 (Sonnet $91.67, Haiku $3.27), wall 2h13m08s. Since the #4 after-paste ($87.04, wall 1h57m58s): +$7.90 in 15m10s (fleet burn ~$0.52/min).
 - AFTER (1m10s later): $95.64 (Sonnet $92.36, Haiku $3.28), wall 2h14m11s. Delta **+$0.70 in 1m03s** (upper bound, includes the live fleet).
 - Detail: cache write unchanged at 15.1m (no cache rebuild), cache read +1.7m, input +14.5k, output +~0.1m. The compact itself is well under $0.70.
+
+## Compact #6 (2026-10-16, Shay's /cost pastes)
+- BEFORE (at 1%): $104.85 (Sonnet $101.57, Haiku $3.28), wall 2h29m47s. Since #5 after-paste ($95.64): +$9.21 in 15m36s (fleet burn ~$0.59/min).
+- AFTER (1m11s later): $105.24 (Sonnet $101.96), wall 2h31m08s. Delta **+$0.39 in 1m21s** (upper bound, includes the live fleet).
+- Detail: cache write unchanged at 16.2m (5 expected rebuilds, no new rebuild), cache read +0.4m. Compacts #3 +$0.40, #4 +$1.72, #5 +$0.70, #6 +$0.39: a 150k compact costs well under $0.50.
