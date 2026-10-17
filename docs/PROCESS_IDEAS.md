@@ -25,16 +25,6 @@ Rules:
 - added: 2026-10-16 10:49
 - log: 2026-10-16 10:49 review 'coordinator-14': added
 
-### PI-41 | Open
-- idea: The tail hard limit (400k) forces a TaskStop of live lane operators mid-row. Prevent it: autoCompactWindow=330000 now set in the user settings so a tail compacts itself soon after the handoff (new sessions), and keep the tail lean (PI-38/39/40). Longer term run lane operators as independent sessions so a coordinator's context never limits a lane.
-- evidence: 2026-10-16 11:15-11:20: the tail reached 409k+ after about 40 post-handoff turns and had to order three lane operators to checkpoint; 5090-i3 left a 20-minute 19-ax job unowned, 4080-i4 stopped with 08-d/11-b open, 4080-i3 had to be stopped mid 08-e; three lanes lose about an hour of operator time each until respawned.
-- saving: about 1 lane-hour x 3 lanes per handoff, plus the tail turns
-- risk: autoCompactWindow also applies to coordinators/subagents; coordinators hand off at 300k, subagents at 200k, so 330k only affects tails
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:18
-- log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': added
-
 ### PI-44 | Open
 - idea: Never move inbox/coordinator/*.msg by hand (my blanket 'mv *.msg done/' habit hid a Haiku-pilot operator's 00-ask question for about 10 minutes); the waker already moves files to delivered/ and prints them. Add a rule line to AGENT_PROMPTS and make the waker print the full text of any PILOT-ESCALATE / 00-ask message (not the 300-char cut).
 - evidence: 2026-10-16 12:48: imm26-5090-i4-hk1 sent a 00-ask (window placement refused); I had archived the file with mv before reading it and only noticed via hk1's status line ~10 min later, so the pilot lane waited.
@@ -141,17 +131,6 @@ Rules:
 - log: 2026-10-16 19:43 review 'coordinator-23': added
 - log: 2026-10-16 20:32 review 'coordinator-24': open -> confirmed (applies: 2026-10-16 20:0x-21:2x: the router tag does not apply to subagent spawns, so every ab2 arm, hpairexec and replay2 spawn needed explicit model=/effort= params in the prompt; 25 replay2 R1 runs (P026...)
 
-### PI-66 | confirmed
-- idea: Raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (or add a non-agent runner such as claude -p for the replay2 arms) so offline replay executors can fan out 20+ runs per message.
-- evidence: 2026-10-16 19:10-20:20: the 20-subagent cap forced waves of 8 (17 failed with 'Concurrent subagent limit reached' when lane operators needed slots); replay2 needs about 700 runs = 6+ executor generations of about 140k tokens each, and the cap also delayed spawning inv20a/19e/14d by about 10 minutes.
-- saving: roughly half the wall time and 3-4 executor generations (about 500k tokens) for replay2
-- risk: medium: rate limits and lane-operator slot starvation
-- hooks: no
-- weakens: no
-- added: 2026-10-16 19:43
-- log: 2026-10-16 19:43 review 'coordinator-23': added
-- log: 2026-10-16 20:13 Shay answered yes
-
 ### PI-67 | open
 - idea: Auto-close stale STOPPED-CONTEXT/FAILED agent markers when the agent's row/ticket is already PASS/closed or another agent owns it (kenshi-waker-guard 'stopped or failed with no successor' check), instead of demanding a respawn text.
 - evidence: 2026-10-16 20:1x-21:2x: five Stop-hook blocks for agents stopped 9-11 h earlier (imm26-sfK, sfFixA, sfFixA2, sfFixB, sfE) whose rows had passed or were reassigned; each cost a coordinator turn plus a lookup (about 6 turns, ~40k tokens).
@@ -182,7 +161,52 @@ Rules:
 - added: 2026-10-16 20:32
 - log: 2026-10-16 20:32 review 'coordinator-24': added
 
+### PI-70 | open
+- idea: agent-status.ps1 -WaitUntil HH:MM (cap 30 min, still checks lane/log activity) so the 10/20-min silent-agent stall rule does not stop an agent that is legitimately waiting on a slow selftest
+- evidence: 2026-10-16 ~20:10 tail 23 TaskStop'd imm26-fix14dtool at 26 min silence although it sat in a 10+ min unblock_14d selftest; the fixer's work had to be redone as fix14dtool2 (75k tokens, ~20 min). Same shape: fix23arecipe's 12-min selftest, fix14dtool2's 47-check selftest
+- saving: 20-40k tokens rework per false stall, plus ~20 min per ticket
+- risk: medium: could hide a real stall; cap the wait at 30 min and keep the lane/log activity check
+- hooks: yes
+- weakens: yes
+- for_shay: yes: weakens a monitoring catch; only Shay can approve, never build on a coordinator decision
+- added: 2026-10-16 20:47
+- log: 2026-10-16 20:47 review 'coordinator-24c (pre-compact, after Shay ordered autoCompact 150k + living handoff)': added
+
+### PI-71 | open
+- idea: tail-wait.ps1 should treat an in-session agent registered in agents/ids.json that has no status file as alive and write the placeholder RUNNING status itself (only matters while tail handoffs exist; moot if compaction replaces them)
+- evidence: 2026-10-16 tail 23: tail-wait exited twice with 'needs the tail: no status' for imm26-5090-i5-op21 and invcind; about 6 turns / 30k tokens per handoff to work around
+- saving: ~30k tokens per overlap handoff
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 20:47
+- log: 2026-10-16 20:47 review 'coordinator-24c (pre-compact, after Shay ordered autoCompact 150k + living handoff)': added
+
 ## In progress
+
+### PI-41 | in-progress
+- idea: The tail hard limit (400k) forces a TaskStop of live lane operators mid-row. Prevent it: autoCompactWindow=330000 now set in the user settings so a tail compacts itself soon after the handoff (new sessions), and keep the tail lean (PI-38/39/40). Longer term run lane operators as independent sessions so a coordinator's context never limits a lane.
+- evidence: 2026-10-16 11:15-11:20: the tail reached 409k+ after about 40 post-handoff turns and had to order three lane operators to checkpoint; 5090-i3 left a 20-minute 19-ax job unowned, 4080-i4 stopped with 08-d/11-b open, 4080-i3 had to be stopped mid 08-e; three lanes lose about an hour of operator time each until respawned.
+- saving: about 1 lane-hour x 3 lanes per handoff, plus the tail turns
+- risk: autoCompactWindow also applies to coordinators/subagents; coordinators hand off at 300k, subagents at 200k, so 330k only affects tails
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:18
+- log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': added
+- log: 2026-10-16 20:47 Shay answered yes
+- log: 2026-10-16 20:47 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
+
+### PI-66 | in-progress
+- idea: Raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (or add a non-agent runner such as claude -p for the replay2 arms) so offline replay executors can fan out 20+ runs per message.
+- evidence: 2026-10-16 19:10-20:20: the 20-subagent cap forced waves of 8 (17 failed with 'Concurrent subagent limit reached' when lane operators needed slots); replay2 needs about 700 runs = 6+ executor generations of about 140k tokens each, and the cap also delayed spawning inv20a/19e/14d by about 10 minutes.
+- saving: roughly half the wall time and 3-4 executor generations (about 500k tokens) for replay2
+- risk: medium: rate limits and lane-operator slot starvation
+- hooks: no
+- weakens: no
+- added: 2026-10-16 19:43
+- log: 2026-10-16 19:43 review 'coordinator-23': added
+- log: 2026-10-16 20:13 Shay answered yes
+- log: 2026-10-16 20:47 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
 
 ### PI-54 | in-progress
 - idea: pilot-audit.py/cost-audit.py must be run with Windows python and resolve agent names to ids by default, and the audit must FAIL LOUDLY (not print an empty COST section) when the cost tool finds no transcripts.
