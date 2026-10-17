@@ -80,7 +80,7 @@ try {
     # ---- tail-ack ----
     $ak = RunPs (Join-Path $here 'tail-ack.ps1') @('-Agent', 'agA')
     T ($ak.code -eq 0 -and (Recs | Where-Object { $_.agent -eq 'agA' }).acked_by_new_coordinator -eq $true) '5a tail-ack.ps1 sets acked'
-    T ((RunPs (Join-Path $here 'tail-ack.ps1') @('-Agent', 'ghost')).code -ne 0) '5b tail-ack for an agent in no ledger fails'
+    T ((RunPs (Join-Path $here 'tail-ack.ps1') @('-Agent', 'ghost')).code -eq 0 -and (Test-Path (Join-Path $tmp 'tail\acks\ghost.ack'))) '5b tail-ack for an agent in no ledger writes an ack marker (PI-59), exit 0'
     # ---- session-start: tail listing + cold start ----
     $deadPid = 0
     foreach ($p in 91000..91400) { if (-not (Get-Process -Id $p -ErrorAction SilentlyContinue)) { $deadPid = $p; break } }

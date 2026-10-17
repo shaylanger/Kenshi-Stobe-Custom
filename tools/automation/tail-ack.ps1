@@ -1,6 +1,6 @@
 # tail-ack.ps1 -Agent <name> [-Program <name>]: the NEW coordinator acknowledges the tail's relayed result for <agent>
 # (docs/TAIL_HANDOFF_CONTRACT.md section 4/6): sets acked_by_new_coordinator=true in every program ledger that has the agent
-# (or only -Program). The tail session may end once all its agents are acked. Exit 1 when no ledger record exists.
+# (or only -Program). The tail session may end once all its agents are acked. An agent in no ledger is acked via <runs>\tail\acks\<agent>.ack (PI-59).
 # Env: KPL_DIR (ledger dir), KAH_RUNS_DIR.
 # Auto-close (2026-10-15): when this ack leaves a tail session with NO pending agent (all done + acknowledged), the tail is finished:
 # tail-close.ps1 -Source ack -NoRelay is called for it (closes its claude process after ~20 s; checks in tail-close.ps1, fail closed).
@@ -11,7 +11,16 @@ $ledger = Join-Path $PSScriptRoot 'program-ledger.ps1'
 $rows = @()
 try { $rows = @((& powershell -NoProfile -ExecutionPolicy Bypass -File $ledger records | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
 $hit = @($rows | Where-Object { $_.agent -ieq $Agent -and (-not $Program -or $_.program -ieq $Program) })
-if (-not $hit.Count) { Write-Error "tail-ack: agent '$Agent' is in no program ledger"; exit 1 }
+# PI-59: an agent in no program ledger (in-session imm26-* operators/fixers) is acked through a marker file
+# <runs>\tail\acks\<agent>.ack (read by Get-TailAgentSet in tail-mode.ps1). It changes no agent state.
+$runsDir0 = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
+if (-not $hit.Count) {
+    $ackDir = Join-Path $runsDir0 'tail\acks'
+    New-Item -ItemType Directory -Force -Path $ackDir | Out-Null
+    $safe = ($Agent -replace '[^A-Za-z0-9._-]', '_')
+    Set-Content -LiteralPath (Join-Path $ackDir "$safe.ack") -Value ("acked " + (Get-Date).ToString('s') + " (agent in no program ledger)") -Encoding ASCII
+    "acked $Agent via marker (agent in no program ledger)"
+}
 foreach ($h in $hit) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $ledger ack $h.program $Agent
     if ($LASTEXITCODE -ne 0) { Write-Error "tail-ack: ledger ack failed for $($h.program)/$($h.wp)"; exit 1 }

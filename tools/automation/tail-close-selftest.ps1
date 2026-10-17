@@ -257,6 +257,18 @@ try {
     T (WaitDead $t4) 'tail-ack auto-close ends the finished tail process'
     T ((Msgs).Count -eq 0) 'ack-triggered close sends no TAIL-DONE (the coordinator itself acked)'
 
+    # PI-59: an agent in no program ledger is acked via the marker file; the tail closes by ack, agent state untouched
+    $t6 = Dummy
+    Status 'imm26-lg' 'DONE'
+    Enter 'T6' $t6 'imm26-lg'
+    $before = (Get-Content (Join-Path $d 'agents\imm26-lg.status') -Raw)
+    ClearInbox
+    $o = (RunPS @('-File', $ack, '-Agent', 'imm26-lg', '-NoClose')) -join "`n"
+    T ($o -match 'acked imm26-lg via marker' -and (Test-Path (Join-Path $d 'tail\acks\imm26-lg.ack'))) 'PI-59 tail-ack of a ledger-less agent writes the ack marker (no error)'
+    T ($o -match 'all agents done\+acked. Close it with: tail-close.ps1' -and (Alive $t6)) 'PI-59 ledger-less agent acked: tail sees done+acked'
+    T ((Get-Content (Join-Path $d 'agents\imm26-lg.status') -Raw) -eq $before) 'PI-59 ack changes no agent state'
+    Remove-Item -LiteralPath (FlagPath 'T6') -Force -ErrorAction SilentlyContinue
+
     # =============== (E) Stop hook trigger (candidate or live hook given by -Guard)
     function GuardRun([string]$sid) {
         $json = (@{ session_id = $sid; cwd = 'C:\KenshiModding'; hook_event_name = 'Stop'; stop_hook_active = $false } | ConvertTo-Json -Compress)

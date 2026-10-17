@@ -183,6 +183,11 @@ function Get-TailAgentSet([string]$runs, $flag) {
         $rec = $recs | Where-Object { $_.Agent -eq $n } | Select-Object -First 1
         $st = Get-AgentStatusState $runs $n
         $acked = [bool]($rec -and $rec.Acked)
+        # PI-59: ledger-less agents are acked by tail-ack.ps1 via <runs>\tail\acks\<agent>.ack (written after the agent's last status update)
+        if (-not $acked) {
+            $ackf = Join-Path $runs ('tail\acks\' + ($n -replace '[^A-Za-z0-9._-]', '_') + '.ack')
+            if ((Test-Path -LiteralPath $ackf) -and (((Get-Date) - (Get-Item -LiteralPath $ackf).LastWriteTime).TotalMinutes -le $st.AgeMin + 0.5)) { $acked = $true }
+        }
         $running = ($st.State -ne '') -and ($TAIL_TERMINAL -notcontains $st.State) -and ($st.AgeMin -lt 45)
         $relayOk = $false; $relayWhy = ''
         if (-not $running -and -not $acked -and ($TAIL_TERMINAL -contains $st.State)) {
