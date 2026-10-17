@@ -1,0 +1,72 @@
+diff -urN a/src/ActivityNativeExecutor.cpp b/src/ActivityNativeExecutor.cpp
+--- a/src/ActivityNativeExecutor.cpp	2026-10-16 17:57:33.716122000 -0600
++++ b/src/ActivityNativeExecutor.cpp	2026-10-16 17:57:33.731694600 -0600
+@@ -1,5 +1,6 @@
+ #include "ActivityNativeExecutor.h"
+ #include "ActivityPolicySupport.h"
++#include "ActivityTravelArrival.h"
+ #include "AutonomyExecutor.h"
+ #include "KenshiAiCompat.h"
+ #include "KenshiBuildingCompat.h"
+@@ -101,12 +102,15 @@
+    Operation& op=it->second;
+    if (op.agreement.id!=a.id || !op.cleanupRequired) continue;
+    Character* c=KenshiAi::ResolveCharacter(world_,a.actor);
+-   if (c && CaptureOwned(c,op,false)) owns=true;
++   const bool ownedNow=c && CaptureOwned(c,op,false);
++   if (ownedNow) owns=true;
+    else if (actor.order.orderCount>0) facts.conflictingOrder=true;
+    if (op.request.command==Travel) {
+     const double dx=actor.x-op.destination.x,dy=actor.y-op.destination.y,dz=actor.z-op.destination.z;
+     // 26-a: Poll latches the Succeeded arrival; re-measuring alone loses it once the NPC walks on during cleanup retries.
+-    facts.arrived=op.arrived || dx*dx+dy*dy+dz*dz<=64.0;
++    // fix26a3: the engine ends a MOVE order at its own radius (> 8 u); an ended order near the point is an arrival (same predicate as Poll).
++    facts.arrived=op.arrived || dx*dx+dy*dy+dz*dz<=64.0 ||
++     (!ownedNow && ActivityTravel::EndedNearPoint(actor.order.orderCount==0,dx,dz));
+    }
+   }
+   if (actor.order.orderCount>0 && !owns) facts.conflictingOrder=true;
+@@ -289,7 +293,22 @@
+    if(target && SameHand(target->getHandle(),op.targetIdentity) && (target->isDead() || target->isUnconcious()))
+     return op.receipt=Result(Receipt::Succeeded,"target_defeated");
+   }
+-  if(!CaptureOwned(actor,op,false)) return op.receipt=Result(Receipt::Interrupted,"owned_order_changed_or_ended");
++  if(!CaptureOwned(actor,op,false)) {
++   // fix26a3 (row 26-a): the engine removed our MOVE order at ITS completion radius (up to ~9 u planar, wider than the 8 u 3D test above).
++   // List empty + within ActivityTravel::kEngineEndRadius of the point = arrived (latched); a foreign/replaced order or a far actor stays Interrupted.
++   const Ogre::Vector3 ap=actor->getPosition();
++   const double pdx=static_cast<double>(ap.x)-op.destination.x,pdz=static_cast<double>(ap.z)-op.destination.z;
++   const bool listEmpty=orders && orders->orders.list.empty();
++   const bool nearEnd=op.request.command==Travel && ActivityTravel::EndedNearPoint(listEmpty,pdx,pdz);
++   try { // one line per operation: the receipt below is final (Poll returns it unchanged from now on)
++    std::ostringstream d; d<<"ACTIVITY_POLL_DIAG id="<<op.request.id<<" cmd="<<static_cast<int>(op.request.command)<<" owned_order_gone orders="
++     <<(orders?static_cast<int>(orders->orders.list.size()):-1)<<" planar="<<std::sqrt(pdx*pdx+pdz*pdz)
++     <<" dy="<<(static_cast<double>(ap.y)-op.destination.y)<<" nearEnd="<<(nearEnd?1:0);
++    ::Log(d.str());
++   } catch (...) { /* diagnostics never change the outcome */ }
++   if(nearEnd) { op.arrived=true; return op.receipt=Result(Receipt::Succeeded,"arrived_order_ended_near_point"); }
++   return op.receipt=Result(Receipt::Interrupted,"owned_order_changed_or_ended");
++  }
+   if(op.request.command==Travel) {
+    Ogre::Vector3 p(static_cast<float>(op.destination.x),static_cast<float>(op.destination.y),static_cast<float>(op.destination.z));
+    if(actor->getPosition().squaredDistance(p)<=64.0f) { op.arrived=true; return op.receipt=Result(Receipt::Succeeded,"arrived_at_scoped_point"); }
+diff -urN a/src/ActivityTravelArrival.h b/src/ActivityTravelArrival.h
+--- a/src/ActivityTravelArrival.h	1969-12-31 18:00:00.000000000 -0600
++++ b/src/ActivityTravelArrival.h	2026-10-16 17:57:33.733241200 -0600
+@@ -0,0 +1,16 @@
++#pragma once
++// imm26-fix26a3 (row 26-a): pure arrival decision for a scoped native Travel order (no game types, testable offline).
++// The engine removes a MOVE_CUS_ORDERED order itself at its OWN completion radius, which is wider than our 8 u 3D arrival test
++// (NATIVE_TRAVEL_ORDER_ENDED planar=9.0 dy=3.0 arrived8=0 in run 26-a-op14g; NativeTravelRouteTarget::kEngineEndRadius = 16 u planar
++// for the route order). An ended order near the point is an arrival, not "owned_order_changed_or_ended".
++#include <cmath>
++namespace Stobe { namespace ActivityTravel {
++const double kEngineEndRadius = 16.0; // planar (x,z; y is up in Kenshi), only when the order list is EMPTY (the engine ended the order)
++// dx,dz = actor minus destination on the ground plane. orderListEmpty = the actor's order list has no entry at all
++// (a foreign / replaced order is a conflict, never an arrival).
++inline bool EndedNearPoint(bool orderListEmpty, double dx, double dz) {
++ if(!orderListEmpty) return false;
++ if(!(dx==dx) || !(dz==dz)) return false; // NaN
++ return dx*dx+dz*dz<=kEngineEndRadius*kEngineEndRadius;
++}
++} }
