@@ -122,3 +122,12 @@ Reason key: CAP = held because of the 20-concurrent-subagent cap (only the i4 op
 - .claude/settings.json: autoCompactWindow 183000 (150k + fixed 33k buffer; unverified assumption, check with /context that the window shows 183k and watch where the next auto-compact fires), hooks PreCompact (handoff-snapshot.ps1: writes C:\KenshiTestRuns\handoff-auto.md and schedules the compact audit 15 min later) and SessionStart matcher "compact" (-Print: re-injects the snapshot + the OWED-TO-SHAY audit line). Meter: warn at 120k (checkpoint text incl. PROCESS IDEAS), no handoff session, no tail. Backups: C:\KenshiTestRunsackup\*.pre-livehandoff-*.
 - Docs: docs/HANDOFF_STANDARD.md, docs/COMPACT_AUDIT.md (measured: compact #1 $0.23 vs handoff $1.84), testing/AGENT_BACKLOG.md.
 - OWED to Shay: after the next auto-compact (first at the new threshold) report the REAL cost from C:\KenshiTestRuns\compact-audit\latest.md; record it in docs/COMPACT_AUDIT.md "Compact #2".
+
+## Post-compact #3 (21:3x local)
+- Compact #3 (150k) done; Shay's /cost: +$0.40 upper bound for the 90 s window (uncached delta only 13.7k, cache was warm); recorded in docs/COMPACT_AUDIT.md, pushed.
+- inv15bx17bx DONE: 17-bx = checker too strict (fixer imm26-fix17bxcheck a54cced9266452218), 15-bx = recipe KOs the body before X samples (fixer imm26-fix15bxorder a92f766cca99d9231); 15-bx split still Shay's decision.
+- imm26-hdeepdive (a565e1f537b61f8c3) started = backlog 21 (Haiku deep dive, read-only). Credit-use review (backlog 22) still to do by the coordinator.
+- Sweep: the Stop-hook old24 block was a stale 30-min 4080 cache; `testruns-sweep.ps1 refresh4080` cleared it (old24=0).
+- Waker re-armed (Monitor b0wppcm1u, waker-persist.sh watch).
+- PROCESS_IDEAS.md is 15/15: new ideas live in AGENT_BACKLOG 'PI queue' (5 entries) until Shay retires the tail-moot PI-46/56/58/63/71.
+
