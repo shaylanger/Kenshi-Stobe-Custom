@@ -27,12 +27,21 @@ MAX_SEARCH_LINE_BYTES = 64_000
 MAX_SEARCH_SECONDS = 20
 MAX_SEARCH_TREE_ENTRIES = 50_000
 MAX_SEARCH_FILES = 10_000
+# Keep the Windows-to-WSL wait longer than psql's hard timeout so the broker
+# can convert a psql timeout into its bounded FrozenAccessError response.
+PSQL_HARD_TIMEOUT_S = 15
+BROKER_RESPONSE_MARGIN_S = 5
+WSL_BROKER_TIMEOUT_S = PSQL_HARD_TIMEOUT_S + BROKER_RESPONSE_MARGIN_S
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 _LIVE_PATH = re.compile(r"(?i)(?:/var/www/html/StobeServer|/root/stobe-work|/root/STOBE-src|C:[\\/]StobeBuild|D:[\\/]Steam[\\/]steamapps[\\/]common[\\/]Kenshi|pending-fixes|\bstobe\b(?!_frozen))")
 
 
 class FrozenAccessError(ValueError):
     """A request is outside the frozen read-only surface."""
+
+
+class FrozenDBTimeoutError(FrozenAccessError):
+    """The bounded frozen database query exceeded its psql hard timeout."""
 
 
 _RECEIPT_LOCK = threading.Lock()
@@ -479,12 +488,14 @@ class FrozenDB:
         proc = subprocess.run(["wsl.exe", "-d", "DwemerAI4Skyrim3", "-u", "root", "--cd", "/", "--",
                                "/usr/bin/python3", "/mnt/c/KenshiModding/tools/model-test/codex_db_broker.py"],
                               input=json.dumps({"sql": statement, "params": []}), text=True, encoding="utf-8",
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=WSL_BROKER_TIMEOUT_S)
         if proc.returncode:
             try:
                 error = json.loads(proc.stdout).get("error", "broker error")
             except (json.JSONDecodeError, AttributeError):
                 error = "broker returned no structured error"
+            if isinstance(error, str) and error.startswith("FrozenDBTimeoutError:"):
+                raise FrozenDBTimeoutError("frozen database query timed out")
             raise FrozenAccessError("frozen DB broker failed: " + str(error))
         try:
             result = json.loads(proc.stdout)

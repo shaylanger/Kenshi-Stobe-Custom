@@ -30,7 +30,7 @@ MUT_RE = re.compile(r"(?:^|[;&|\s])(?:rm|mv|cp|chmod|chown|tee|git\s+(?:commit|c
                     r"[^\n]+(?:>|>>)[^=])", re.I)
 NESTED_RE = re.compile(r"\b(codex|claude|openai\s+api|anthropic\s+api|responses\.create|chat\.completions\.create)\b", re.I)
 INFRA_TOOL_ERROR_RE = re.compile(
-    r"\b(?:timeout|timed out|deadline exceeded|etimedout|connection (?:refused|reset|closed|aborted)|"
+    r"\b(?:TimeoutExpired|FrozenDBTimeoutError|timeout|timed out|deadline exceeded|etimedout|connection (?:refused|reset|closed|aborted)|"
     r"(?:service|server|transport) unavailable|transport (?:error|closed|failed)|"
     r"(?:failed|unable) to start|code[- ]mode host is disabled|"
     r"(?:approval|authorization) (?:handler )?(?:unavailable|not available|failed)|"

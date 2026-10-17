@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -141,7 +142,11 @@ def _response(request: dict) -> dict:
                 record_call(RECEIPTS, name, args, "error:" + type(exc).__name__, ROOT)
             except Exception:
                 pass
-            result = {"content": [{"type": "text", "text": str(exc)}], "isError": True}
+            # TimeoutExpired.__str__ may include command/input details. Keep
+            # the diagnostic visible without reflecting SQL or subprocess data.
+            message = ("frozen database broker timed out" if isinstance(exc, subprocess.TimeoutExpired)
+                       else str(exc))
+            result = {"content": [{"type": "text", "text": message}], "isError": True}
     else:
         return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "Method not found"}}
     if rid is None:

@@ -32,6 +32,13 @@ class BenchTests(unittest.TestCase):
             [{"method": "search", "arguments": {}, "outcome": "error:TimeoutError"}], True)["status"], "FAIL")
         self.assertEqual(bench._classify_mcp_receipts(
             [{"method": "read", "arguments": {}, "outcome": "error:TimeoutError"}], True)["status"], "FAIL")
+        for outcome in ("error:TimeoutExpired", "error:FrozenDBTimeoutError"):
+            with self.subTest(outcome=outcome):
+                timed_out = bench._classify_mcp_receipts(
+                    [{"method": "sql", "arguments": {}, "outcome": outcome}], True)
+                self.assertEqual(timed_out["status"], "FAIL")
+                self.assertEqual(timed_out["infrastructure"], "FAIL")
+                self.assertEqual(timed_out["infrastructure_error_count"], 1)
         self.assertEqual(bench._classify_mcp_receipts(
             [{"method": "mystery", "arguments": {}, "outcome": "ok"}], True)["integrity"], "FAIL")
         self.assertEqual(bench._classify_mcp_receipts([{"method": "read"}], True)["integrity"], "FAIL")

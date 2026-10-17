@@ -16,6 +16,8 @@ MODULE = Path(__file__).with_name("codex_frozen.py")
 spec = importlib.util.spec_from_file_location("codex_frozen", MODULE)
 cf = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cf)
+sys.path.insert(0, str(MODULE.parent))
+import codex_db_broker as broker
 
 GUARD_SPEC = importlib.util.spec_from_file_location("codex_guard", Path(__file__).with_name("codex_guard.py"))
 guard = importlib.util.module_from_spec(GUARD_SPEC)
@@ -177,6 +179,47 @@ class FrozenRootTests(unittest.TestCase):
 
 
 class SqlGateTests(unittest.TestCase):
+    def test_broker_timeout_budgets_are_ordered_and_fail_closed(self):
+        self.assertEqual(cf.PSQL_HARD_TIMEOUT_S, 15)
+        self.assertEqual(cf.BROKER_RESPONSE_MARGIN_S, 5)
+        self.assertEqual(cf.WSL_BROKER_TIMEOUT_S, 20)
+        self.assertGreater(cf.WSL_BROKER_TIMEOUT_S, broker.PSQL_HARD_TIMEOUT_S)
+
+        with patch.object(cf.subprocess, "run", side_effect=subprocess.TimeoutExpired(["wsl.exe"], 20)) as run:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                cf.FrozenDB("stobe_frozen").select("SELECT 1")
+        self.assertEqual(run.call_args.kwargs["timeout"], cf.WSL_BROKER_TIMEOUT_S)
+
+        config = {"host": "127.0.0.1", "port": 5432, "user": "reader", "password": "test"}
+        with patch.object(broker.subprocess, "run",
+                          side_effect=subprocess.TimeoutExpired(["psql", "private SQL"], 15)) as run:
+            with self.assertRaises(broker.FrozenDBTimeoutError) as caught:
+                broker._psql(config, "SELECT 1")
+        self.assertEqual(str(caught.exception), "frozen database query timed out")
+        self.assertNotIn("private SQL", str(caught.exception))
+        self.assertEqual(run.call_args.kwargs["timeout"], broker.PSQL_HARD_TIMEOUT_S)
+
+    def test_broker_inner_timeout_type_survives_windows_wrapper_without_payload(self):
+        response = type("Proc", (), {
+            "returncode": 2,
+            "stdout": json.dumps({"error": "FrozenDBTimeoutError: frozen database query timed out"}),
+            "stderr": "",
+        })()
+        with patch.object(cf.subprocess, "run", return_value=response):
+            with self.assertRaises(cf.FrozenDBTimeoutError) as caught:
+                cf.FrozenDB("stobe_frozen").select("SELECT 1")
+        self.assertEqual(str(caught.exception), "frozen database query timed out")
+
+    def test_mcp_timeout_response_hides_subprocess_command_and_input(self):
+        request = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                   "params": {"name": "sql", "arguments": {"query": "SELECT 1"}}}
+        with patch.object(mcp, "_call", side_effect=subprocess.TimeoutExpired(
+                ["wsl.exe", "private SQL"], 20)), patch.object(mcp, "record_call") as record:
+            response = mcp._response(request)
+        self.assertEqual(response["result"]["content"][0]["text"], "frozen database broker timed out")
+        self.assertNotIn("private SQL", json.dumps(response))
+        self.assertEqual(record.call_args.args[3], "error:TimeoutExpired")
+
     def test_accepts_plain_select_subset(self):
         self.assertEqual(cf.validate_select("SELECT id, name FROM public.npc WHERE id = 4"),
                          "SELECT id, name FROM public.npc WHERE id = 4")

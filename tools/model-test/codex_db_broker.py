@@ -17,7 +17,7 @@ import stat
 import subprocess
 import sys
 
-from codex_frozen import FrozenAccessError, validate_select
+from codex_frozen import FrozenAccessError, FrozenDBTimeoutError, PSQL_HARD_TIMEOUT_S, validate_select
 
 DB_NAME = "stobe_frozen"
 DB_USER = "codex_frozen_reader"
@@ -55,11 +55,12 @@ def _psql(config: dict, select_sql: str) -> tuple[list[str], list[list[str]]]:
                "-c", "BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; " + select_sql + "; ROLLBACK;"]
     try:
         proc = subprocess.run(command, text=True, encoding="utf-8", stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, timeout=15, env=env, shell=False)
+                              stderr=subprocess.PIPE, timeout=PSQL_HARD_TIMEOUT_S, env=env, shell=False)
     except FileNotFoundError as exc:
         raise FrozenAccessError("fixed /usr/bin/psql client is missing") from exc
     except subprocess.TimeoutExpired as exc:
-        raise FrozenAccessError("frozen database query exceeded 15 seconds") from exc
+        # Do not stringify TimeoutExpired: it can include the command and SQL.
+        raise FrozenDBTimeoutError("frozen database query timed out") from None
     if proc.returncode:
         # Prefer the bounded PostgreSQL error header over a trailing caret or
         # source-context line. Avoid returning SQL text or any row contents.

@@ -237,6 +237,20 @@ class RecorderTests(unittest.TestCase):
         self.assertIn("setup-infrastructure:transport_failure", result["audit"]["flags"])
         self.assertNotIn("timed out awaiting", json.dumps(result))
 
+    def test_sql_timeout_error_classes_are_infrastructure_not_safe_rejections(self):
+        calls = [{"call_id": "sql-1", "name": "sql"}]
+        for error_class in ("TimeoutExpired", "FrozenDBTimeoutError"):
+            with self.subTest(error_class=error_class):
+                events = [{"type": "response_item", "payload": {
+                    "type": "custom_tool_call_output", "call_id": "sql-1",
+                    "isError": True, "error_class": error_class,
+                }}]
+                health = cr._tool_health(events, calls)
+                self.assertEqual(health["status"], "FAIL")
+                self.assertEqual(len(health["infrastructure_failures"]), 1)
+                self.assertEqual(health["infrastructure_failures"][0]["error_class"], error_class)
+                self.assertNotIn("result", json.dumps(health))
+
     def test_structured_noninfrastructure_rejection_is_not_setup_failure(self):
         td = tempfile.TemporaryDirectory()
         self.addCleanup(td.cleanup)
