@@ -75,19 +75,6 @@ Rules:
 - added: 2026-10-16 13:35
 - log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
 
-### PI-51 | confirmed
-- idea: Replace the 'wake, read output file, restart waker' loop by one persistent waker that appends actionable events to a file watched by the Monitor tool (or the background task notification), so the coordinator does not spend 2 tool calls per wake restarting it and never creates duplicate wakers.
-- evidence: 13:00-13:55: about 30 waker restarts, each 2 tool calls; twice a second waker was started while one was still running (exit code 15 kills, duplicate EVENT lines) and the Stop hook blocked once because no waker was running in the gap.
-- saving: about 60 tool calls and 3 hook-block turns per hour
-- risk: medium: waker semantics and the Stop-hook liveness check must move together
-- hooks: yes
-- weakens: no
-- added: 2026-10-16 13:56
-- moment: tail turn after fix26f2 hand-back, 16:1x
-- last_review: efc58758-86f8-4786-a138-4e53f075016d-tail
-- log: 2026-10-16 13:56 review 'coordinator-17': added
-- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': Open -> confirmed (applies: tail-wait.ps1 had to be re-armed after each early exit; the tail spent several turns only restarting the waker while 3 agents ran (fix26f2, 3 op25s).)
-
 ### PI-52 | Open
 - idea: Put known tooling snags (e.g. hxdefs.sh:30 /c/ path in bundle_dir.txt giving a false 'bundle dirs missing' SETUP-FAIL, use HX_OUT=C:/KenshiTestRuns/imm26-4080-hx) in the generated lane brief from testing/KNOWN_BLOCKERS.md, and make mark-row.py refuse SETUP-FAIL 'bundle dirs missing' when run.log is empty and the dirs exist.
 - evidence: 11:58-13:34: the same path bug produced false SETUP-FAILs on 01-cx, 16-bx (4080-i3, 5090-i5) and cost two investigator agents (inv01cx 190k tokens) plus two operator rediscoveries before it was named.
@@ -118,32 +105,6 @@ Rules:
 - added: 2026-10-16 16:14
 - log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
 
-### PI-61 | confirmed
-- idea: Size setup-fail fixer work to ONE ticket per fixer: three-ticket briefs hit the 200k context at ticket 1-2 every time, so each needed a successor with full re-reading.
-- evidence: 2026-10-16 18:00-18:50: imm26-sfFixA (3 tickets) stopped after 03-b, sfFixB (3 tickets) after 13-c/13-c-neg, sfFixA2 stopped before verifying 23-e; three respawns of about 200k tokens each, about 600k tokens of re-reading and a 30+ min delay on 23-e and 11-b.
-- saving: about 400k tokens and 30 min per three-ticket batch
-- risk: low: more agents, but each with a smaller scope; costs nothing extra in coordination if spawned in parallel at once
-- hooks: no
-- weakens: no
-- added: 2026-10-16 18:45
-- moment: 19:25 fix16bx vs the 3-ticket sfFixA2 stop
-- last_review: coordinator-23
-- log: 2026-10-16 18:45 review 'coordinator-22': added
-- log: 2026-10-16 19:43 review 'coordinator-23': open -> confirmed (applies: 2026-10-16 19:20-20:15: every setup-fail/checker ticket got its own fixer (fix16bx, fix01cx, fix02bx, fix19e20a, fix14dsrv, fix14dtool, fix11b, nc33); all finished at 59k-135k tokens with a commit ...)
-
-### PI-62 | confirmed
-- idea: The Stop-hook sweep block should not fire for items whose owning agent is DONE and whose commit is pushed (pi11-stage, b3-report, 4080 launch log dumps, old NC trees): auto-keep them 7 days with a standard reason, or auto-delete after a safety check, instead of costing a coordinator turn each.
-- evidence: 2026-10-16 18:05-18:30: five separate Stop-hook blocks (imm26-nc6, b3-report.txt, two 4080 launch logs, pi11-stage), each a full-context turn of about 5-8k tokens for a delete or -Keep whose answer was obvious from git log.
-- saving: about 5 turns and 30k tokens per session
-- risk: medium: auto-delete must verify the work is committed and no inflight marker names the path; never touch corpus, fixtures or inflight
-- hooks: yes
-- weakens: no
-- added: 2026-10-16 18:45
-- moment: 20:20 agents$2.brief.md block, an 18 KB stray brief from the PI-53 bug
-- last_review: coordinator-23
-- log: 2026-10-16 18:45 review 'coordinator-22': added
-- log: 2026-10-16 19:43 review 'coordinator-23': open -> confirmed (applies: 2026-10-16 19:00-20:20: the Stop-hook sweep block fired 5 times for finished-owner leftovers (4080 logs, imm26-nc7, tail-close.ps1.bak-hidden, tripresume-a, agents$2.brief.md), each a full-context ...)
-
 ### PI-63 | open
 - idea: tail-mode.ps1 enter should refuse (or warn loudly) on an agent name that has no status file, ledger record or live in-session task, and tail-wait.ps1 should print which name is unknown instead of exiting with 'needs the tail'.
 - evidence: 2026-10-16 18:46-19:00: the tail flag listed imm26-fix23acheck but the real agent was imm26-fix23a-checker; tail-wait exited at once 4 times with 'no status, no ledger record', and the Stop hook kept blocking until I edited the flag by hand and asked the agent to write a status.
@@ -154,7 +115,7 @@ Rules:
 - added: 2026-10-16 19:32
 - log: 2026-10-16 19:32 review '38ce4c9d-074d-4b00-9557-275240adb80c-tail': added
 
-### PI-64 | open
+### PI-64 | confirmed
 - idea: agent-status.ps1 DONE should be written by the harness hand-back (SubagentHandback or task-notification completed) when the agent never wrote it, or tail-mode status should treat a completed task-notification as DONE.
 - evidence: 2026-10-16 19:35: imm26-5090-i5-op18 and imm26-4080-i3op30 had handed back their final reports and finished, but their status files still said RUNNING, so the tail could not close until I wrote DONE by hand.
 - saving: about 2 tool calls per operator and avoids a false RUNNING count in the Stop hook
@@ -162,9 +123,12 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-16 19:32
+- moment: 20:28 alert 'agent-orphaned-imm26-invcind' after its DONE hand-back
+- last_review: coordinator-24
 - log: 2026-10-16 19:32 review '38ce4c9d-074d-4b00-9557-275240adb80c-tail': added
+- log: 2026-10-16 20:32 review 'coordinator-24': open -> confirmed (applies: 2026-10-16 20:2x: imm26-invcind handed back (DONE relayed by tail) but its status file stayed RUNNING, raising an 'agent-orphaned' alert I had to ack and fix by hand; same for 4080-i4op22/op23 and ...)
 
-### PI-65 | open
+### PI-65 | confirmed
 - idea: Make the Agent router tagging ([model:..] [effort:..]) also apply to Agent calls issued from inside a subagent, or put a mandatory 'pass model= and effort= as Agent parameters' line in every executor prompt template (EXECUTOR2_PROMPT, ab2 EXECUTOR_PROMPT, WP briefs).
 - evidence: 2026-10-16 19:15: imm26-hpairexec2's first 25 Haiku-pair runs ran on Sonnet because the router hook does not fire for subagent spawns (ledger agent-calls.tsv empty after 19:08); found only at collect (MODEL? flags), rerun cost about 2.5 USD and one executor generation.
 - saving: about 2.5 USD plus 25 wasted runs per executor that misses it; protects the pilot's validity
@@ -172,9 +136,12 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-16 19:43
+- moment: 20:3x hpairexec R1 P026-P038 first attempts ran on Sonnet
+- last_review: coordinator-24
 - log: 2026-10-16 19:43 review 'coordinator-23': added
+- log: 2026-10-16 20:32 review 'coordinator-24': open -> confirmed (applies: 2026-10-16 20:0x-21:2x: the router tag does not apply to subagent spawns, so every ab2 arm, hpairexec and replay2 spawn needed explicit model=/effort= params in the prompt; 25 replay2 R1 runs (P026...)
 
-### PI-66 | open
+### PI-66 | confirmed
 - idea: Raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (or add a non-agent runner such as claude -p for the replay2 arms) so offline replay executors can fan out 20+ runs per message.
 - evidence: 2026-10-16 19:10-20:20: the 20-subagent cap forced waves of 8 (17 failed with 'Concurrent subagent limit reached' when lane operators needed slots); replay2 needs about 700 runs = 6+ executor generations of about 140k tokens each, and the cap also delayed spawning inv20a/19e/14d by about 10 minutes.
 - saving: roughly half the wall time and 3-4 executor generations (about 500k tokens) for replay2
@@ -183,6 +150,37 @@ Rules:
 - weakens: no
 - added: 2026-10-16 19:43
 - log: 2026-10-16 19:43 review 'coordinator-23': added
+- log: 2026-10-16 20:13 Shay answered yes
+
+### PI-67 | open
+- idea: Auto-close stale STOPPED-CONTEXT/FAILED agent markers when the agent's row/ticket is already PASS/closed or another agent owns it (kenshi-waker-guard 'stopped or failed with no successor' check), instead of demanding a respawn text.
+- evidence: 2026-10-16 20:1x-21:2x: five Stop-hook blocks for agents stopped 9-11 h earlier (imm26-sfK, sfFixA, sfFixA2, sfFixB, sfE) whose rows had passed or were reassigned; each cost a coordinator turn plus a lookup (about 6 turns, ~40k tokens).
+- saving: about 6 turns and 40k tokens per handoff period
+- risk: medium: must not hide a genuinely lost WP; only close when the program ledger shows its wp finished/reassigned or the row PASS is committed
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 20:32
+- log: 2026-10-16 20:32 review 'coordinator-24': added
+
+### PI-68 | open
+- idea: An agent waiting on its own background work must not re-deliver the same SubagentHandback repeatedly: the harness/coordinator should treat identical hand-back text from a DONE agent as a duplicate and the agent should stop itself (or the coordinator TaskStop it on the second duplicate).
+- evidence: 2026-10-16 20:2x-21:3x: imm26-replay2-interim (status DONE) re-sent the identical 3 KB hand-back 8 times and woke itself 7 times, burning about 190k subagent tokens and 8 coordinator turns until I TaskStopped it.
+- saving: about 190k tokens and 8 turns per occurrence
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 20:32
+- log: 2026-10-16 20:32 review 'coordinator-24': added
+
+### PI-69 | open
+- idea: Every pending hook/settings swap README must ship a ready swap.ps1 and show the Git-Bash-safe invocation (`cd <dir> && powershell -NoProfile -ExecutionPolicy Bypass -File swap.ps1`), never an inline -Command with $ variables or backslash paths.
+- evidence: 2026-10-16 20:1x-20:3x: PI-51 swap took 4 attempts by Shay because Git Bash expanded $h in the inline command and stripped the backslashes of the -File path (PI-53), about 25 minutes and 5 round trips.
+- saving: about 20 min and 4 round trips per hook swap
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 20:32
+- log: 2026-10-16 20:32 review 'coordinator-24': added
 
 ## In progress
 
@@ -856,3 +854,48 @@ Rules:
 - log: 2026-10-16 18:02 review 'coordinator-21': added
 - log: 2026-10-16 18:45 review 'coordinator-22': open -> confirmed (applies: 2026-10-16 18:35: the sfFixC and sff (03-b) recipe hand-backs each told operators to run with KAH_PF_ISOLATION=0, which the project forbids; I had to rewrite the commands by hand in three operator ...)
 - log: 2026-10-16 19:43 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
+
+### PI-51 | done
+- idea: Replace the 'wake, read output file, restart waker' loop by one persistent waker that appends actionable events to a file watched by the Monitor tool (or the background task notification), so the coordinator does not spend 2 tool calls per wake restarting it and never creates duplicate wakers.
+- evidence: 13:00-13:55: about 30 waker restarts, each 2 tool calls; twice a second waker was started while one was still running (exit code 15 kills, duplicate EVENT lines) and the Stop hook blocked once because no waker was running in the gap.
+- saving: about 60 tool calls and 3 hook-block turns per hour
+- risk: medium: waker semantics and the Stop-hook liveness check must move together
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 13:56
+- moment: tail turn after fix26f2 hand-back, 16:1x
+- last_review: efc58758-86f8-4786-a138-4e53f075016d-tail
+- measured: applied 2026-10-16 (hook swap + Monitor on waker-persist.sh watch); measured: before ~30 waker restarts/h, after one persistent daemon with heartbeat, no gap blocks
+- retired: 2026-10-16 built
+- log: 2026-10-16 13:56 review 'coordinator-17': added
+- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': Open -> confirmed (applies: tail-wait.ps1 had to be re-armed after each early exit; the tail spent several turns only restarting the waker while 3 agents ran (fix26f2, 3 op25s).)
+
+### PI-61 | done
+- idea: Size setup-fail fixer work to ONE ticket per fixer: three-ticket briefs hit the 200k context at ticket 1-2 every time, so each needed a successor with full re-reading.
+- evidence: 2026-10-16 18:00-18:50: imm26-sfFixA (3 tickets) stopped after 03-b, sfFixB (3 tickets) after 13-c/13-c-neg, sfFixA2 stopped before verifying 23-e; three respawns of about 200k tokens each, about 600k tokens of re-reading and a 30+ min delay on 23-e and 11-b.
+- saving: about 400k tokens and 30 min per three-ticket batch
+- risk: low: more agents, but each with a smaller scope; costs nothing extra in coordination if spawned in parallel at once
+- hooks: no
+- weakens: no
+- added: 2026-10-16 18:45
+- moment: 19:25 fix16bx vs the 3-ticket sfFixA2 stop
+- last_review: coordinator-23
+- measured: practiced 2026-10-16 19:20-21:30: every ticket got its own fixer (fix16bxengage, fix16bx2, fixcindwait, fix19ewait, fixnc34, fixctllaunch, pi62sweep, fix23arecipe, fix14dtool2); all finished at 49k-135k tokens
+- retired: 2026-10-16 built
+- log: 2026-10-16 18:45 review 'coordinator-22': added
+- log: 2026-10-16 19:43 review 'coordinator-23': open -> confirmed (applies: 2026-10-16 19:20-20:15: every setup-fail/checker ticket got its own fixer (fix16bx, fix01cx, fix02bx, fix19e20a, fix14dsrv, fix14dtool, fix11b, nc33); all finished at 59k-135k tokens with a commit ...)
+
+### PI-62 | done
+- idea: The Stop-hook sweep block should not fire for items whose owning agent is DONE and whose commit is pushed (pi11-stage, b3-report, 4080 launch log dumps, old NC trees): auto-keep them 7 days with a standard reason, or auto-delete after a safety check, instead of costing a coordinator turn each.
+- evidence: 2026-10-16 18:05-18:30: five separate Stop-hook blocks (imm26-nc6, b3-report.txt, two 4080 launch logs, pi11-stage), each a full-context turn of about 5-8k tokens for a delete or -Keep whose answer was obvious from git log.
+- saving: about 5 turns and 30k tokens per session
+- risk: medium: auto-delete must verify the work is committed and no inflight marker names the path; never touch corpus, fixtures or inflight
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 18:45
+- moment: 20:20 agents$2.brief.md block, an 18 KB stray brief from the PI-53 bug
+- last_review: coordinator-23
+- measured: applied 2026-10-16 (testruns-sweep -Auto in the Stop hook, 30/30 selftests, extra patterns approved by Shay)
+- retired: 2026-10-16 built
+- log: 2026-10-16 18:45 review 'coordinator-22': added
+- log: 2026-10-16 19:43 review 'coordinator-23': open -> confirmed (applies: 2026-10-16 19:00-20:20: the Stop-hook sweep block fired 5 times for finished-owner leftovers (4080 logs, imm26-nc7, tail-close.ps1.bak-hidden, tripresume-a, agents$2.brief.md), each a full-context ...)
