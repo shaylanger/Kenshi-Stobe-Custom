@@ -1,0 +1,1 @@
+target=Cind [Hungry Bandit] serial=1798217728 mode=chat

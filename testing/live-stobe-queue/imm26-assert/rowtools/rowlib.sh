@@ -64,11 +64,12 @@ rl_say() {  # rl_say <N> "text" [wait_s]  -> s<N>/ bundle. rc 3 = SETUP-FAIL, rc
   if [ -n "${ROW_NATIVE:-}" ]; then rl_push; rc=$?; [ $rc = 0 ] || return $rc; fi
   rl_prep_player || { RL_REASON="Shay not conscious/selected (replies would come from another character)"; return 3; }
   mk=$(rl_mark); tq=$(rl_q "$text")
+  # the reply wait matches the NPC by speaker NAME (inv14d F2): the log tag "(NPC)"/"(PC)" is isPlayerCharacter() of the speaker, so a Nameless-faction NPC logs "(PC)" and the player echo "(NPC)"
   lt_h <<EOT > "$d/say.txt" 2>&1
 L=$(rl_q "$LT_STOBELOG"); n0=\$(wc -l < "\$L")
 stobe-auto stobe_say "$tgt" $tq </dev/null 2>&1 | head -2
 end=\$((SECONDS+$wait_s))
-while [ \$SECONDS -lt \$end ]; do sleep 2; tail -n +\$((n0+1)) "\$L" | grep -qE "ACTION_EXEC: SAY \[[^]]*\](.*)\(NPC\)" && { sleep 3; break; }; done
+while [ \$SECONDS -lt \$end ]; do sleep 2; tail -n +\$((n0+1)) "\$L" | grep -qF $(rl_q "ACTION_EXEC: SAY [${RL_NPC_FULL:-${ROW_NPC:-Cind}}]:") && { sleep 3; break; }; done
 EOT
   [ -n "${KAH_ROW_FAKE:-}" ] || sleep "${ROW_SETTLE:-3}"
   rl_bundle "$d" "$mk"; echo "say: $text" >> "$d/meta.txt"; echo "$text" > "$d/utterance.txt"

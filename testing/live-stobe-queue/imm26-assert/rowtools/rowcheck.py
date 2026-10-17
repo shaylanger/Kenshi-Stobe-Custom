@@ -60,8 +60,15 @@ def full_rows(ev, step, types):
 
 
 def first_reply(ev, step):
+    """The NPC's first spoken line of a step. The log tag after the line is isPlayerCharacter() of the speaker, NOT who spoke: an NPC moved into the
+    player faction (Nameless) logs "(PC)" and the player's own echo can be logged "[Orix]: ... (NPC)" (inv14d F2). So when say.txt names the target
+    ("target=<full name> serial=..."), pick the first SAY line whose speaker equals that name (either tag); with no target= line keep the legacy "(NPC)" match."""
     t = ''.join((rd(ev, step, 'reply.txt') or '').splitlines(True))
-    m = re.findall(r'ACTION_EXEC: SAY \[.+?\]: (.*?) \(NPC\)', t)
+    tm = re.search(r'^target=(.+?) serial=', rd(ev, step, 'say.txt') or '', re.M)
+    if tm:
+        m = re.findall(r'ACTION_EXEC: SAY \[' + re.escape(tm.group(1).strip()) + r'\]: (.*?) \((?:NPC|PC)\)', t)
+    else:
+        m = re.findall(r'ACTION_EXEC: SAY \[.+?\]: (.*?) \(NPC\)', t)
     return m[0].strip() if m else ''
 
 
