@@ -9,6 +9,8 @@ ZERO-CONTEXT TEST before every compact: "could a new session do the next 10 thin
 
 Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-913a-ead9d4167d45). Tail of coordinator #23 (5161648d) CLOSED 20:47: it owns nothing; no tail exists now.
 
+## 0. BLOCKER: LLM provider balance empty (402) since ~22:10 -> all lane rows blocked; see SHAY_DECISIONS.md top. Re-check `bash tools/automation/llm-health.sh` before respawning operators; imm26-4080-i4op24 abandoned for this reason (rows 01-cx x3, 02-dx x3 on 4080-i4 first after top-up; `--save kah-imm26-4080-i4`).
+
 ## 1. Resume checklist (do these first)
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1 -Brief`; `agent-rollcall.ps1` (one line per agent).
 2. Waker: Monitor tool, command `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch`, timeout_ms 3600000 (expires after 30 min; re-arming is harmless; heartbeat `C:\KenshiTestRuns\waker\coordinator.hb`).

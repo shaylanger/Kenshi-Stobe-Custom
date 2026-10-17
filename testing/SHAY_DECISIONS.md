@@ -4,6 +4,13 @@ RULE (Shay 2026-10-16): every item that needs a Shay decision is recorded HERE w
 
 ## Open
 
+### BLOCKER (needs Shay, 2026-10-16 22:15): LLM provider balance is empty (HTTP 402)
+- `bash tools/automation/llm-health.sh` -> `LLM-HEALTH FAIL http=402 {"error":{"message":"You need positive balance to do inference. Please add balance manually or setup top-up"`. Reported by imm26-4080-i4op24 (preflight + llm-health both FAIL), so EVERY in-game row that needs the chat LLM is blocked on every lane until the balance is topped up (the provider is the one in the lane's server config; CLAUDE.md says chat = DeepInfra, relationship eval = OpenRouter: top up whichever the health check reads).
+- In game: NPCs cannot answer (no replies), so no row can pass; nothing is wrong with the mod. In code: nothing to change.
+- What waits: 01-cx x3 and 02-dx x3 (4080-i4, `hxrun_v3cx.sh 01-cx 4080-i4 --save kah-imm26-4080-i4 ...`, `hxrun_02bd3.sh 02-dx 4080-i4 --save kah-imm26-4080-i4 ...`), 02-bx and 16-bx on 4080-i3 (op32), the 23-a/14-d/19-e reruns after their fixers, 26-a. The replay2 experiment uses the Anthropic API via `claude -p` and is NOT affected.
+- Default in use: operators stop on LLM-HEALTH FAIL; I respawn them after Shay says the balance is topped up.
+
+
 1) HUNT ROUTE GOAL (a/b/c)  - default (a)
    Problem: a Hunt offer's route goal is a landmark ("outside Outlaw Watch to the west"), but the agreed animal is bound by exact serial and never swapped (ActivityRuntimeBindings.cpp:384-394). In the real world the animal is NOT at the landmark (test: ~1260 u away; the 26-a recipe fakes it by teleporting the goat to the goal). So in real play the NPC walks to the landmark, scans, finds no agreed animal, and gives up ("no_observed_suitable_reachable_target").
    (a) Route to the animal's own position / an approach point near it: NPC walks straight to where the animal actually is, then hunts it. Code: route kind observed_source instead of landmark in the Hunt offer + resolveRoute; the 26-a recipe then no longer needs to pin the goat at the goal. Most faithful to "go hunt that animal"; costs a server+recipe change.
