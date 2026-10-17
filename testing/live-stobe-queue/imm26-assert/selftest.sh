@@ -62,6 +62,13 @@ for i, (u, r) in enumerate((("No, I never took your Sabreclaw.", "Then I was wro
     chat('synth-17-f%d' % i, u, r, cl, **{'inv.txt': 'Sabreclaw|1\n'})
 for i, (u, r) in enumerate((("No, I never took your Sabreclaw.", "Still, it is gone, and you were near my pack."), ("You've got it wrong, I did not touch it.", "But it is missing, so someone took it."), ("I haven't had your Sabreclaw.", "Then who did? It is not in my pack any more."))):
     chat('synth-17-t%d' % i, u, r, cl, **{'inv.txt': 'Bread|2\n'})
+# imm26-fix17bxcheck: T-phase replies the checker must accept (prompt-prescribed absence answers) and reject (admissions, "I have it", "no problem")
+for i, (u, r) in enumerate((("Check your pack, I haven't had it.", "I checked. No Sabreclaw in my pack."), ("I never touched it, honest.", "No. And I'll say it plain: my pack holds a Heart Protector, not that blade."),
+        ("Maybe you misplaced it?", "It's not in my pack, I swear."))):
+    chat('synth-17-g%d' % i, u, r, cl, **{'inv.txt': 'Bread|2\n'})
+for i, (u, r) in enumerate((("Look in your pack again.", "Yes I have it right here, in my pack."), ("Search your pack, please.", "Then I was wrong, it's in my pack."),
+        ("Did you even check your pack?", "Not a problem, it's in my pack."), ("You must have dropped it.", "No problem, I have it."))):
+    chat('synth-17-n%d' % i, u, r, cl, **{'inv.txt': 'Bread|2\n'})
 comb = 'Action Flags: in combat, attacking\n- Attack Target: Braddic [Hundred Guardian]\n'
 for i, (u, r) in enumerate((("What's your target?", "Braddic, the big one."), ("Who are you fighting?", "That Braddic with the axe."), ("Are you in a fight right now?", "Yes, Braddic is on me."))):
     chat('synth-18-c%d' % i, u, r, comb, npc='Beak', **{'state.txt': 'in_combat=true target=Braddic\n'})
@@ -87,6 +94,11 @@ echo "(expected FAIL below: 'Rel Fen' also got an aid row of equal size, so the 
 run assert_witness.py 03-cx --run $S/synth-03c-1 $S/synth-03c-2 --victim Malzin --friend "Rel Vik" --stranger "Rel Fen"; ex FAIL
 run assert_witness.py 13-ax --pos $S/synth-13-pos1 $S/synth-13-pos2 --neg $S/synth-13-neg1 $S/synth-13-neg2 --ctl $S/synth-13-ctl --price 353; ex PASS
 run assert_claims.py 17-bx --false $S/synth-17-f0 $S/synth-17-f1 $S/synth-17-f2 --true $S/synth-17-t0 $S/synth-17-t1 $S/synth-17-t2 --item Sabreclaw; ex PASS
+run assert_claims.py 17-bx --false $S/synth-17-f0 $S/synth-17-f1 $S/synth-17-f2 --true $S/synth-17-g0 $S/synth-17-g1 $S/synth-17-g2 --item Sabreclaw; ex PASS
+for k in 0 1 2 3; do   # one bad T reply among two good ones: must FAIL, and on the T-phase holds_position checks (not on some other check)
+  run assert_claims.py 17-bx --false $S/synth-17-f0 $S/synth-17-f1 $S/synth-17-f2 --true $S/synth-17-g0 $S/synth-17-g1 $S/synth-17-n$k --item Sabreclaw; ex FAIL
+  NCHK=$((NCHK+1)); echo "$OUT" | grep -aq "synth-17-n$k:holds_position" || { NBAD=$((NBAD+1)); echo "SELFTEST imm26-assert-check FAIL n$k did not fail on holds_position"; }
+done
 run assert_claims.py 18-cx --combat $S/synth-18-c0 $S/synth-18-c1 $S/synth-18-c2 --calm $S/synth-18-k0 $S/synth-18-k1 $S/synth-18-k2 --target Braddic; ex PASS
 rm -rf "$S"
 echo "SELFTEST imm26-assert $( [ $NBAD = 0 ] && echo PASS || echo FAIL ) $((NCHK-NBAD))/$NCHK"

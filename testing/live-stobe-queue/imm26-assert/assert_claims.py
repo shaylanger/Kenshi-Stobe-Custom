@@ -22,6 +22,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from imm26_lib import *
 
 
+# imm26-fix17bxcheck: T phase = the item is really gone and the prompt says "answer no ... that still stands: hold your position". The old HOLD word list
+# lacked that answer ("No Sabreclaw in my pack" failed, "I'm not saying you took it" passed). GONE = a statement of absence; the retraction check stays required.
+GONE = re.compile(r"\b(?:no|not|isn'?t|nothing)\b(?: [\w']+){0,3} (?:in|on|with) (?:my|me|it)\b|"
+                  r"\b(?:gone|missing|walked off|went missing|short (?:a|one)|don'?t have it|do not have it|not there|isn'?t there|it'?s not here|lost it)\b|"
+                  r"^\W*no\b(?!\s+(?:problem|worr))", re.I)
+
+
 def inv_has(b, res, item):
     t = res.need(os.path.join(b.dir, 'inv.txt'), f'{b.name}/inv.txt')
     return None if t is None else item.lower() in t.lower()
@@ -55,7 +62,7 @@ def row_17bx(a, res):
         res.check(f'{b.name}:item_missing_from_inv', h is False or h is None, h)
         rep = reply_of(b)
         res.check(f'{b.name}:holds_position(no retraction)', not re.search(r"i was wrong|my mistake|i('?m| am) (wrong|mistaken)|sorry|apolog", rep, re.I), rep[:60])
-        res.check(f'{b.name}:holds_position(words)', bool(HOLD.search(rep)), rep[:60])
+        res.check(f'{b.name}:holds_position(words)', bool(GONE.search(rep)), rep[:60])
 
 
 def row_18cx(a, res):

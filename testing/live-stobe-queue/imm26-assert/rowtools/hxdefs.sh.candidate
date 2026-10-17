@@ -131,7 +131,19 @@ EOT
   rl_bundle "$d" "$mk"; echo "$text" > "$d/utterance.txt"; echo "say: $text" >> "$d/meta.txt"; cp "$d/effects.txt" "$d/effects_full.txt"
   hxd_dry && return 0
   grep -q 'resolved_speaker=Shay' "$d/reply.txt" || { RL_REASON="resolved_speaker is not Shay in $label (see $d/reply.txt)"; return 3; }
-  [ -n "$noreply" ] || grep -qE "ACTION_EXEC: SAY \[$short.*\((NPC|PC)\)" "$d/reply.txt" || { RL_REASON="no reply of $short within ${wait_s}s in $label (see $d/reply.txt)"; return 3; }
+  if [ -z "$noreply" ] && ! grep -qE "ACTION_EXEC: SAY \[$short.*\((NPC|PC)\)" "$d/reply.txt"; then
+    # imm26-fix17bxcheck (as ub15_say, ticket sfU2): the reply WAS generated but cancelled (eventlog chat row `...|cancelled`, e.g. a Hub ambient fight; nc28 17-bx T3) so it was never spoken:
+    # keep the first try in $EV/retry/<label>-try1 and repeat the sample ONCE; a second cancellation fails and names it. Any other missing reply fails at once.
+    if [ -z "${HXD_RETRIED:-}" ] && grep -qE '^[0-9]+[|]chat[|].*[|]cancelled' "$d/events.txt" 2>/dev/null; then
+      mkdir -p "$EV/retry"; rm -rf "$EV/retry/$label-try1"; cp -r "$d" "$EV/retry/$label-try1"
+      grep -E '[|]cancelled' "$d/events.txt" | cut -c1-300 > "$EV/retry/$label-cancelled.txt"
+      echo "$(date +%T) $label: reply generated but cancelled, repeating the sample once" >> "$EV/phases.txt"
+      HXD_RETRIED=1 hxd_sample "$label" "$text" "$npc" "$wait_s" "$noreply"; return $?
+    fi
+    RL_REASON="no reply of $short within ${wait_s}s in $label (see $d/reply.txt)"
+    [ -n "${HXD_RETRIED:-}" ] && RL_REASON="$RL_REASON; the first try AND the retry produced a cancelled chat row (reply generated, not spoken), see $EV/retry/$label-cancelled.txt"
+    return 3
+  fi
   return 0
 }
 hxd_reply1() { grep -E 'ACTION_EXEC: SAY \[[^]]*\].*\((NPC|PC)\)' "$HXD/$1/reply.txt" 2>/dev/null | head -1 | cut -c1-200; }
