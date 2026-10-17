@@ -42,9 +42,10 @@ The fix20a19e candidates are live (swapped 14:55; faction guard proven live on 4
 Adds: (1) s2 retry in the `s2b` slot when the accept turn stored no ACCEPTED row (5090-i4 20-a: LLM HTTP 12002 -> empty stream); checker STEPS unchanged. (2) deterministic fallback: no PROPOSED after s1/s1b/s1c -> arm the sfTrav seam (`inject-travel.sh`) and say the first opener once more (`s1d`); `SFFC_INJECT=0` off; needs `inject-travel-deploy.sh <lane>` on the lane (missing = SETUP-FAIL naming it). (3) `rd19_trip` (19-a/19-e/19-f/19-anc2) gets the prompt guard + third opener + fallback (rowdefs.sh has none).
 ```
 cd /c/KenshiModding/testing/live-stobe-queue/imm26-assert
-KAH_PF_ISOLATION=0 bash rowtools/sfrrun_fc.sh 20-a 4080-i3 --allow-retry "sfFixC: quiet spot + ACCEPTED guard + s2 retry + travel fallback"
-KAH_PF_ISOLATION=0 bash rowtools/reloadrun-b_fc.sh 19-e 4080-i4 --allow-retry "sfFixC: faction restore + prompt guard + travel fallback"
+bash rowtools/sfrrun_fc.sh 20-a 4080-i3 --save kah-imm26-4080 --allow-retry "sfFixC: quiet spot + ACCEPTED guard + s2 retry + travel fallback"
+bash rowtools/reloadrun-b_fc.sh 19-e 4080-i4 --save kah-imm26-4080-i4 --allow-retry "sfFixC: faction restore + prompt guard + travel fallback"
 ```
+Never set `KAH_PF_ISOLATION=0` (the classifier denies it): run from each lane's configured save (`--save` above).
 Evidence to read after a SETUP-FAIL: `faction.txt` (db_faction_before/after), `inject_arm.txt` (fallback), `s1*/prompt.txt` (consent section), `place_dist.txt` (20-a). Dry runs: add `--dry` and `KAH_ROWS_BASE=/tmp/x` (without it a dry run rotates the lane's real `rows/<row>` to `.prev`).
 
 ## imm26-fix23acheck: 23-a counts acknowledgements per LLM reply (Shay 2026-10-16, option A) - STAGED, not swapped
