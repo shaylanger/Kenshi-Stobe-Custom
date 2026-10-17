@@ -32,7 +32,7 @@ else age=0; f="(no output yet in $O)"; fi
 cur=$(grep -a -E '^[0-9]{2}:[0-9]{2} .*: (prepare|run) ' "$O/batch.log" 2>/dev/null | tail -1 | cut -c1-80)
 # Cheaper (res-wait 2026-10-10): ask the harness first; a harness answer proves Kenshi runs, so tasklist.exe (a Windows
 # process spawn) only runs when the harness is silent. Same verdicts as before.
-st=$(timeout 30 stobe-auto status </dev/null 2>&1 | tr -d '\r' | head -1)
+st=$(STOBE_AUTO_LIVE=1 timeout 30 stobe-auto status </dev/null 2>&1 | tr -d '\r' | head -1)
 if ! grep -q 'phase=' <<<"$st" && [ -z "$(kenshi_pids)" ]; then
   echo "HEALTH STALL Kenshi is not running file=$f age=${age}m ${cur:+now=\"$cur\"}"; exit 2
 fi
@@ -53,7 +53,7 @@ why=""
 # so the file age stayed fresh. Many dialogue rows run paused on purpose, so a paused game alone is no stall: STALL
 # when game time did not move since the previous check (>= 5 min ago) AND every line the newest file got since then
 # is the same (timestamps stripped). State lives outside <out-dir>, so it never becomes the newest file.
-gh=$(timeout 30 stobe-auto time </dev/null 2>/dev/null | tr -d '\r' | grep -oE 'game_hours=[0-9.]+' | head -1)
+gh=$(STOBE_AUTO_LIVE=1 timeout 30 stobe-auto time </dev/null 2>/dev/null | tr -d '\r' | grep -oE 'game_hours=[0-9.]+' | head -1)
 sf="/tmp/batch-health.$(echo "$O" | md5sum | cut -c1-8)"; now=$(date +%s)
 nl=0; [ -f "$f" ] && nl=$(wc -l <"$f")
 if [ -z "$why" ] && [ -n "$gh" ] && [ -f "$sf" ]; then

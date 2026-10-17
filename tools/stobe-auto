@@ -8,6 +8,33 @@ harness on ("stobe-say on" or "stobe-auto on").
 import os
 import sys
 
+import glob
+
+
+def _lane_guard():
+    """PI-48: bare stobe-auto answers from Shay's LIVE install. While a lane lock (game-<n>.lock) is held,
+    refuse (exit 2) unless the call is lane-routed (KAH_INSTANCE / KAH_DIR / --dir) or STOBE_AUTO_LIVE=1."""
+    env = os.environ
+    argv = sys.argv[1:]
+    if env.get('STOBE_AUTO_LIVE') == '1' or env.get('KAH_INSTANCE') or env.get('KAH_DIR'):
+        return
+    if not argv or argv[0] in ('--dir', 'help', '-h', '--help'):
+        return
+    runs = env.get('KAH_RUNS_DIR') or ('/mnt/c/KenshiTestRuns' if os.path.isdir('/mnt/c/KenshiTestRuns') else 'C:/KenshiTestRuns')
+    locks = sorted(glob.glob(os.path.join(runs, 'game-*.lock')))
+    if not locks:
+        return
+    sys.stderr.write(
+        'stobe-auto: REFUSED (PI-48): a lane lock is held (%s) and KAH_INSTANCE is unset, so a bare stobe-auto would talk to the '
+        'LIVE install, not your lane.\n'
+        'Fix: use go-row / lane-setup.sh, or first `export RIG=<rig> KAH_INSTANCE=<n>; source tools/automation/rig-env.sh` '
+        '(or KAH_DIR=<lane harness dir> / --dir <dir>).\n'
+        'Coordinator/Shay deliberately using the live install: STOBE_AUTO_LIVE=1 stobe-auto ...\n' % os.path.basename(locks[0]))
+    sys.exit(2)
+
+
+_lane_guard()
+
 os.environ.setdefault('KAH_DIR', r'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness')
 KAH = '/mnt/c/KenshiModding/Kenshi-Automation-Harness/client/kah.py'
 os.execvp('python3', ['python3', KAH] + sys.argv[1:])

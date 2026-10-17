@@ -303,7 +303,7 @@ if ($Pilot) {
     ) | Where-Object { Test-Path -LiteralPath $_[0] }
 }
 # PI-48 standing rule (every brief, pilot or not): a bare `stobe-auto` answers from Shay's LIVE install. While a pilot is ACTIVE the PreToolUse guard (hooks\kenshi-waker-guard.ps1) also refuses it.
-$banRule = "- STOBE-AUTO BAN (PI-48): NEVER run bare ``stobe-auto`` (no KAH_DIR) or any command on the live install / default port / Steam Kenshi dir: it answers from Shay's LIVE game, not this lane. Lane-scoped tools only: go-row/go-batch/row scripts, lane-setup.sh, preflight.sh, status tools, kenshi-ctl.ps1 with KAH_INSTANCE=<n>. A by-hand harness query is only ``KAH_DIR='$($l.dir)\mods\AutomationHarness' stobe-auto ...``."
+$banRule = "- STOBE-AUTO BAN (PI-48): NEVER run bare ``stobe-auto`` (no KAH_DIR) or any command on the live install / default port / Steam Kenshi dir: it answers from Shay's LIVE game, not this lane. Lane-scoped tools only: go-row/go-batch/row scripts, lane-setup.sh, preflight.sh, status tools, kenshi-ctl.ps1 with KAH_INSTANCE=<n>. A by-hand harness query is only ``KAH_DIR='$($l.dir)\mods\AutomationHarness' stobe-auto ...``. Use go-row / lane-setup, or first export RIG and KAH_INSTANCE and source rig-env.sh; bare stobe-auto talks to the live install (it now exits 2 while a lane lock is held; STOBE_AUTO_LIVE=1 is only for the coordinator/Shay)."
 $pilotRules = @()
 if ($Pilot) {
     $pm = "bash /c/KenshiModding/tools/automation/pilot-mark.sh $Name"
