@@ -164,16 +164,13 @@ def main():
             except Exception: pass
     if a.mode == 'compacts' and res:
         r = res[-1]
-        open(os.path.join(a.out, 'latest.md'), 'w', encoding='utf-8').write(
-            '# latest compact audit (%s)
-
-compact at %s (%s), %s -> %s tokens, summarizer %s s
-
-'
-            '- one-off cost: $%s = summarizer ESTIMATE $%s (in $%s %s cache, out ~%s tokens $%s) + first turn after MEASURED $%s
-'
-            '- mean turn cost: before $%s (n=%s) -> after $%s (n=%s); break-even after %s turns
-' % (
+        nl = chr(10)
+        fmt = nl.join([
+            '# latest compact audit (%s)', '',
+            'compact at %s (%s), %s -> %s tokens, summarizer %s s', '',
+            '- one-off cost: $%s = summarizer ESTIMATE $%s (in $%s %s cache, out ~%s tokens $%s) + first turn after MEASURED $%s',
+            '- mean turn cost: before $%s (n=%s) -> after $%s (n=%s); break-even after %s turns', ''])
+        open(os.path.join(a.out, 'latest.md'), 'w', encoding='utf-8').write(fmt % (
                 r['session'], r['at'], r['trigger'], r['preTokens'], r['postTokens'], round((r['durationMs'] or 0) / 1000),
                 r['one_off_usd'], r['summary_total_usd_ESTIMATE'], r['summary_in_usd_ESTIMATE'], 'warm' if r['cache_warm_before'] else 'COLD',
                 r['summary_out_tokens_ESTIMATE'], r['summary_out_usd_ESTIMATE'], r['first_turn_after_usd_MEASURED'],

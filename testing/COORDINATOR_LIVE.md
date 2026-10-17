@@ -21,7 +21,7 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 - Haiku experiments: no cost pre-approval; report time, tokens, cost per arm afterwards vs the baselines. "do PI 66 and any other PI item that is confirmed".
 - Never steer/resume/message an ab2 arm. Ask Shay only in final text, never block (no AskUserQuestion).
 - Shay: "record in the handoff the details (options, in-game effects, short description) ... if the other session ended we would have no data"; "the handoff needs to capture everything a fresh session would need given 0 context, so we don't lose important info during a compact".
-- NEW DECISION FOR SHAY (add to SHAY_DECISIONS): 16-bx 40-word cap: keep it, or give reserved/terse NPCs a trait brevity line in the prompt. In game: reserved characters either get replies cut to <=40 words by the prompt, or the row allows longer replies. Default: keep the cap, no prompt change.
+- NEW DECISION FOR SHAY (now in SHAY_DECISIONS): 16-bx 40-word cap: keep it, or give reserved/terse NPCs a trait brevity line in the prompt. In game: reserved characters either get replies cut to <=40 words by the prompt, or the row allows longer replies. Default: keep the cap, no prompt change.
 - Shay wants: auto-compact at ~150k with this file kept current instead of 300k + new-session handoff (see section 9, status of the setup).
 - When a game question is asked of Shay: describe the in-game effect on NPC behaviour and the code logic, in plain terms.
 
@@ -48,7 +48,7 @@ Registered in `C:\KenshiTestRuns\agents\ids.json` (`agent-ids.ps1 add <name> <id
 | imm26-5090-i3op37 | a9501959811f482a6 | DONE 20:48: 23-a = REAL FAIL with recipe v3 (c5b46874): game ended the order 19 u short (planar=18.9 dy=14.9, native_order_ended_before_goal). Lane 5090-i3 now has NO claimable row; investigator inv23a running; recipe nit: skip stage-landing check when Cind x/z moved >1000 (stale y) |
 | imm26-inv23a | a80058b9dd5461884 | investigates the 23-a arrival tolerance (native C++); result -> native fixer -> op for 5090-i3 rerun |
 | imm26-4080-i3op32 | abd6bf21590043dbe | lane 4080-i3 operator (brief agents\imm26-4080-i3op32.brief.md, 15.7 KB over limit but fine): applies fix02bxsrv apply.py to /tmp/stobe-standalone4080/site then 02-bx n=3, then rows from fix01cxguard/fix02dxroute |
-| imm26-fix01cxguard | ad41638d336c5e23e | widens 01-cx v3cx GUARD marker list ("Don't stand so close"); note inbox\operatorsix01cxguard.txt |
+| imm26-fix01cxguard | ad41638d336c5e23e | DONE 4a88ed78 (v3cx GUARD markers widened, selftest 35/35); op32 told to rerun 01-cx n=3 on 4080-i3 after 02-bx |
 | imm26-fix02dxroute | ab2e97d14c298a4d9 | routes 02-dx through the v3 echo skip; note inbox\operatorsix02dxroute.txt |
 | imm26-5090-i5-op21 | a4d054cf11835817a | lane 5090-i5 operator: NC34 DLL (6E14E686) installed on both i5 Stobe dirs; running 26-a; then 14-d v2 (`unblockrun_14d_v2.sh 14-d i5 --allow-retry "fix14dtool v2" --ask "Hunt 5 bandits."` and again "Hunt the 5 bandits."), then 19-e (`reloadrun-b.sh 19-e 5090-i5 --no-reload ...`, grep "Trip resume wait" in /tmp/stobe-imm26-5090-i5/site/log/stobeserver.log) |
 | imm26-4080-i3op31 | DONE (tail 23 closed 20:47, no tail left) | results: 16-bx v3 FAIL 0/3 (real: reserved NPC >40 words in 4 of 9 replies; prompt has no brevity rule; checker lacks "how about you" in ENGAGE, covered by fix16bxengage); 01-cx v3cx FAIL 2/3 (checker gap -> fix01cxguard); 02-dx FAIL 1/3 (checker gap -> fix02dxroute). Marks b8930534, 4676f94e, 7cf8d45d |
