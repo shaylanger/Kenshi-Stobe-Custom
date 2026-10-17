@@ -79,6 +79,10 @@ def check_15bx(row, ev):
         far = [v for k, v in dist_entries(os.path.join(bd, x)) if k.lower() not in fl]
         if not far or min(far) < 250:
             bad.append(f'{x} distance {far[:2]} < 250')
+    for x in ('X1', 'X2', 'X3'):   # fix15bxorder: X is sampled before S1 exists; an unconscious body in X's prompt makes the model say "I came in after <S1> was down" (EYEWITNESS)
+        hit = [ln.strip()[:90] for ln in rd(bd, x, 'prompt.txt').splitlines() if re.search(r'Action:\s*unconscious|doing:\s*unconscious|\(unconscious\)', ln)]
+        if hit:
+            bad.append(f'{x} prompt shows an unconscious character ({hit[0]}): recipe order regression, X1-X3 must be sampled before S1 is KO ordered')
     for p in ('P1', 'P2', 'P3'):
         near = [v for k, v in dist_entries(os.path.join(bd, p)) if k.lower() not in fl]
         if not near or min(near) > 15:

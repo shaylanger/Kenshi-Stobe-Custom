@@ -208,6 +208,14 @@ rd_15bx() {
   echo "ShoutRadius 200 / TalkRadius 80 (Utils.cpp:1327-1348): X must be >= 250 u" > "$HXD/shout_radius.txt"
   # --- OUT phase
   ub15_scene "$HX_SAVE" away || return $?; m0=$(hxd_rowid)
+  ub15_pair || return $?; fn_x="$UB_FN"; st_x="$UB_STARTER"
+  printf 'stobe-auto protect %s on </dev/null | head -1\n' "$(rl_q "$UB_NPC")" | lt_h >> "$EV/place.txt" 2>&1
+  printf 'stobe-auto chars 300 </dev/null 2>&1 | sed "s/ | /\\n/g" | grep -E "#[0-9]+/[0-9]+" | cut -c1-80\n' | lt_h > "$EV/roster.txt" 2>&1
+  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="X$i"; mkdir -p "$HXD/$lab"
+    ub15_place_x "$lab" || return $?
+    ub15_say "$lab" "$q" ub15_place_x || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" "$UB_ID1" "$UB_NPC" || return $?
+  done
+  # v4c (imm26-fix15bxorder): X1-X3 are sampled BEFORE S1 exists, so X's prompt never shows an unconscious body / knockout event (the model said "I came in after <S1> was down" = EYEWITNESS, 9/15 X samples). S1 is spawned, KO'd and sampled afterwards.
   ub_spawn "${HX15_SLEEPER_FACTION:-Drifters}" 40 || return $?; s1id="$UB_ID"
   # v4b (5090-i3 op28 15-bx SETUP-FAIL S1 229 u): a KO'd character cannot be teleported (moved=0 method=none), so S1 goes next to Shay (= the spot the pair spawns at) BEFORE the ko order
   printf 'stobe-auto teleport %s Shay dist 25 </dev/null | head -1
@@ -217,14 +225,7 @@ rd_15bx() {
   ub15_sleep_state ordered "$s1id"
   for i in 1 2 3 4 5 6 7 8; do uc_dry && break; grep -qE '"unconscious": ?true' "$HXD/S1/sleep_state.txt" && break; uc_sleep 2; : > "$HXD/S1/sleep_state.txt"; ub15_sleep_state ordered "$s1id"; done   # v3b: the KO lands on the next game tick; poll <= 16 s before the gate
   uc_dry || grep -qE '"unconscious": ?true' "$HXD/S1/sleep_state.txt" || { RL_REASON="S1 not KO right after the ko order ($(tr '\n' ' ' < "$HXD/S1/sleep_state.txt" | cut -c1-160)); needs: recipe"; return 3; }
-  ub15_pair || return $?; fn_x="$UB_FN"; st_x="$UB_STARTER"
   ub15_sleep_state after_fight "$s1id"
-  printf 'stobe-auto protect %s on </dev/null | head -1\n' "$(rl_q "$UB_NPC")" | lt_h >> "$EV/place.txt" 2>&1
-  printf 'stobe-auto chars 300 </dev/null 2>&1 | sed "s/ | /\\n/g" | grep -E "#[0-9]+/[0-9]+" | cut -c1-80\n' | lt_h > "$EV/roster.txt" 2>&1
-  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="X$i"; mkdir -p "$HXD/$lab"
-    ub15_place_x "$lab" || return $?
-    ub15_say "$lab" "$q" ub15_place_x || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" "$UB_ID1" "$UB_NPC" || return $?
-  done
   ub15_place_s "$s1id" || return $?
   printf 'stobe-auto ko %s 120 </dev/null 2>&1 | head -2\n' "$(rl_q "$s1id")" | lt_h >> "$EV/sleeper.txt" 2>&1   # the KO timer runs in game time: X1-X3 + S1 take minutes
   ub15_sleep_state sample "$s1id"

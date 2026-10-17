@@ -126,15 +126,34 @@ export KAH_ROW_FAKE=1; unset KAH_ROW_DRY; HXD="$T/hxd3"; EV="$T/ev3"; mkdir -p "
 hxd_begin() { :; }; rd_need_npc() { :; }; ub15_scene() { :; }; hxd_rowid() { echo 0; }; lt_h() { cat >/dev/null; }
 ub_spawn() { UB_ID="#9/9"; }
 ub15_sleep_state() { mkdir -p "$HXD/S1"; echo "$1|$STATE" >> "$HXD/S1/sleep_state.txt"; }
-ub15_pair() { REACHED=yes; RL_REASON="stop-after-gate"; return 3; }
+# fix15bxorder: the OUT-phase pair is now spawned FIRST (call 1 = ok, X1-X3 sampled with mocks), then S1 + ko + gate; call 2 (IN phase, after the S1 sample) stops the run
+PAIRN=0; ub15_pair() { PAIRN=$((PAIRN+1)); UB_FN=A,B; UB_STARTER=A; UB_ID1="#9/1"; [ $PAIRN -ge 2 ] || return 0; REACHED=yes; RL_REASON="stop-after-gate"; return 3; }
+ub15_place_x() { :; }; ub15_say() { :; }; hxd_dist() { :; }; ub15_place_s() { :; }; hxd_sample() { :; }; hxd_trim() { :; }
 STATE='"unconscious":false "first_order":"SLEEP_ON_FLOOR"'
-rd_15bx; echo "gate-false rc=$? reached=$REACHED reason=$RL_REASON"
-REACHED=no; STATE='"unconscious": true "first_order":"none"'; rm -f "$HXD/S1/sleep_state.txt"
-rd_15bx; echo "gate-true rc=$? reached=$REACHED reason=$RL_REASON"
+PAIRN=0; rd_15bx; echo "gate-false rc=$? reached=$REACHED reason=$RL_REASON pairs=$PAIRN"
+REACHED=no; PAIRN=0; STATE='"unconscious": true "first_order":"none"'; rm -f "$HXD/S1/sleep_state.txt"
+rd_15bx; echo "gate-true rc=$? reached=$REACHED reason=$RL_REASON pairs=$PAIRN"
 EOS
 export A ST_HERE U T; bash "$T/v3_t.sh" > "$T/v3_t.out" 2>&1
-grep -q '^gate-false rc=3 reached=no reason=S1 not KO right after the ko order.*needs: recipe' "$T/v3_t.out" && chk v3-awake-s1-fails-fast-before-pair ok || chk v3-awake-s1-fails-fast-before-pair bad "$(grep ^gate-false "$T/v3_t.out")"
-grep -q '^gate-true rc=3 reached=yes reason=stop-after-gate' "$T/v3_t.out" && chk v3-ko-s1-passes-gate-to-pair ok || chk v3-ko-s1-passes-gate-to-pair bad "$(grep ^gate-true "$T/v3_t.out")"
+grep -q '^gate-false rc=3 reached=no reason=S1 not KO right after the ko order.*needs: recipe pairs=1' "$T/v3_t.out" && chk v3-awake-s1-fails-fast-before-pair ok || chk v3-awake-s1-fails-fast-before-pair bad "$(grep ^gate-false "$T/v3_t.out")"
+grep -q '^gate-true rc=3 reached=yes reason=stop-after-gate pairs=2' "$T/v3_t.out" && chk v3-ko-s1-passes-gate-to-pair ok || chk v3-ko-s1-passes-gate-to-pair bad "$(grep ^gate-true "$T/v3_t.out")"
+# ---- 6b. fix15bxorder: X1-X3 are sampled before S1 exists / is KO'd (X's prompt must not show an unconscious body: "I came in after <S1> was down" = EYEWITNESS)
+say3=$(grep -n 'stobe_say' "$L3" | sed -n 3p | cut -d: -f1); say4=$(grep -n 'stobe_say' "$L3" | sed -n 4p | cut -d: -f1); kofirst=$(grep -n "stobe-auto ko " "$L3" | head -1 | cut -d: -f1)
+[ -n "$say3" ] && [ -n "$kofirst" ] && [ "$kofirst" -gt "$say3" ] && chk v4c-no-ko-before-x-samples ok "x3 say line $say3 < first ko line $kofirst" || chk v4c-no-ko-before-x-samples bad "say3=$say3 ko=$kofirst"
+[ -n "$say4" ] && [ "$kofirst" -lt "$say4" ] && chk v4c-s1-ko-before-s1-sample ok "ko $kofirst < s1 say $say4" || chk v4c-s1-ko-before-s1-sample bad "ko=$kofirst say4=$say4"
+dsp=$(grep -n 'Shay dist 25' "$L3" | head -1 | cut -d: -f1); [ -n "$dsp" ] && [ "$dsp" -gt "$say3" ] && [ "$dsp" -lt "$kofirst" ] && chk v4c-s1-placed-after-x-samples-before-ko ok "x3 say $say3 < s1 teleport-to-Shay $dsp < ko $kofirst" || chk v4c-s1-placed-after-x-samples-before-ko bad "s1tp=$dsp say3=$say3 ko=$kofirst"
+# no unconscious Nearby entry in an X prompt: clean prompt passes; the real v3 shapes ("Action: unconscious", "doing:unconscious", roster "(unconscious)") are SETUP-FAIL
+mk15 "$T/e15u" 300 10 60 "Vren,Dalla,Hungry" Vren yes; r=$(HX_ASSERT_DIR="$T/stubs" c15 "$T/e15u"); case "$r" in "RESULT 15-bx PASS"*) chk v4c-clean-x-prompt-passes ok;; *) chk v4c-clean-x-prompt-passes bad "$r";; esac
+si=0; for shape in "- Nyt [Hungry Bandit] (Male Shek): Faction: Drifters [Neutral] | Action: unconscious | Appearance: x" "Nyt [Hungry Bandit] (male) | doing:unconscious (knocked out, cannot talk) | condition:-" "[infonpc] Shay: nearby NPC roster (2): Cind [Hungry Bandit], Nyt [Hungry Bandit] (unconscious)"; do
+  mk15 "$T/e15v" 300 10 60 "Vren,Dalla,Hungry" Vren yes; printf 'ok line
+%s
+' "$shape" > "$T/e15v/X2/prompt.txt"; r=$(c15 "$T/e15v"); si=$((si+1))
+  case "$r" in "RESULT 15-bx SETUP-FAIL"*"X2 prompt shows an unconscious"*) chk "v4c-unconscious-in-x-prompt-setupfail-$si" ok;; *) chk "v4c-unconscious-in-x-prompt-setupfail-$si" bad "$r";; esac
+done
+# the AVAILABLE ACTION catalogue mentions "unconscious" in every prompt: must not trip the guard
+mk15 "$T/e15w" 300 10 60 "Vren,Dalla,Hungry" Vren yes; printf 'AVAILABLE ACTION: CutHorns (Works only on dead, knocked-out, unconscious, imprisoned, or carried Shek)
+- Only say that someone is knocked out when the people list shows it. unconscious
+' > "$T/e15w/X1/prompt.txt"; r=$(HX_ASSERT_DIR="$T/stubs" c15 "$T/e15w"); case "$r" in "RESULT 15-bx PASS"*) chk v4c-action-catalogue-not-flagged ok;; *) chk v4c-action-catalogue-not-flagged bad "$r";; esac
 # ---- 7. v4 (imm26-fix15bx05cx3)
 # 7a default away is near ; explicit far still works
 r=$(dry 15-bx 4080-i4); LD="$T/fake-15-bx4080-i4.log"
