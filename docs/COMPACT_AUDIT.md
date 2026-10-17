@@ -52,3 +52,8 @@ Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus th
 - Delta $1.72 in 2m05s of wall (Sonnet $82.05 -> $83.77, Haiku unchanged). By class (Sonnet, prices.json): uncached input +16.7k = $0.03, cache read +6.2M = $0.62, cache write +0.2M = $0.80 (+-0.1M rounding = +-$0.40), output not resolvable at 0.1m rounding.
 - This is an UPPER bound: the same 2 minutes also carried the fleet (~10 subagents, burn rate $0.78/min = ~$1.6 per 2 min before the compact). The compact itself is therefore inside the noise; the clearly attributable part is the new prefix written to cache (~$0.2) plus one warm-cache summarizer pass over ~150k (cache read ~$0.015) and its output (~$0.1-0.3).
 - Compact #3 +$0.40 upper bound, compact #4 +$1.72 upper bound (noisier window). Conclusion unchanged: a 150k compact costs well under $1; the fleet costs ~$47/h and is the lever.
+
+## Compact #5 (2026-10-16, Shay's /cost pastes)
+- BEFORE (3 s into the compact call): $94.94 (Sonnet $91.67, Haiku $3.27), wall 2h13m08s. Since the #4 after-paste ($87.04, wall 1h57m58s): +$7.90 in 15m10s (fleet burn ~$0.52/min).
+- AFTER (1m10s later): $95.64 (Sonnet $92.36, Haiku $3.28), wall 2h14m11s. Delta **+$0.70 in 1m03s** (upper bound, includes the live fleet).
+- Detail: cache write unchanged at 15.1m (no cache rebuild), cache read +1.7m, input +14.5k, output +~0.1m. The compact itself is well under $0.70.
