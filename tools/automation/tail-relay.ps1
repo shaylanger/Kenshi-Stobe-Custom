@@ -15,8 +15,10 @@ param(
     [string]$Report = '',
     [string]$Summary = '',
     [string]$ToSession = '',
-    [ValidateSet('DONE', 'FAILED', 'STALL', 'QUESTION', 'PEER', 'TAILDONE')][string]$Kind = 'DONE'
+    [ValidateSet('DONE', 'FAILED', 'STALL', 'QUESTION', 'PEER', 'TAILDONE')][string]$Kind = 'DONE',
+    [switch]$Force   # PI-57: bypass the 2 h identical-relay dedupe (also env KAH_RELAY_NODEDUPE=1)
 )
+if ($Force) { $env:KAH_RELAY_NODEDUPE = '1' }
 # Target (2026-10-15, "relay follows the current coordinator"): without -ToSession the message goes to the CURRENT coordinator
 # (C:\KenshiTestRuns\coordinator.current, written by session-start.ps1 / the heartbeat claim; tail-mode.ps1 current); a -ToSession that is
 # itself a tail session or a dead coordinator is replaced by the current coordinator. Pointer missing/unreadable = old behaviour
@@ -80,9 +82,50 @@ if ($body.Count -gt $budget) {
 }
 $msg = (($head + $body) -join "`n") + "`n"
 
+# PI-57 (Shay 2026-10-16): drop a relay whose content hash equals one already delivered for the same agent within the last 2 h
+# (an agent waiting on its own background job re-sent the same DONE report 7 times). Hash = agent + kind + report path + report file SHA256 + body
+# (the time/to header lines are not part of it). STALL and TAILDONE are never deduped (a repeated stall is information). Drops are logged in
+# <runs>\tail\relay-dedupe.log and nothing is written (no inbox file, no ledger change); exit 0. -Force or env KAH_RELAY_NODEDUPE=1 bypasses.
+$dedupeMin = 120
+$dedupeDir = Join-Path $runs 'tail\relay-dedupe'
+$dedupeFile = Join-Path $dedupeDir ("{0}.json" -f $Agent)
+$relayHash = $null
+if ($Kind -in 'DONE', 'FAILED', 'QUESTION', 'PEER') {
+    try {
+        $rsha = ''
+        if ($Report -and (Test-Path -LiteralPath $Report -PathType Leaf)) { $rsha = (Get-FileHash -LiteralPath $Report -Algorithm SHA256).Hash }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        $relayHash = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(("$Agent|$Kind|$Report|$rsha|" + ($body -join "`n")))) | ForEach-Object { $_.ToString('x2') })
+        $prior = @()
+        if (Test-Path -LiteralPath $dedupeFile) { $prior = @((Get-Content -LiteralPath $dedupeFile -Raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
+        $prior = @($prior | Where-Object { $_ -and $_.hash -and ((Get-Date) - [datetime]$_.time).TotalMinutes -lt $dedupeMin })
+        $hit = $prior | Where-Object { $_.hash -eq $relayHash } | Select-Object -First 1
+        if ($hit -and -not $env:KAH_RELAY_NODEDUPE) {
+            $ageMin = [int]((Get-Date) - [datetime]$hit.time).TotalMinutes
+            $note = "{0} DROP duplicate relay agent={1} kind={2} hash={3} (identical to {4} delivered {5} min ago)" -f $now.ToString('yyyy-MM-dd HH:mm:ss'), $Agent, $Kind, $relayHash.Substring(0, 12), $hit.file, $ageMin
+            New-Item -ItemType Directory -Force -Path (Join-Path $runs 'tail') | Out-Null
+            Add-Content -LiteralPath (Join-Path $runs 'tail\relay-dedupe.log') -Value $note -Encoding UTF8
+            "TAIL-RELAY $Agent $Kind DROPPED: identical to the relay already delivered $ageMin min ago ($($hit.file)); nothing sent."
+            "(inbox file: none -- duplicate relay dropped; relay target: none -- see $runs\tail\relay-dedupe.log)" | Write-Host
+            exit 0
+        }
+    } catch { $relayHash = $null }
+}
+
 New-Item -ItemType Directory -Force -Path $inbox | Out-Null
-$file = Join-Path $inbox ("{0}-tail-{1}.msg" -f $now.ToString('yyyyMMdd-HHmmss'), $Agent)
+$file =Join-Path $inbox ("{0}-tail-{1}.msg" -f $now.ToString('yyyyMMdd-HHmmss'), $Agent)
 [IO.File]::WriteAllText($file, $msg, (New-Object Text.UTF8Encoding($false)))
+
+# remember this relay's hash for the dedupe window (fail-open)
+if ($relayHash) {
+    try {
+        New-Item -ItemType Directory -Force -Path $dedupeDir | Out-Null
+        $keep = @()
+        if (Test-Path -LiteralPath $dedupeFile) { $keep = @((Get-Content -LiteralPath $dedupeFile -Raw | ConvertFrom-Json) | ForEach-Object { $_ } | Where-Object { $_ -and $_.hash -and ((Get-Date) - [datetime]$_.time).TotalMinutes -lt $dedupeMin }) }
+        $keep += [pscustomobject]@{ hash = $relayHash; time = $now.ToString('o'); file = (Split-Path -Leaf $file) }
+        [IO.File]::WriteAllText($dedupeFile, (ConvertTo-Json -InputObject @($keep) -Depth 3), (New-Object Text.UTF8Encoding($false)))
+    } catch { }
+}
 
 # record the result file; a new relay is un-acked until tail-ack.ps1 runs
 if ($rec -and $Report -and $Kind -in 'DONE', 'FAILED') {
