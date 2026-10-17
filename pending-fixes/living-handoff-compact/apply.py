@@ -30,7 +30,7 @@ mp = os.path.join(ws, '.claude', 'context-meter.project.ps1')
 shutil.copy2(mp, os.path.join(bk, 'context-meter.project.ps1.pre-livehandoff-' + stamp))
 t = open(mp, encoding='utf-8').read()
 new_warn = ('$WARN_MSG = "Context: {tokens} tokens. LIVING-HANDOFF CHECKPOINT (docs/HANDOFF_STANDARD.md): auto-compact runs at about 150k. Now: run the zero-context test '
-            '(could a new session continue from testing/COORDINATOR_LIVE.md + HANDOFF Right now + SHAY_DECISIONS.md alone?), update those files, commit + push, then continue normally. '
+            '(could a new session continue from testing/COORDINATOR_LIVE.md + HANDOFF Right now + SHAY_DECISIONS.md + AGENT_BACKLOG.md alone?), update those files, AND the PROCESS IDEAS: file every new improvement idea from this stretch (concrete evidence + cost, docs/PROCESS_IDEAS.md via process-ideas.ps1 add or a review json; cap 15: progress/done finished ones first; record evidence on existing ideas that happened again), then commit + push and continue normally. '
             'Do not start a new large unit; there is NO handoff session and NO tail any more."')
 t2 = re.sub(r'^\$WARN_MSG = "Context: \{tokens\} tokens \(overlap handoff at \{handoff\}\).*$', lambda m: new_warn, t, count=1, flags=re.M)
 t2 = t2.replace('$WARN = 270000; $HANDOFF = 300000', '$WARN = 120000; $HANDOFF = 99999999')
