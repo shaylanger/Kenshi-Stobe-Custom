@@ -19,6 +19,8 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 
 - 22:30 CHECKPOINT (121k): /cost reconciliation done (compact real cost ~$0.8 at 290k, summarizer billed uncached; docs/COMPACT_AUDIT.md). Shay must paste /cost before AND after the next compact (meter text now says so). PI cap is 15/15: two new ideas queued in AGENT_BACKLOG PI queue (compact-audit honesty/reconcile; explicit-pathspec commits). Running: op25 (4080-i4 01-cx/02-dx, a... afd2c7df286186938), op22 (5090-i5, 19-e next, a1211dab5b1bd93e3), op32, fix23agate, fix26fcamp, inv13cneg, inv15bx17bx, inv26a, ab2exec3. Owed: ab2 COMPARISON.md when ab2exec3 finishes; 5090-i3 operator (imm26-5090-i3op38) after fix23agate lands; next compact: tell Shay the /cost result.
 
+- 22:45 op22 DONE: 19-e PASS (eb5d46bd, near_s4 dist=8.0); 14-d FAIL = Cind refused on odds (5 vs 2), no field rejection any more (dcd4f441). Decision added to SHAY_DECISIONS (odds refusal; default a: recipe gets a bigger squad + second ask). i5 has no runnable row until inv26a / fix26fcamp land. Shay running /cost before the auto-compact; do NOT add spend before it.
+
 ## 1. Resume checklist (do these first)
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1 -Brief`; `agent-rollcall.ps1` (one line per agent).
 2. Waker: Monitor tool, command `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch`, timeout_ms 3600000 (expires after 30 min; re-arming is harmless; heartbeat `C:\KenshiTestRuns\waker\coordinator.hb`).

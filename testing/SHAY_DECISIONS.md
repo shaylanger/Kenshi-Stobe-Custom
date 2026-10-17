@@ -48,6 +48,13 @@ RULE (Shay 2026-10-16): every item that needs a Shay decision is recorded HERE w
 - Option b: also resume on a bored turn, like trips. In game: a few seconds after load the NPC walks back to the camp on its own. Code: add the activity ticket to the bored-turn path in ChatBox.cpp plus a server change; new test row.
 - Related: fix26fcamp (running) fixes the real bug that a camp order could never resume at all.
 
+### May an NPC refuse an explicit "Hunt/clear the 5 bandits" order because of the odds? (row 14-d, found 2026-10-16 22:45)
+- What happened: with the server fix in, the order is no longer rejected for bad fields. Cind (Hungry Bandit, now in Nameless, affinity to you 60 Fond, squad of 2 + Malzin) answered in dialogue: "Five against two is a poor trade. We watch first, pick our moment - if you still want it." No hunt started, so the row cannot pass.
+- Option a (default, no change): NPCs may decline a clearly bad-odds order and offer to wait. In game: you must bring a bigger squad or repeat the order ("if you still want it"). Row 14-d recipe changes to a bigger squad (or a weaker far group) and a second ask line.
+- Option b: an explicit player order is always accepted (NPC may grumble but goes). In game: NPCs follow suicidal orders. Code: change the activity prompt rules (server only) and a test; weakens the NPC's self-preservation.
+- Option c: refuse only below a threshold (e.g. worse than 1 vs 3 and no weapon), accept otherwise. Code: prompt rule plus a new row for the refusal.
+- Recommendation: a (keeps NPCs believable); I will adjust the recipe unless you say otherwise.
+
 ## Decided
 - PI-62 (auto-sweep) and its extra delete patterns (selftest-all*, scratch-*, coordinator.heartbeat.*.tmp, dur_run*.sh): YES, Shay 2026-10-16.
 - PI-66 / PI-51 confirmed by Shay 2026-10-16 (PI-51 applied).
