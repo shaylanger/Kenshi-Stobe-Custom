@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """reloadscen_sfe.py <name>   scenario JSON for reload-sfe-selftest.sh (synthetic rows modelled on real 19-a / wpR1 evidence; hashes computed with seed24c.plan_hash).
-Names: a24c-pass a24c-goalgone a24c-lost a24c-hashbad a24c-noown a24c-insertfail  f26-pass f26-retry f26-nooffer f26-scenebad f26-nocamp f26-reject f26-targets-changed f26-lost"""
+Names: a24c-pass a24c-goalgone a24c-lost a24c-hashbad a24c-noown a24c-insertfail  f26-pass f26-retry f26-nooffer f26-scenebad f26-nocamp f26-reject f26-targets-changed f26-lost f26-zone-same f26-zone-dropped f26-scenelost"""
 import json
 import os
 import sys
@@ -77,12 +77,14 @@ if n.startswith('a24c-'):
 elif n.startswith('f26-'):
     W1, W2 = 'epoch-1', 'epoch-2'
     A1, A2 = 'activity-aaaa', 'activity-bbbb'
-    camp = '' if n == 'f26-nocamp' else '{"candidateId":"v1:rebirth:1","zoneName":"Rebirth"}'
+    # fix26fcamp: the zone id/digest are world+session scoped, so the continuation shows a NEW zone (f26-zone-same = server kept the old one, f26-zone-dropped = lost it)
+    camp = '' if n == 'f26-nocamp' else '{"candidateId":"v1:' + 'a' * 48 + '","scopeDigest":"' + 'b' * 64 + '"}'
+    camp2 = camp if n in ('f26-nocamp', 'f26-zone-same') else ('' if n == 'f26-zone-dropped' else '{"candidateId":"v1:' + 'c' * 48 + '","scopeDigest":"' + 'd' * 64 + '"}')
     tg = '[11,12,13]'
     p = act(A1, W1, 'proposed', 'ClearGroup', targets=tg, camp=camp)
     a = act(A1, W1, 'accepted', 'ClearGroup', targets=tg, camp=camp)
     old = act(A1, W1, 'superseded', 'ClearGroup', rstate='ended', rcont=A2, targets=tg, camp=camp)
-    new = act(A2, W2, 'accepted', 'ClearGroup', rstate='resumed', rof=A1, rcount='1', targets='[11,12]' if n == 'f26-targets-changed' else tg, camp=camp)
+    new = act(A2, W2, 'accepted', 'ClearGroup', rstate='resumed', rof=A1, rcount='1', targets='[11,12]' if n == 'f26-targets-changed' else tg, camp=camp2)
     outs = [[f'{A1}|1|false|{W1}'], [f'{A1}|1|false|{W1}', f'{A2}|1|false|{W2}']]
     if n == 'f26-lost':
         S = {'steps': [step('Shall we clear them?'), step('Good.'), step('What job?')], 'act': [[p], [a], [a]], 'out': [outs[0]], 'actlog': [[], []]}
@@ -98,6 +100,8 @@ elif n.startswith('f26-'):
         S = {'steps': [step('Shall we clear them out together?'), step('Good.'), step('Still on it.')], 'act': [[p], [a], [old, new]], 'out': outs,
              'actlog': [[], ['ACTIVITY resume start accepted']]}
     S['sees'] = n != 'f26-scenebad'
+    if n == 'f26-scenelost':
+        S['alive'] = 1
 else:
     raise SystemExit('unknown scenario ' + n)
 print(json.dumps(S))

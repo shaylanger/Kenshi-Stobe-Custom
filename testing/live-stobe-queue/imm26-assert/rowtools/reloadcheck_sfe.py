@@ -5,7 +5,7 @@ Reuses reloadcheck_a.py's assertions unchanged (nothing is weakened); adds only 
        trip (regional_goal block cloned onto a real native trip by seed24c.py) resumes after a save+load. The `accepted_row` of the set-A checker is taken from the seeded
        row (seed_row.json) because the seed is not in any step's ev_full.
 26-f : SETUP-FAIL unless scene.txt ends SCENE-OK and the accepted pre-save record carries a campZone.candidateId and agreedTargets; then reloadcheck_a.c_job unchanged
-       (continuation chain + identical agreedTargets/campZone).
+       (continuation chain + identical agreedTargets; campZone PRESENT with a NEW world-scoped id/digest = camp_zone_rebound; fix26fcamp). SETUP-FAIL when reseat.txt has SCENE-LOST.
 """
 import json
 import os
@@ -53,6 +53,9 @@ def c_26f(v, ev):
         acc = [r for r in ra.recs(ev, 'act_pre.txt') if r['kind'] == 'ClearGroup' and r['status'] == 'accepted']
         if acc and not ('candidateId' in acc[-1]['camp'] and acc[-1]['targets'].strip('[] ')):
             return v.setup_fail('accepted ClearGroup carries no campZone.candidateId / agreedTargets (camp variant not staged): camp=%r targets=%r' % (acc[-1]['camp'][:80], acc[-1]['targets'][:60]))
+    lost = [ln for ln in (rc.rd(ev, 'reseat.txt') or '').splitlines() if ln.startswith('SCENE-LOST')]   # fix26fcamp: the recipe probe after the load found the bandit scene gone
+    if lost:
+        return v.setup_fail('scene lost across the save/load (not a product result; the exact agreedTargets cannot match): ' + lost[0][:220])
     ra.c_job(v, ev)
 
 

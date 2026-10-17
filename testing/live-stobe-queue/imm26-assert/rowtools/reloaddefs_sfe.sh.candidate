@@ -152,6 +152,25 @@ EOT
   if [ "$ok" -ge "$need" ]; then echo "SCENE-OK" >> "$sc"; else echo "SCENE-BAD cind does not stably see >= 3 bandits (counting polls ok=$ok of $need needed in $pl polls; see senses lines above)" >> "$sc"; fi
   return 0
 }
+rs_probe26f() {   # fix26fcamp: after the load + reseat, record whether the bandit scene survived (4080-i4 18:50: 3 of 4 serials gone and the hostility not logged). Evidence appended to reseat.txt;
+  # the LAST line is RESEAT-OK or SCENE-LOST (checker reloadcheck_sfe.py: SETUP-FAIL, never a product FAIL). Re-applying relation -100 also logs the before-value:
+  # "-100.0 -> -100.0 enemy=1->1" = the game kept the hostility, "-10.0 -> -100.0 enemy=0->1" = the load dropped it (now restored, as a real camp would be).
+  local s id want=0 alive=0 chars first=""
+  chars=$(rs_sh 'stobe-auto chars 600 "Dust Bandit|!dead" </dev/null | head -3')
+  echo "probe chars600: $(echo "$chars" | tr '\n' ' ' | cut -c1-500)" >> "$EV/reseat.txt"
+  for s in $(sed -E 's/^#([0-9]+)\/[0-9]+$/\1/' "$EV/bandits.txt" 2>/dev/null); do
+    want=$((want+1)); id=$(echo "$chars" | grep -oE "#$s/[0-9]+" | head -1)
+    if [ -n "$id" ]; then
+      alive=$((alive+1)); [ -n "$first" ] || first="$id"
+      echo "probe where $id: $(rs_sh "stobe-auto where $(rl_q "$id") </dev/null | head -1" | tr '\n' ' ' | cut -c1-200)" >> "$EV/reseat.txt"
+    else
+      echo "probe where #$s: not alive within 600 u after the load" >> "$EV/reseat.txt"
+    fi
+  done
+  [ -z "$first" ] || echo "probe relation $first -100: $(rs_sh "stobe-auto relation $(rl_q "$first") -100 </dev/null | head -2" | tr '\n' ' ' | cut -c1-200)" >> "$EV/reseat.txt"
+  if [ "$want" -gt 0 ] && [ "$alive" -ge "$want" ]; then echo "RESEAT-OK $alive of $want agreed bandits alive within 600 u after the load" >> "$EV/reseat.txt"
+  else echo "SCENE-LOST only $alive of $want agreed bandits are alive within 600 u after the load (the exact agreedTargets cannot match: scene, not product)" >> "$EV/reseat.txt"; fi
+}
 rs_reseat26f() {   # after the load: Shay + Cind back at the camp spot, the SAME bandits (by serial) re-teleported + pinned
   local at="${RW_REBIRTH:--47333 730 -55600}" c chars ids s id
   rl_resolve "$ROW_NPC" >/dev/null 2>&1; c="$RL_NPC_ID"; set -- $at
@@ -166,6 +185,7 @@ EOT
   done
   echo "reseat bandits:$ids" >> "$EV/reseat.txt"
   [ -z "$ids" ] || { rs_place_bandits $ids; rs_sh "stobe-auto face $(rl_q "$c") $(rl_q "$(echo $ids | awk '{print $1}')") </dev/null | head -1; sleep 1" >> "$EV/reseat.txt"; }
+  rs_probe26f
 }
 rs_proposed_clear() {   # act_s*.txt holds a proposed ClearGroup record
   awk -F'|' '$6=="proposed" && $7=="ClearGroup"{f=1} END{exit !f}' "$EV/$1" 2>/dev/null

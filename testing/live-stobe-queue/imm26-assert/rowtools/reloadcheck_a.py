@@ -57,9 +57,34 @@ def jrows(ev, name):
 def same_terms(a, b):
     bad = []
     for k in ('kind', 'res', 'qty', 'targets', 'camp'):
+        if k == 'camp':   # fix26fcamp: the camp zone candidateId/scopeDigest are world+session scoped (new on every load): only its PRESENCE is a term; the rebind is checked by camp_zone_rebound
+            if bool((a.get(k) or '').strip()) != bool((b.get(k) or '').strip()):
+                bad.append(f'{k}:{a.get(k)}->{b.get(k)}')
+            continue
         if (a.get(k) or b.get(k)) and a.get(k) != b.get(k):
             bad.append(f'{k}:{a.get(k)}->{b.get(k)}')
     return bad
+
+
+ZONE_ID = re.compile(r'\Av1:[a-f0-9]{48}\Z')
+
+
+def camp_zone(r):
+    try:
+        z = json.loads(r.get('camp') or '{}')
+    except ValueError:
+        return {}
+    return z if isinstance(z, dict) else {}
+
+
+def chk_camp_rebound(v, old, new):
+    """fix26fcamp: a camp-qualified ClearGroup continues with THIS epoch's zone: present, well formed and not the old epoch's id (the native import rejects an old zone)."""
+    oz = camp_zone(old)
+    if not oz.get('candidateId'):
+        return
+    nz = camp_zone(new)
+    ok = bool(ZONE_ID.match(str(nz.get('candidateId', '')))) and bool(re.match(r'\A[a-f0-9]{64}\Z', str(nz.get('scopeDigest', '')))) and nz.get('candidateId') != oz.get('candidateId')
+    v.ck('camp_zone_rebound', ok, f"{str(oz.get('candidateId'))[:20]}->{str(nz.get('candidateId'))[:20]}")
 
 
 def chk_ctx(v, ev, label):
@@ -123,6 +148,7 @@ def c_job(v, ev):
     v.ck('resume_state_resumed', n['rstate'] == 'resumed', n['rstate'])
     v.ck('resume_count_1', n['rcount'] == '1', n['rcount'])
     v.ck('terms_identical', not same_terms(old, n), same_terms(old, n) or f"{n['kind']} {n['res']} qty={n['qty']}")
+    chk_camp_rebound(v, old, n)
     act = [r for r in post if r['world'] == n['world'] and r['actor'] == n['actor'] and r['status'] in ACTIVE]
     v.ck('exactly_one_active_record_for_actor_in_new_world', len(act) == 1 or n['status'] == 'completed', len(act))
     ob = [x for x in outbox(ev, 'out_post.txt') if x[0] == n['id']]

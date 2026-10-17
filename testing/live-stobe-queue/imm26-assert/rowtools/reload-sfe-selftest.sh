@@ -80,6 +80,13 @@ expect 26-f-no-camp-setup-fail f26-nocamp 26-f "RESULT 26-f SETUP-FAIL" "campZon
 expect 26-f-accept-rejected-setup-fail f26-reject 26-f "RESULT 26-f SETUP-FAIL" "requester_now_hostile"
 expect 26-f-targets-changed f26-targets-changed 26-f "RESULT 26-f FAIL" "terms_identical"
 expect 26-f-continuation-lost f26-lost 26-f "RESULT 26-f FAIL" "continuation_record_exists,old_record_superseded"
+# fix26fcamp: the continuation carries a NEW world-scoped camp zone; the old zone kept = FAIL, zone dropped = FAIL, scene lost across the load = SETUP-FAIL (never a product result)
+expect 26-f-zone-not-rebound f26-zone-same 26-f "RESULT 26-f FAIL" "camp_zone_rebound"
+expect 26-f-zone-dropped f26-zone-dropped 26-f "RESULT 26-f FAIL" "camp_zone_rebound,terms_identical"
+expect 26-f-scene-lost-setup-fail f26-scenelost 26-f "RESULT 26-f SETUP-FAIL" "scene lost across the save/load"
+scen f26-pass; run 26-f $L >/dev/null; RS="$EVB/26-f/reseat.txt"
+grep -q '^probe chars600:' "$RS" && grep -q '^probe relation .* -100:' "$RS" && [ "$(grep -c '^probe where ' "$RS")" = 4 ] && tail -1 "$RS" | grep -q '^RESEAT-OK 4 of 4' && chk 26-f-probe-evidence-reseat-ok ok || chk 26-f-probe-evidence-reseat-ok bad "$(tail -3 "$RS" 2>/dev/null | cut -c1-200)"
+scen f26-scenelost; run 26-f $L >/dev/null; tail -1 "$EVB/26-f/reseat.txt" | grep -q '^SCENE-LOST only 1 of 4' && chk 26-f-probe-scene-lost-line ok || chk 26-f-probe-scene-lost-line bad "$(tail -1 "$EVB/26-f/reseat.txt" | cut -c1-200)"
 scen f26-pass; run 26-f $L >/dev/null; F="$KAH_ROW_FAKE_LOG"
 grep -q 'stobe-auto faction' "$F" && chk 26-f-cind-into-player-faction ok || chk 26-f-cind-into-player-faction bad
 grep -q 'stobe-auto spawn "Dust Bandit" "Dust Bandits" at -47335 725 -55640 count 4' "$F" && ! grep -q 'Bandit Raiders' "$F" && chk 26-f-plain-dust-bandits-not-raiders ok || chk 26-f-plain-dust-bandits-not-raiders bad
