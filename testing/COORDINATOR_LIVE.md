@@ -15,6 +15,8 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 
 - 22:25 replay2 DONE (hpairexec12): aggregate.md final; report given to Shay. Agree: Haiku 38 / Sonnet 74 / pair 54 / draft-review 67 / guard rails 47. Cost: Haiku $0.81, Sonnet $11.78, pair $6.73, DR $13.29, GR $0.92, graders $4.36. Compact summarizer cost is UNKNOWN (estimate only); get it via /cost before/after the next compact.
 
+- 22:20 backlog slots used: inv13cneg (a60bb3a6a90bba76f), inv15bx17bx (aa73686fef0612a27), inv26a (a0dd841baa6268293) started. fix19erecipe DONE 2da454da (op22 runs 19-e next). op22: 14-d post-fix run FAILED differently: no field rejection now, NPC Selika declined in dialogue ("Five against two is a p...") -> wait op22 report. 5090-i3 idle alert is expected (waiting fix23agate selftest).
+
 ## 1. Resume checklist (do these first)
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1 -Brief`; `agent-rollcall.ps1` (one line per agent).
 2. Waker: Monitor tool, command `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch`, timeout_ms 3600000 (expires after 30 min; re-arming is harmless; heartbeat `C:\KenshiTestRuns\waker\coordinator.hb`).

@@ -9,8 +9,8 @@ Keep this file current: set state to STARTED (agent name + id) when spawned, DON
 | 1 | 26-f post-load ClearGroup resume | investigate `imm26-inv26f` | DONE (report agents\out\imm26-inv26f\out-20261016-210817.md); fixer `imm26-fix26fcamp` STARTED 22:12 (a4d7e70bf54475471) then operator reruns reload-run-sfe.sh 26-f | Evidence: testing/NPC_IMMERSION_26_TESTS.md row 26-f, KNOWN_BLOCKERS; ask for root cause + patch diff, no edits |
 | 2 | 23-a: root cause is the RECIPE (inv23a): skip stage teleport when gate < 1500 u | fixer `imm26-fix23agate` | STARTED 22:13 (af4922b8959aebd6b) | then op for 5090-i3 reruns 23-a |
 | 3 | 14-d SCENE-BAD (3 extra serials not near; far bandit lands in the near platoon) | fixer `imm26-fix14dtool3` | WAIT op21 report | fallback `--far-spawnt "<squad template>"`; evidence C:\KenshiTestRuns\inbox\setupfail*14-d* and set_probe.txt in the i5 rows dir |
-| 4 | 13-c-neg (native, SETUP-FAIL ticket, setupfail.ps1 list) | investigate `imm26-inv13cneg` | READY | owner imm26-5090-i3op36 is gone; ticket age 17h+ |
-| 5 | 15-bx / 17-bx variance | investigate `imm26-inv15bx17bx` | READY | note 15-bx split is a Shay decision (default yes in SHAY_DECISIONS); investigate why the rows vary run to run |
+| 4 | 13-c-neg (native, SETUP-FAIL ticket, setupfail.ps1 list) | investigate `imm26-inv13cneg` | STARTED 22:20 (a60bb3a6a90bba76f) | owner imm26-5090-i3op36 is gone; ticket age 17h+ |
+| 5 | 15-bx / 17-bx variance | investigate `imm26-inv15bx17bx` | STARTED 22:20 (aa73686fef0612a27) | note 15-bx split is a Shay decision (default yes in SHAY_DECISIONS); investigate why the rows vary run to run |
 | 6 | operator for lane 5090-i3 | operator `imm26-5090-i3op38` | WAIT items 2 or 4 | spawn when a fixer lands a claimable row (alert lane-idle-5090-i3 acked until then) |
 | 7 | 16-bx brevity | fixer | DONE e98e265a; op32 told to apply on 4080-i3 + rerun | 4080-i4 site also needs the patch |
 | 8 | PI-67 auto-close stale STOPPED-CONTEXT/FAILED markers when the row is PASS/reassigned | fixer `imm26-fixpi67` | READY (low priority) | agent-status/session-start/alert-scan; add selftest; hooks untouched |
@@ -22,10 +22,11 @@ Keep this file current: set state to STARTED (agent name + id) when spawned, DON
 eplay2-headless.py); must coexist with hpairexec11 (claim files); when verified: run the r2 remainder + r3 (+ graders if headless-capable) with it, tell hpairexec11 to stop issuing r2 |
 | 14 | tail-close-selftest 25 pre-existing failures | fixer | PARKED | only matters if tail handoffs continue (auto-compact replaces them) |
 | 15 | ab2 pilot cleanup + COMPARISON.md explanation | coordinator | WAIT imm26-ab2exec3 finishing (seq ~8/20) | README cleanup list in COORDINATOR_LIVE section 5 |
-| 16 | replay2 FINAL FULL REPORT to Shay | coordinator | DONE 22:2x (aggregate C:\KenshiTestRuns\shadoweplay2ggregate.md) | section 3 of COORDINATOR_LIVE |
+| 16 | replay2 FINAL FULL REPORT to Shay | coordinator | DONE 22:2x (aggregate C:\KenshiTestRuns\shadow
+eplay2ggregate.md) | section 3 of COORDINATOR_LIVE |
 | 17 | 14-d server fix | fixer `imm26-fix14dserver` | DONE def07676 | i5 operator op22 (a1211dab5b1bd93e3) running 14-d v2 |
 | 18 | 19-e recipe (Cind within ~30 u before s4) | fixer `imm26-fix19erecipe` | STARTED 22:13 (aa28c7638749868c1) | then op reruns 19-e |
-| 19 | 26-a native fix: ACTIVITY_OFFMESH_REACH actorOnMesh=0 targetOnMesh=1 dy=-14.6 reachable=0 -> hunt fails no_observed_suitable_reachable_target; NC34 fallback only covers actorOnMesh=1 | investigate then native fixer `imm26-inv26a` / NC35 | READY | evidence agents\out\imm26-5090-i5-op21a-run2; stobe.log lines ACTIVITY_OFFMESH_REACH |
+| 19 | 26-a native fix: ACTIVITY_OFFMESH_REACH actorOnMesh=0 targetOnMesh=1 dy=-14.6 reachable=0 -> hunt fails no_observed_suitable_reachable_target; NC34 fallback only covers actorOnMesh=1 | investigate then native fixer `imm26-inv26a` / NC35 | STARTED 22:20 inv26a (a0dd841baa6268293) | evidence agents\out\imm26-5090-i5-op21a-run2; stobe.log lines ACTIVITY_OFFMESH_REACH |
 | 20 | operator for lane 5090-i5 | operator `imm26-5090-i5-op22` | STARTED 22:08 (a1211dab5b1bd93e3); 19-e after item 18 | lane up, game running; i5 has no claimable row now |
 
 ## PI queue (ideas waiting for a free slot in the 15-entry cap of docs/PROCESS_IDEAS.md; add them with process-ideas.ps1 add when a slot frees)
