@@ -332,6 +332,15 @@ def on_stop(inp, aid):
     if not st or st['state'] != 'RUNNING' or abandoned(name) or not owner_ok(reg):
         return  # the agent already reported (or someone else owns the name): leave it
     state, why = classify_end(inp.get('last_assistant_message'))
+    if state == 'FAILED' and not (inp.get('last_assistant_message') or '').strip():
+        # Hand-back delivered through SubagentHandback leaves an empty final message: a report saved by this agent means DONE, not FAILED.
+        try:
+            od = os.path.join(AGENTS, 'out', name)
+            started = float(reg.get('started') or 0)
+            if os.path.isdir(od) and any(os.path.getmtime(os.path.join(od, f)) >= started for f in os.listdir(od)):
+                state, why = 'DONE', 'ended with an empty final message but a report was saved in agents/out/' + name
+        except Exception:
+            pass
     nxt = st['next']
     if state == 'STOPPED-CONTEXT':
         nxt = (nxt + ' | ' if nxt else '') + 'see ' + os.path.join(AGENTS, name + '.handoff.md') + ' / hand-back text'
