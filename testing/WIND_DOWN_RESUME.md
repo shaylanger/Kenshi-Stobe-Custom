@@ -20,7 +20,7 @@ session can resume cold. Read with `COORDINATOR_LIVE.md` (last 40 lines), `SHAY_
 | 26-a | root cause: DLL `owned_target` on fresh goats; fix proposed, NOT applied | apply fix, build + install DLL, rerun |
 | 26-f | rerun parked (fix26fcamp deployed to compose, 5090-i5, 5090-i3, sfo-manual; NOT 5090-i4 / 4080 / live) | deploy to the rest, rerun |
 | 02-bx / 02-dx | reruns parked | apply `pending-fixes/imm26-fix02bxregex` (d009980c) to `/tmp/stobe-standalone4080/site` and the 4080-i4 site (`apply.py <site>`, `--check` first; needs fix02bxsrv) |
-| 01-cx | setup-fail ticket, unowned, needs=fixture | runs on 4080-i4 (no fixture on 5090-i5); 4080-i4op25 was running 01-cx x3 then 02-dx x3 when wound down - check `drive.sh` results |
+| 01-cx | op25 DONE: 02-dx PASS 3/3 on 4080-i4 (6f625284); 01-cx SETUP-FAIL 3/3 (9b4e87a9): row-tool defect, the spawned Dust Bandit is renamed at first chat ("Bex [Dust Bandit]") but hxdefs.sh waits for `SAY [Dust`, and the scene teleports a different Dust Bandit serial (dist 3860); rep 3 "no stranger pair within 3000 u" | fixer: give 01-cx an id-based A pick and resolve its post-rename name, as hxdefs_02bd_id.sh does for 02-bx; then rerun on 4080-i4. 4080-i4 site now has fix16bxbrevity, fix14dserver, fix02bxsrv (NOT fix02bxregex). 4080-i4 game stopped, lock released |
 | 4080-i4 | needs fix16bxbrevity and fix02bxsrv | install before the next batch there |
 | 14-d, 16-bx, others | at the row-rework cap (see `rowgate.ps1 status <row>`) | next agent needs ESCALATE + METHOD-QUESTION lines |
 
