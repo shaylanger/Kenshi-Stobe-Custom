@@ -6,7 +6,34 @@ that can only be forced by a method the table does not name is GATED (never PASS
 Evidence files (written by tripdefs.sh): s<N>/* bundles (N may be 1b/2b), agr_*.txt = `rowid|status|phase|reason|owned_work_released|agreement_id|destination`
 (newest first), state_*.txt = stobe_state JSON, npc.txt = resolved NPC name.
 """
+import json
+import os
 import re
+from datetime import datetime
+
+# imm26-fix23acheck (Shay 2026-10-16, 23-a option A): the completion acknowledgement is counted per LLM REPLY, not per SAY line. The server
+# (processor/chat.php streamResponse) splits ONE reply into per-sentence ScriptQueue chunks that share one request_id (2 ms apart in
+# output_to_plugin.log); the game then speaks them 6-8 s apart (TTS pacing), so a time window alone cannot see they are one reply.
+SAY_LINE = re.compile(r'^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?)\][^\n]*?ACTION_EXEC: SAY \[(.+?)\]: (.*?) \(NPC\)\s*$', re.M)
+SAY_WINDOW_S = 2.0   # fallback grouping (no request_id evidence): consecutive SAY lines closer than this are one reply
+# a REPEATED completion acknowledgement (arrival / leg done / trip over). Built from the real acknowledgements of 23-a-v1 / v2b
+# ("We're here, and that leg's done - the guide work ends at the town line", "Arrived, yes. This leg's done").
+REACK_RE = re.compile(
+    r"\b(?:we(?:'re|\s+are|'ve|\s+have)\s+(?:here|arrived|there)\b|arrived\b|here\s+we\s+are\b|made\s+it\b|"
+    r"(?:the\s+|this\s+|that\s+|our\s+)?(?:trip|journey|walk|leg|guide\s+work|guiding|escort)(?:'s|\s+is|\s+was|\s+has)?\s+(?:now\s+)?(?:done|over|complete[d]?|finished|ended|ends)\b|"
+    r"(?:done|finished|over)\s+(?:with\s+)?(?:the\s+|this\s+|that\s+|our\s+)?(?:trip|journey|walk|leg)\b|"
+    r"(?:end\s+of\s+(?:the\s+|our\s+)?(?:trip|road|journey|leg))|reached\s+(?:squin|the\s+(?:town|gate|destination))|here\s+is\s+(?:where|as\s+far))", re.I)
+
+
+def _norm_txt(t):
+    return re.sub(r'[^a-z0-9]+', ' ', (t or '').lower()).strip()
+
+
+def _ts(s):
+    try:
+        return datetime.strptime(s, '%Y-%m-%d %H:%M:%S.%f' if '.' in s else '%Y-%m-%d %H:%M:%S').timestamp()
+    except ValueError:
+        return None
 
 
 def register(rc, CHECKS):
@@ -49,6 +76,76 @@ def register(rc, CHECKS):
                 out.append(tx.strip())
         return out
 
+    def say_chunks(ev, step, who):
+        """[(ts|None, speaker, text)] of the NPC's SAY lines of a step, in order (ts = game-log time in seconds, None if the line has none)"""
+        pre = (who or '').split(' [')[0].split()[0].lower() if (who or '').strip() else ''
+        out = []
+        for ln in (rd(ev, step, 'reply.txt') or '').splitlines():
+            m = SAY_LINE.match(ln)
+            if m:
+                if not pre or m.group(2).lower().startswith(pre):
+                    out.append((_ts(m.group(1)), m.group(2), m.group(3).strip()))
+                continue
+            m2 = re.search(r'ACTION_EXEC: SAY \[(.+?)\]: (.*?) \(NPC\)', ln)       # timestamp-less line (older bundles / fakes)
+            if m2 and (not pre or m2.group(1).lower().startswith(pre)):
+                out.append((None, m2.group(1), m2.group(2).strip()))
+        return out
+
+    def plugin_chunks(ev, step):
+        """[(request_id, actor, message)] of the ScriptQueue chunks the server queued during the step (optional file <step>/plugin_out.txt = the
+        output_to_plugin.log lines; None if the file is absent)"""
+        t = rd(ev, step, 'plugin_out.txt')
+        if t is None:
+            return None
+        out = []
+        for ln in t.splitlines():
+            m = re.search(r'(\{.*\})\s*$', ln)
+            js = {}
+            if m:
+                try:
+                    js = json.loads(m.group(1))
+                except ValueError:
+                    js = {}
+            if not js:
+                r = re.search(r'"request_id"\s*:\s*"([^"]+)"', ln)
+                a = re.search(r'"actor"\s*:\s*"([^"]*)"', ln)
+                g = re.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', ln)
+                if r and g:
+                    js = {'request_id': r.group(1), 'actor': a.group(1) if a else '', 'message': g.group(1), 'action': 'ScriptQueue'}
+            if js.get('request_id') and js.get('message') is not None and js.get('action', 'ScriptQueue') == 'ScriptQueue':
+                out.append((js['request_id'], js.get('actor', ''), js['message']))
+        return out
+
+    def reply_groups(chunks, plugin):
+        """group the SAY chunks by LLM reply: a chunk whose text matches a queued ScriptQueue chunk takes that chunk's request_id; the rest
+        (no plugin evidence / unmatched text) fall back to the SAY_WINDOW_S window against the previous chunk. Returns (groups, how)"""
+        pool = list(plugin or [])
+        groups, keys, how = [], [], set()
+        prev_ts = None
+        for ts, sp, tx in chunks:
+            rid = None
+            for i, (r, a, m) in enumerate(pool):
+                if _norm_txt(m) == _norm_txt(tx) and (not a or _norm_txt(a.split(' [')[0]) == _norm_txt(sp.split(' [')[0])):
+                    rid = r
+                    pool.pop(i)
+                    break
+            if rid is not None:
+                how.add('request_id')
+                if ('rid', rid) in keys:
+                    groups[keys.index(('rid', rid))].append(tx)
+                else:
+                    keys.append(('rid', rid))
+                    groups.append([tx])
+            else:
+                how.add('window')
+                if groups and prev_ts is not None and ts is not None and 0 <= ts - prev_ts <= SAY_WINDOW_S:
+                    groups[-1].append(tx)
+                else:
+                    keys.append(('win', len(groups)))
+                    groups.append([tx])
+            prev_ts = ts if ts is not None else prev_ts
+        return groups, '+'.join(sorted(how)) or 'none'
+
     def ai(ev, name):
         t = rd(ev, name)
         if t is None:
@@ -81,8 +178,25 @@ def register(rc, CHECKS):
         v.ck('no_follow_or_travel_controller', a['first'] == 'none' and a['goal'] == 'NULL_TASK', f"first_order={a['first']} current_goal={a['goal']}")
         sh = ai(ev, 'state_shay.txt')
         v.ck('npc_not_in_squad', bool(a['faction']) and a['faction'] != sh['faction'], f"npc={a['faction']} shay={sh['faction']}")
-        acks = speaker_lines(ev, 's3', (rd(ev, 'npc.txt') or '').strip())
-        v.ck('one_completion_acknowledgement', len(acks) == 1, f'n={len(acks)}')
+        who = (rd(ev, 'npc.txt') or '').strip()
+        chunks3 = say_chunks(ev, 's3', who)
+        groups, how = reply_groups(chunks3, plugin_chunks(ev, 's3'))
+        hint = ' (no s3/plugin_out.txt request_id evidence: only SAY lines < 2 s apart count as one reply)' if 'window' in how and len(chunks3) > 1 else ''
+        v.ck('one_completion_acknowledgement', len(groups) == 1, f'n={len(groups)} replies from {len(chunks3)} SAY lines by {how}{hint}')
+        acks = [g[0] for g in groups]
+        # a FOLLOWING turn (s4) must not re-acknowledge the completion; missing evidence is SETUP-FAIL (never PASS)
+        spoken3 = {_norm_txt(t) for _, _, t in chunks3}
+        if not os.path.isfile(os.path.join(ev, 's4', 'reply.txt')):
+            if not v.bad:
+                v.setup_fail('following-turn evidence missing (s4/reply.txt): rerun 23-a with the runner that sends the neutral follow-up turn (tripdefs rd_23a s4)')
+        else:
+            later = [t for _, _, t in say_chunks(ev, 's4', who) if _norm_txt(t) not in spoken3]    # drop s3 chunks that were spoken late
+            if not later:
+                if not v.bad:
+                    v.setup_fail('no NPC reply in the following turn (s4/reply.txt has no NPC SAY line besides the s3 chunks)')
+            else:
+                hit = [t for t in later if REACK_RE.search(t)]
+                v.ck('following_turn_no_reacknowledgement', not hit, ('re-acknowledged: ' + hit[0][:100]) if hit else f'{len(later)} line(s) clean')
         v.note = f'R~ ack: {acks[0][:140]!r}' if acks else ''
 
     # ---------------------------------------------------------------- 20-a

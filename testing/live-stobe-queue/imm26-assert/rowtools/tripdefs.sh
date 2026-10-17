@@ -126,8 +126,16 @@ rd_23a() {  # FX-TRAVEL: complete an agreed trip: propose, accept, teleport to t
   tr_prep || return $?; tr_trip_setup || return $?
   tr_arrive || return $?
   tr_state state_shay.txt Shay
+  local pl pn0=0   # imm26-fix23acheck: output_to_plugin.log slice of the completion turn (request_id of each ScriptQueue chunk) -> s3/plugin_out.txt (optional evidence)
+  pl="$(dirname "$LT_SRVLOG")/output_to_plugin.log"
+  [ -n "${KAH_ROW_FAKE:-}" ] || { pn0=$(printf 'wc -l < %s 2>/dev/null || echo 0\n' "$pl" | lt_w | tail -1 | tr -dc 0-9); pn0=${pn0:-0}; }
   rl_say 3 "We're here. Thanks for guiding me." || return $?
+  [ -n "${KAH_ROW_FAKE:-}" ] || printf "tail -n +%s %s 2>/dev/null | grep -a '\"action\":\"ScriptQueue\"' | cut -c1-900 | head -40\n" "$((pn0 + 1))" "$pl" | lt_w > "$EV/s3/plugin_out.txt" 2>&1
   tr_state state_after.txt "$RL_NPC_FULL"; tr_agr agr_final.txt 8
+  # following turn (imm26-fix23acheck): a neutral question; s4 must NOT re-acknowledge the completion (rowcheck_trip c_23a). Late s3 chunks are spoken
+  # up to ~10 s after the first one, so settle first (rowcheck_trip also drops s4 lines equal to an s3 chunk).
+  [ -n "${KAH_ROW_FAKE:-}" ] || sleep "${TRIP_23A_SETTLE:-15}"
+  rl_say 4 "What do you make of this place?" || return $?
 }
 rd_20a() {  # ACCEPTED trip; change request must not move the row; confirm must end/replace it
   tr_prep || return $?; tr_trip_setup || return $?

@@ -30,18 +30,18 @@ CIND = state('Traders Guild')
 n = sys.argv[1]
 S = {}
 if n == '23a-pass':
-    S = {'steps': [S1, S2, {'reply': 'Walk is done, then.'}], 'agr': [ACC, [agr(7009, 'COMPLETED', 'completed', '', 'true')] + ACC],
+    S = {'steps': [S1, S2, {'reply': 'Walk is done, then.'}, {'reply': 'Squin keeps me busy.'}], 'agr': [ACC, [agr(7009, 'COMPLETED', 'completed', '', 'true')] + ACC],
          'state': {'Shay': [SHAY], 'Cind': [CIND]}}
 elif n == '23a-fail':     # failed instead of completed, controller left, two acknowledgements
-    S = {'steps': [S1, S2, {'reply': 'Walk is done, then.'}], 'agr': [ACC, [agr(7009, 'FAILED', 'failed', 'native_order_ended_before_goal', 'false')] + ACC],
+    S = {'steps': [S1, S2, {'reply': 'Walk is done, then.'}, {'reply': 'Squin keeps me busy.'}], 'agr': [ACC, [agr(7009, 'FAILED', 'failed', 'native_order_ended_before_goal', 'false')] + ACC],
          'state': {'Shay': [SHAY], 'Cind': [state('Traders Guild', 'follow', 'FOLLOW')]}}
 elif n == '23a-noaccept':
     S = {'steps': [{'reply': 'No.'}, {'reply': 'No.'}, {'reply': 'No.'}], 'agr': [[]], 'state': {'Shay': [SHAY], 'Cind': [CIND]}}
 elif n == '23a-lead':     # accept turn without the native start line -> s2b "Lead the way." is said
-    S = {'steps': [S1, dict(S2, log=[]), {'reply': 'Squin it is.', 'log': NATIVE}, {'reply': 'Walk is done, then.'}],
+    S = {'steps': [S1, dict(S2, log=[]), {'reply': 'Squin it is.', 'log': NATIVE}, {'reply': 'Walk is done, then.'}, {'reply': 'Squin keeps me busy.'}],
          'agr': [ACC, [agr(7009, 'COMPLETED', 'completed', '', 'true')] + ACC], 'state': {'Shay': [SHAY], 'Cind': [CIND]}}
 elif n == '23a-fallback':  # first wording gets no PROPOSED row -> s1b
-    S = {'steps': [{'reply': 'I need a concrete offer.'}, S1, S2, {'reply': 'Walk is done, then.'}],
+    S = {'steps': [{'reply': 'I need a concrete offer.'}, S1, S2, {'reply': 'Walk is done, then.'}, {'reply': 'Squin keeps me busy.'}],
          'agr': [ACC, [agr(7009, 'COMPLETED', 'completed', '', 'true')] + ACC], 'state': {'Shay': [SHAY], 'Cind': [CIND]}}
 elif n in ('20a-pass', '20a-fail'):
     s4 = [['travel_agreement', row('ENDED')]] if n == '20a-pass' else []
