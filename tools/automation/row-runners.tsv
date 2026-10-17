@@ -25,8 +25,8 @@
 11-b | unblockrun_sfk.sh | --save <ready> | recipe v2 (sfK)
 08-d | unblockrun_a.sh | --save <ready> | add --neg for the negative leg
 08-e | reload-run-a2.sh | --save <ready> | recipe v2 (sfG2)
-13-c | unblockrun_f.sh | --save <ready> | needs NC18+ DLL (arrival turn)
-13-c-neg | unblockrun_f.sh | --save <ready> | needs NC18+ DLL
+13-c | unblockrun_f3.sh | --save <ready> | needs NC18+ DLL (arrival turn)
+13-c-neg | unblockrun_f3.sh | --save <ready> | needs NC18+ DLL
 10-e | unblockrun_b.sh | --save <ready> | real game restart
 10-e-inproc | unblockrun_b.sh | --save <ready> | record-only
 27-a | unblockrun_b.sh | --save <ready> | needs harness DLL eeed8c93

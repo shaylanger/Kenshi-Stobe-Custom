@@ -16,12 +16,20 @@ declare -F uf_terminal >/dev/null || . "$UF3_HERE/unblockdefs_f.sh"
 eval "uf3_hop_walk_stage() $(declare -f uf_walk_stage | sed '1d')"
 . "$UF3_HERE/sfr22b_keep.sh"               # shadows uf_walk_stage (keeper)
 eval "uf3_keep_walk_stage() $(declare -f uf_walk_stage | sed '1d')"
+# imm26-inv13cneg: NATIVE_TRAVEL_START (participation_bound=) is logged at the ACCEPT turn INSIDE tr_trip_setup, i.e. BEFORE rd_13c sets UF_N0 (unblockdefs_f.sh:86), so the dump below
+# never held it and unblockcheck_f3.c_neg saw participation_bound=None (SETUP-FAIL 'unbound proof') although the log had bound=1. UF_NS = stobe.log mark taken BEFORE the trip setup;
+# only the DUMP reads from it (uf_native_end / the walk loop keep UF_N0, so a stale end line from the setup window cannot end the walk early).
+declare -F tr_trip_setup >/dev/null && eval "uf3_trip_setup_orig() $(declare -f tr_trip_setup | sed '1d')"
+tr_trip_setup() {
+  UF_NS=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); UF_NS=${UF_NS:-0}
+  uf3_trip_setup_orig "$@"
+}
 uf_walk_stage() {   # uf_walk_stage <npc-quoted> <gate> <back> <neg 0|1> <gap> <speed> <tries>
   if [ "$4" = 1 ]; then uf3_hop_walk_stage "$@"; else uf3_keep_walk_stage "$1" "$2" "$3" "$4" "$5" "$6" "${UF3_KEEP_CALLS:-8}"; fi
 }
 uf_native_dump() {  # uf_native_dump <file> : START/terminal/FINISH/ORDER_ENDED/PART_BIND lines of this walk + the last 2 OBS lines
   lt_h <<EOT > "$EV/$1" 2>&1
-tail -n +$(( ${UF_N0:-0} + 1 )) $LT_STOBELOG 2>/dev/null | grep -a -E 'NATIVE_TRAVEL_START|NATIVE_TRAVEL_FINISH|NATIVE_TRAVEL_ORDER_ENDED|NATIVE_TRAVEL_PART_BIND|NATIVE_TRAVEL[: ].*terminal=1' | cut -c1-520 | head -14 # uf:ndump
+tail -n +$(( ${UF_NS:-${UF_N0:-0}} + 1 )) $LT_STOBELOG 2>/dev/null | grep -a -E 'NATIVE_TRAVEL_START|NATIVE_TRAVEL_FINISH|NATIVE_TRAVEL_ORDER_ENDED|NATIVE_TRAVEL_PART_BIND|NATIVE_TRAVEL[: ].*terminal=1' | cut -c1-520 | head -14 # uf:ndump
 tail -n +$(( ${UF_N0:-0} + 1 )) $LT_STOBELOG 2>/dev/null | grep -a NATIVE_TRAVEL_OBS | cut -c1-320 | tail -2 # uf:nobs
 EOT
 }

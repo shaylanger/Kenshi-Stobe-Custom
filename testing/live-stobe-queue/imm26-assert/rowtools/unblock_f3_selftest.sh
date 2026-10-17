@@ -50,6 +50,10 @@ scen f13cneg-completed-pass 'S["ndump"]=[START1,FIN,PH(0,QD)]'; expect 13-c-neg-
 F="$KAH_ROW_FAKE_LOG"
 ! grep -q "seq 1 80" "$F" && grep -q "teleport Shay -62380 330 16250 dist 550" "$F" && chk 13-c-neg-keeps-hop-walk-shay-behind ok || chk 13-c-neg-keeps-hop-walk-shay-behind bad
 [ "$(grep -c "teleport Shay 'Cind" "$F")" = 0 ] && chk 13-c-neg-never-moves-shay-onto-cind ok || chk 13-c-neg-never-moves-shay-onto-cind bad
+# ---- inv13cneg: NATIVE_TRAVEL_START is logged at the ACCEPT turn inside tr_trip_setup, BEFORE rd_13c sets UF_N0: the native_travel.txt dump must start at the mark taken BEFORE the setup (UF_NS), the OBS window stays at UF_N0
+scen f13cneg-completed-pass 'S["ndump"]=[START1,FIN,PH(0,QD)]'; run 13-c-neg $L >/dev/null
+nd=$(grep -a 'uf:ndump' "$KAH_ROW_FAKE_LOG" | head -1 | sed -nE 's/.*tail -n \+([0-9]+) .*/\1/p'); no=$(grep -a 'uf:nobs' "$KAH_ROW_FAKE_LOG" | head -1 | sed -nE 's/.*tail -n \+([0-9]+) .*/\1/p')
+[ -n "$nd" ] && [ -n "$no" ] && [ "$nd" -lt "$no" ] && chk 13-c-neg-dump-window-starts-before-trip-setup ok "dump=+$nd obs=+$no" || chk 13-c-neg-dump-window-starts-before-trip-setup bad "dump=+$nd obs=+$no"   # [f3-before-fix: FAIL]
 scen f13cneg-completed-pass 'S["ndump"]=[START0,FIN,PH(0,QD)]'; expect 13-c-neg-unbound-setupfail x 13-c-neg SETUP-FAIL "unbound proof"   # [f-fails: PASS]
 scen f13cneg-completed-pass 'S["ndump"]=[START1,FIN,PH(1)]'; expect 13-c-neg-qualified-setupfail x 13-c-neg SETUP-FAIL "QUALIFIED although Shay was held behind"   # [f-fails: PASS]
 scen f13cneg-completed-pass 'S["ndump"]=[START1,FIN]'; expect 13-c-neg-no-terminal-line-setupfail x 13-c-neg SETUP-FAIL "no terminal NATIVE_TRAVEL participation_qualified line"
